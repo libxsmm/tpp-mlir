@@ -9,10 +9,6 @@ if(USE_OneDNN)
   set(ONEDNN_LIBS_INCL "-ltpp_dnnl_runner_utils")
 endif()
 
-if(USE_OpenMP)
-  set(OPENMP_LIBS_INCL "-lomp")
-endif()
-
 set(LIBS
         ${dialect_libs}
         ${conversion_libs}
@@ -81,7 +77,7 @@ target_link_options(tpp-run PRIVATE
   -lmlir_runner_utils
   -lmlir_async_runtime
   ${TPP_GPU_LINK_FLAGS}
-  ${OPENMP_LIBS_INCL}
+  $<$<BOOL:${USE_OpenMP}>:${OpenMP_C_LIBRARIES}>
   -Wl,--as-needed
 )
 
