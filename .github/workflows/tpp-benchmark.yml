@@ -26,7 +26,8 @@ env:
 jobs:
   Check_LLVM:
     if: ${{ github.event_name }} == "push" || \
-        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }})
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }}) || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     uses: ./.github/workflows/tpp-llvm.yml
     secrets: inherit
 
@@ -34,7 +35,8 @@ jobs:
     runs-on: pcl-tiergarten
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_EMR_BENCH }} == 1 || \
-        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }})
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }}) || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +50,8 @@ jobs:
     runs-on: pcl-tiergarten
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_EMR_BENCH }} == 1 || \
-        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }})
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark' }}) || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +63,9 @@ jobs:
 
   TPP-MLIR-ZEN-BASE:
     runs-on: pcl-tiergarten
-    if: inputs.RUN_ZEN_BENCH == 1
+    if: ${{ github.event_name }} == "push" || \
+        ${{ inputs.RUN_ZEN_BENCH }} == 1 || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +77,9 @@ jobs:
 
   TPP-MLIR-ZEN-OMP:
     runs-on: pcl-tiergarten
-    if: inputs.RUN_ZEN_BENCH == 1
+    if: ${{ github.event_name }} == "push" || \
+        ${{ inputs.RUN_ZEN_BENCH }} == 1 || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +91,9 @@ jobs:
 
   TPP-MLIR-CLX-BASE:
     runs-on: pcl-tiergarten
-    if: inputs.RUN_CLX_BENCH == 1
+    if: ${{ github.event_name }} == "push" || \
+        ${{ inputs.RUN_CLX_BENCH }} == 1 || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +105,9 @@ jobs:
 
   TPP-MLIR-CLX-OMP:
     runs-on: pcl-tiergarten
-    if: inputs.RUN_CLX_BENCH == 1
+    if: ${{ github.event_name }} == "push" || \
+        ${{ inputs.RUN_CLX_BENCH }} == 1 || \
+        (${{ github.event_name }} == "pull_request" && ${{ github.event.label.name == 'benchmark-all' }})
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
