@@ -9,6 +9,9 @@ on:
       RUN_ZEN_BENCH:
         description: "Run on Zen5"
         default: "0"
+      RUN_CLX_BENCH:
+        description: "Run on CLX"
+        default: "0"
   push:
     branches:
       - 'main'
@@ -78,3 +81,28 @@ jobs:
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
                ${{ github.workspace }}/scripts/github/benchmark.sh -o"
           ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
+
+  TPP-MLIR-CLX-BASE:
+    runs-on: pcl-tiergarten
+    if: inputs.RUN_CLX_BENCH == 1
+    needs: Check_LLVM
+    steps:
+      - uses: actions/checkout@v4
+      - name: CLX Base
+        run: |-
+          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+
+  TPP-MLIR-CLX-OMP:
+    runs-on: pcl-tiergarten
+    if: inputs.RUN_CLX_BENCH == 1
+    needs: Check_LLVM
+    steps:
+      - uses: actions/checkout@v4
+      - name: CLX OpenMP
+        run: |-
+          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+                ${{ github.workspace }}/scripts/github/benchmark.sh -o"
+          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+        
