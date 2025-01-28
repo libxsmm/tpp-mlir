@@ -92,14 +92,13 @@ def VectorContractToFMA : Pass<
 def BrgemmLinalgTiling : Pass<"tile-brgemm-linalg"> {
   let summary = "Tile bregmm  matmul and reduction dimension.";
   let description = [{
-    Tiles the innermost dimensions of the batch reduce matmul operation. Additionally, it swaps the reduction and k dimension loop. The final loop structure is as follows: M-loop->N-loop->reduction-loop->K-loop. For example: --tile-brgemm-linalg="lhsTile=8,8 rhsTile=8,16".
+    Tiles the innermost dimensions of the batch reduce matmul operation to support perfect register allocation. Additionally, it swaps the reduction and k dimension loop. The final loop structure is as follows: M-loop->N-loop->reduction-loop->K-loop. For example: --tile-brgemm-linalg="registerBlocking=<mTileSize>, <nTileSize>".
   }];
   let dependentDialects = ["linalg::LinalgDialect",
                            "memref::MemRefDialect",
                            "arith::ArithDialect"];
   let options = [
-         ListOption<"mTileShape", "lhsTile", "unsigned", "Input for the tile shape of m x k dim. Tile size should not be greater than the dimension size. Example: lhsTile=8,8">,
-         ListOption<"nTileShape", "rhsTile", "unsigned", "Input for the tile shape of k x n dim. Tile size should not be greater than the dimension size. Example: rhsTile=8,16">,
+         ListOption<"registerTileShape", "registerBlocking", "unsigned", "Input for the register blocking tile shapes for a brgemm operation">,
   ];
 }
 

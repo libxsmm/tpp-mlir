@@ -66,17 +66,12 @@ llvm::cl::opt<bool> lowerPackUnpackWithoutTranspose(
     llvm::cl::desc("Lower packs and unpacks reverting any dim permutations"),
     llvm::cl::init(false));
 
-// Lhs tile sizes for linalg-to-vector.
+
 llvm::cl::list<unsigned>
-    lhsTile("lhsTile", llvm::cl::desc("Lhs tile size for brgemm operation"),
-            llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 8}),
+    registerBlocking("registerBlocking", llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
+            llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 32}),
             llvm::cl::CommaSeparated);
 
-// Rhs tile sizes for linalg-to-vector
-llvm::cl::list<unsigned>
-    rhsTile("rhsTile", llvm::cl::desc("Rhs tile size for brgemm operation"),
-            llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 16}),
-            llvm::cl::CommaSeparated);
 
 llvm::cl::opt<bool> vectorToXSMM("vector-to-XSMM",
                                  llvm::cl::desc("Lower vector to XSMM"),
@@ -160,10 +155,8 @@ private:
       tppDefaultOptions.linalgToVector = linalgToVector;
       tppDefaultOptions.vectorToXSMM = vectorToXSMM;
       tppDefaultOptions.lowerPackUnpackWithoutTranspose = lowerPackUnpackWithoutTranspose;
-      tppDefaultOptions.lhsTile =
-          SmallVector<unsigned>{lhsTile.begin(), lhsTile.end()};
-      tppDefaultOptions.rhsTile =
-          SmallVector<unsigned>{rhsTile.begin(), rhsTile.end()};
+      tppDefaultOptions.registerBlocking =
+          SmallVector<unsigned>{registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;
 
       pm.addPass(createDefaultTppPasses(tppDefaultOptions));

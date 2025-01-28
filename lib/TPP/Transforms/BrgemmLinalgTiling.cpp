@@ -54,17 +54,17 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
 
     if (!brgemmOp.hasPureBufferSemantics())
       return failure();
-    //  Get the M and N tile shape from the user input
-    SmallVector<int64_t> tileShapeM(options.mTileShape.begin(),
-                                    options.mTileShape.end());
-    SmallVector<int64_t> tileShapeN(options.nTileShape.begin(),
-                                    options.nTileShape.end());
+    //  Get the register blocking tile shape from the user input
+    SmallVector<int64_t> tileShapeM(options.registerTileShape.begin(),
+                                    options.registerTileShape.end());
 
-    if (tileShapeM.size() != 2 || tileShapeN.size() != 2)
+    SmallVector<int64_t> tileShapeN(2);
+    tileShapeN[0] = 1;
+    tileShapeN[1] = tileShapeM[1];
+    tileShapeM[1] = 1;
+
+    if (tileShapeM.size() != 2)
            return failure();
-
-    if (tileShapeM[1] != tileShapeN[0])
-            return failure();
 
     // Stores the M, N, and K Tile Sizes
     SmallVector<int64_t> mxnxkTile(3);
@@ -114,8 +114,8 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
       Value ubCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, upperBound);
       //Tile size should not be greater than the upperBound
       if ((*itrShapeM) > upperBound)
-	      return failure();
-      Value stepCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, upperBound/(*itrShapeM));
+              return failure();
+      Value stepCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, *itrShapeM);
       // Creates M, N, and K tile loops
       scf::ForOp loopOp = rewriter.create<scf::ForOp>(brgemmOp.getLoc(),
                                                       zeroCst, ubCstTiledLoop, stepCstTiledLoop);
@@ -184,8 +184,8 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
             strides.push_back(rewriter.getIndexAttr(1));
           }
         } else {
-          shape.push_back(rewriter.getIndexAttr(tensorShape[j] / (*tileItr)));
-          indices.push_back(tensorShape[j] / (*tileItr));
+          shape.push_back(rewriter.getIndexAttr( (*tileItr)));
+          indices.push_back((*tileItr));
           strides.push_back(rewriter.getIndexAttr(1));
           offsets.push_back(
               inductionVars[i][tensorShape.size() - tileSizesIndex[i] + k]);
@@ -224,8 +224,7 @@ struct BrgemmLinalgTiling : public tpp::impl::BrgemmLinalgTilingBase<BrgemmLinal
 
   void runOnOperation() override {
     BrgemmLinalgTilingOptions options;
-    options.mTileShape = SmallVector<unsigned>{*mTileShape};
-    options.nTileShape = SmallVector<unsigned>{*nTileShape};
+    options.registerTileShape = SmallVector<unsigned>{*registerTileShape};
     RewritePatternSet patterns(&getContext());
     populateBrgemmLinalgTilingPatterns(patterns, options);
     GreedyRewriteConfig config;

@@ -139,8 +139,7 @@ private:
       if (linalgToVector || forceLinalgToVector) {
         // Vectorizes the remaining Linalg operations
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
-            BrgemmLinalgTilingOptions{SmallVector<unsigned>{*lhsTile},
-                                      SmallVector<unsigned>{*rhsTile}}));
+            BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 

@@ -1,5 +1,5 @@
 // RUN: tpp-opt %s  | tpp-run -e entry --entry-point-result=void -print > %t.1
-// RUN: tpp-opt %s  --tile-brgemm-linalg="lhsTile=8,8 rhsTile=8,16" --vectorization-pass| tpp-run -e entry --entry-point-result=void -print > %t.2
+// RUN: tpp-opt %s  --tile-brgemm-linalg="registerBlocking=8,32" --vectorization-pass| tpp-run -e entry --entry-point-result=void -print > %t.2
 // RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF --allow-empty
 
 // DIFF-NOT: {{.}}
