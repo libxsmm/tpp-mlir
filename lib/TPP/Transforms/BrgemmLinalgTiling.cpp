@@ -58,13 +58,13 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
     SmallVector<int64_t> tileShapeM(options.registerTileShape.begin(),
                                     options.registerTileShape.end());
 
+    if (tileShapeM.size() != 2)
+           return failure();
+
     SmallVector<int64_t> tileShapeN(2);
     tileShapeN[0] = 1;
     tileShapeN[1] = tileShapeM[1];
     tileShapeM[1] = 1;
-
-    if (tileShapeM.size() != 2)
-           return failure();
 
     // Stores the M, N, and K Tile Sizes
     SmallVector<int64_t> mxnxkTile(3);
@@ -184,7 +184,7 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
             strides.push_back(rewriter.getIndexAttr(1));
           }
         } else {
-          shape.push_back(rewriter.getIndexAttr( (*tileItr)));
+          shape.push_back(rewriter.getIndexAttr(*tileItr));
           indices.push_back((*tileItr));
           strides.push_back(rewriter.getIndexAttr(1));
           offsets.push_back(
