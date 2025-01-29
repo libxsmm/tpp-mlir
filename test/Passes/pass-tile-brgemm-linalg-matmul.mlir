@@ -1,4 +1,3 @@
-
 // RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32" --split-input-file  | FileCheck %s
 
 module {
@@ -44,8 +43,6 @@ module {
 
 // -----
 
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32" --split-input-file | FileCheck %s
-
 module {
   memref.global "private" constant @__constant_48x32x32xf32 : memref<48x32x32xf32> = dense<1.000000e+00> {alignment = 64 : i64}
   func.func @chainned_gemm_do_register_tiling(%arg0: memref<8x48x32x32xf32>) -> memref<8x48x32x32xf32> {
@@ -76,7 +73,6 @@ module {
 }
 
 // CHECK-LABEL:   memref.global "private" constant @__constant_48x32x32xf32 : memref<48x32x32xf32> = dense<1.000000e+00> {alignment = 64 : i64}
-
 // CHECK-LABEL:   func.func @chainned_gemm_do_register_tiling(
 // CHECK-SAME:                     %[[VAL_0:.*]]: memref<8x48x32x32xf32>) -> memref<8x48x32x32xf32> {
 // CHECK:           %[[VAL_1:.*]] = arith.constant 1 : index

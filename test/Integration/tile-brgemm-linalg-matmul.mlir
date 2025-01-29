@@ -1,8 +1,8 @@
 // RUN: tpp-run -e entry --entry-point-result=void -print %s > %t.1
 // RUN: tpp-run -e entry --entry-point-result=void --vector-to-kernels --registerBlocking=8,32 %s -print > %t.2
-// RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF --allow-empty
+// RUN: diff %t.1 %t.2
+// RUN: rm %t.1 %t.2
 
-// DIFF-NOT: {{.}}
 module {
   memref.global "private" constant @__constant_48x32x32xf32 : memref<48x32x32xf32> = dense<1.000000e+00> {alignment = 64 : i64}
   func.func @entry(%arg0: memref<8x48x32x32xf32>) -> memref<8x48x32x32xf32> {
