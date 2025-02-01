@@ -43,108 +43,86 @@ using namespace mlir::tpp;
 
 namespace mlir {
 namespace tpp {
-struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
-  using OpRewritePattern<linalg::BatchReduceMatmulOp>::OpRewritePattern;
+
+template <typename BrgemmOp>
+struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
+  using OpRewritePattern<BrgemmOp>::OpRewritePattern;
 
   LinalgOpTiling(MLIRContext *ctx, BrgemmLinalgTilingOptions tilingoptions)
-      : OpRewritePattern(ctx), options(tilingoptions) {}
+      : OpRewritePattern<BrgemmOp>(ctx), options(tilingoptions) {}
 
-  LogicalResult matchAndRewrite(linalg::BatchReduceMatmulOp brgemmOp,
+  LogicalResult matchAndRewrite(BrgemmOp brgemmOp,
                                 PatternRewriter &rewriter) const override {
-
     if (!brgemmOp.hasPureBufferSemantics())
       return failure();
-    //  Get the register blocking tile shape from the user input
-    SmallVector<int64_t> tileShapeM(options.registerTileShape.begin(),
-                                    options.registerTileShape.end());
 
-    if (tileShapeM.size() != 2)
+    // Check whether the tile sizes are valid
+    if (options.registerTileShape.size() != 3 && options.registerTileShape.size() != 2)
            return failure();
 
-    SmallVector<int64_t> tileShapeN(2);
-    tileShapeN[0] = 1;
-    tileShapeN[1] = tileShapeM[1];
-    tileShapeM[1] = 1;
+    // Check the whether the operation is brmatmul fp32 or bf16 type using reduction count
+    SmallVector<utils::IteratorType> brgemmIteratorTypes =
+        brgemmOp.getIteratorTypesArray();
+    int reductionCount =
+        std::count(brgemmIteratorTypes.begin(), brgemmIteratorTypes.end(),
+                   utils::IteratorType::reduction);
+    if (reductionCount != 2 && reductionCount != 3)
+            return failure();
 
-    // Stores the M, N, and K Tile Sizes
+    //  Get the register blocking tile shape from the user input
     SmallVector<int64_t> mxnxkTile(3);
-     // Stores the M, and N Tile Sizes
-    SmallVector<int64_t> mxnTile(2);
+    for (size_t i = 0; i < options.registerTileShape.size(); i++) {
+            mxnxkTile[i] = options.registerTileShape[i];
+    }
 
-    mxnxkTile[0] = tileShapeM[0];
-    mxnxkTile[1] = tileShapeN[1];
-    mxnxkTile[2] = tileShapeM[1];
-    mxnTile[0] = tileShapeM[0];
-    mxnTile[1] = tileShapeN[1];
+    // Set the K tile to 1, if the user not provided (it is fp32 target)
+    if (options.registerTileShape.size() == 2)
+      mxnxkTile[2] = 1;
 
-    // To assist in calculating the argument and step values for the tiled loop.
-    SmallVector<int64_t> boundariesOne{1,
-                                       static_cast<long>(tileShapeM.size() - 1),
-                                       static_cast<long>(mxnxkTile.size() - 1)};
+    // k-tile size adjusted based on the vnni layout for bf16 type
+    auto tensorShape = dyn_cast<MemRefType>(brgemmOp.getOperand(0).getType()).getShape();
+    if (tensorShape.size() == 4 && options.registerTileShape.size() == 3) {
+      mxnxkTile[2] = mxnxkTile[2] / tensorShape[3];
+    }
 
-    SmallVector<int64_t> tileSizesIndex{static_cast<long>(tileShapeM.size()),
-                                        static_cast<long>(tileShapeN.size()),
-                                        static_cast<long>(mxnTile.size())};
-    SmallVector<SmallVector<int64_t>> tileshapes{tileShapeM, tileShapeN, mxnTile};
+
     SmallVector<int> swap_i = {0, 2, 1};
     size_t i = 0;
     std::map<int, std::map<int, Value>> inductionVars;
 
     // For M, N, and K loops
     scf::ForOp innermostForLoop;
-    // For brgemm reduction loop
-    scf::ForOp reductionForLoop;
 
     // Creating the tiled loops
-    for (auto itrShapeM = mxnxkTile.begin(); itrShapeM != mxnxkTile.end();
-         itrShapeM++, i++) {
-      int index = swap_i[i] / boundariesOne[swap_i[i]];
-      int offset = swap_i[i] / (mxnxkTile.size() - 1);
-
-      int operandSize =
-          dyn_cast<MemRefType>(brgemmOp.getOperand(index).getType())
-              .getShape()
-              .size();
-      int effectiveOffset = operandSize - tileSizesIndex[index] + offset;
+    for (auto itrShapeMNK = mxnxkTile.begin(); itrShapeMNK != mxnxkTile.end();
+         itrShapeMNK++, i++) {
       auto upperBound =
-          dyn_cast<MemRefType>(brgemmOp.getOperand(index).getType())
-              .getShape()[effectiveOffset];
+          dyn_cast<MemRefType>(brgemmOp.getOperand(swap_i[i]).getType())
+              .getShape()[1];
+
+      //Tile size should not be greater than the upperBound
+      if ((*itrShapeMNK) > upperBound)
+              return failure();
+
       Location loc = brgemmOp.getLoc();
       Value zeroCst = rewriter.create<arith::ConstantIndexOp>(loc, 0);
       Value ubCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, upperBound);
-      //Tile size should not be greater than the upperBound
-      if ((*itrShapeM) > upperBound)
-              return failure();
-      Value stepCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, *itrShapeM);
+
+      Value stepCstTiledLoop = rewriter.create<arith::ConstantIndexOp>(loc, *itrShapeMNK);
       // Creates M, N, and K tile loops
       scf::ForOp loopOp = rewriter.create<scf::ForOp>(brgemmOp.getLoc(),
                                                       zeroCst, ubCstTiledLoop, stepCstTiledLoop);
       rewriter.setInsertionPointToStart(loopOp.getBody());
-      int indexTwo = offset;
-      int operandSizeTwo =
-          dyn_cast<MemRefType>(brgemmOp.getOperand(indexTwo).getType())
-              .getShape()
-              .size();
-      int effectiveOffsetTwo = operandSizeTwo - tileSizesIndex[index] + index;
-
-      inductionVars[index][effectiveOffset] = loopOp.getInductionVar();
-
-      inductionVars[indexTwo][effectiveOffsetTwo] = loopOp.getInductionVar();
-      int indexThree = mxnTile.size();
-      int effectiveOffsetThree =
-          index +
-          dyn_cast<MemRefType>(brgemmOp.getOperand(indexThree).getType())
-              .getShape()
-              .size() -
-          tileSizesIndex[indexThree];
-      if (inductionVars[indexThree][effectiveOffsetThree] == NULL) {
-        inductionVars[indexThree][effectiveOffsetThree] =
-            loopOp.getInductionVar();
-      }
-
       innermostForLoop = loopOp;
-      if ((mxnxkTile.size() - 1) == (i + 1)) {
-        //Creates the brgemm reduction loop
+
+      // Stores the induction variable with respect to the operands mapping it's subview.
+      if (i == 0) {
+              inductionVars[0][1] = loopOp.getInductionVar();
+              inductionVars[2][0] = loopOp.getInductionVar();
+      } else if(i == 1) {
+              inductionVars[1][2] = loopOp.getInductionVar();
+              inductionVars[2][1] = loopOp.getInductionVar();
+        //Creates reduction loop after the N loop
         Value ubCstReduction = rewriter.create<arith::ConstantIndexOp>(
             loc, dyn_cast<MemRefType>(brgemmOp.getOperand(0).getType())
                      .getShape()[0]);
@@ -152,46 +130,58 @@ struct LinalgOpTiling : OpRewritePattern<linalg::BatchReduceMatmulOp> {
         scf::ForOp redloopOp = rewriter.create<scf::ForOp>(
             brgemmOp.getLoc(), zeroCst, ubCstReduction, stepCstReduction);
         rewriter.setInsertionPointToStart(redloopOp.getBody());
-        reductionForLoop = redloopOp;
+        inductionVars[0][0] = redloopOp.getInductionVar();
+        inductionVars[1][0] = redloopOp.getInductionVar();
+
+      } else if(i == 2) {
+              inductionVars[0][2] = loopOp.getInductionVar();
+              inductionVars[1][1] = loopOp.getInductionVar();
       }
     }
 
+    // DS to assist while creating new subviews with correct indices and shapes
+    SmallVector<int64_t> mxkTile(2);
+    SmallVector<int64_t> kxnTile(2);
+    SmallVector<int64_t> mxnTile(2);
+    mxkTile[0] = mxnxkTile[0];
+    mxkTile[1] = mxnxkTile[2];
+    kxnTile[0] = mxnxkTile[2];
+    kxnTile[1] = mxnxkTile[1];
+    mxnTile[0] = mxnxkTile[0];
+    mxnTile[1] = mxnxkTile[1];
+
+    SmallVector<SmallVector<int64_t>> tileshapes{mxkTile, kxnTile, mxnTile};
     // Creating subviews
-    SmallVector<SmallVector<int64_t>> tiles = {tileShapeM, tileShapeN};
     for (size_t i = 0; i < brgemmOp.getNumOperands(); i++) {
-      SmallVector<int64_t> indices;
-      auto input = brgemmOp.getOperand(i);
-      auto operandType = input.getType();
       SmallVector<OpFoldResult> offsets;
-      size_t k = 0;
-      auto tileItr = tileshapes[i].begin();
-      auto tensorShape = dyn_cast<MemRefType>(operandType).getShape();
+      SmallVector<int64_t> indices;
       SmallVector<OpFoldResult> shape;
       SmallVector<OpFoldResult> strides;
-      for (size_t j = 0; j < tensorShape.size(); j++) {
-        if (j < tensorShape.size() - tileSizesIndex[i]) {
-          if (j == ((tensorShape.size() - tileSizesIndex[i]) - 1) &&
-              i < (brgemmOp.getNumOperands() - 1)) {
-            offsets.push_back(reductionForLoop.getInductionVar());
-            indices.push_back(tensorShape[j] / tensorShape[j]);
-            shape.push_back(rewriter.getIndexAttr(tensorShape[j] / tensorShape[j]));
-            strides.push_back(rewriter.getIndexAttr(1));
 
-          } else {
+      auto input = brgemmOp.getOperand(i);
+      auto tensorShape = dyn_cast<MemRefType>(input.getType()).getShape();
+      auto tileItr = tileshapes[i].begin();
+
+      // Iterates over the shape of each tensor and update its offsets, indices, shapes, strides with respect to tile sizes
+      for (size_t j = 0; j < tensorShape.size(); j++) {
+        if (j == 0 && (i < 2)) { // Updates the batch dimension
+            offsets.push_back(inductionVars[i][j]);
+            indices.push_back(1);
+            shape.push_back(rewriter.getIndexAttr(1));
+            strides.push_back(rewriter.getIndexAttr(1));
+        } else if (j < 3) { // Updates the M, N, and K dimensions
+          offsets.push_back(inductionVars[i][j]);
+          indices.push_back((*tileItr));
+          shape.push_back(rewriter.getIndexAttr(*tileItr));
+          strides.push_back(rewriter.getIndexAttr(1));
+          tileItr++;
+        } else { // Just copies the vnni layout dimensions
             offsets.push_back(rewriter.getIndexAttr(0));
             indices.push_back(tensorShape[j]);
             shape.push_back(rewriter.getIndexAttr(tensorShape[j]));
             strides.push_back(rewriter.getIndexAttr(1));
-          }
-        } else {
-          shape.push_back(rewriter.getIndexAttr(*tileItr));
-          indices.push_back((*tileItr));
-          strides.push_back(rewriter.getIndexAttr(1));
-          offsets.push_back(
-              inductionVars[i][tensorShape.size() - tileSizesIndex[i] + k]);
-          k++;
-          tileItr++;
         }
+
       }
 
       auto subview = rewriter.create<memref::SubViewOp>(
@@ -215,7 +205,7 @@ private:
 
 void populateBrgemmLinalgTilingPatterns(RewritePatternSet &patterns,
                                   BrgemmLinalgTilingOptions options) {
-  patterns.add<LinalgOpTiling>(patterns.getContext(), options);
+  patterns.add<LinalgOpTiling<linalg::GenericOp>, LinalgOpTiling<linalg::BatchReduceMatmulOp>>(patterns.getContext(), options);
 }
 
 struct BrgemmLinalgTiling : public tpp::impl::BrgemmLinalgTilingBase<BrgemmLinalgTiling> {
