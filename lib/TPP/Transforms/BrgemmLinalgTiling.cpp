@@ -89,20 +89,18 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
       mxnxkTile[2] = mxnxkTile[2] / tensorShape[3];
     }
 
-    SmallVector<int> swap_i = {0, 2, 1};
     size_t i = 0;
+    SmallVector<int> swap_i = {0, 2, 1};
     std::map<int, std::map<int, Value>> inductionVars;
 
     // For M, N, and K loops
     scf::ForOp innermostForLoop;
-
     // Creating the tiled loops
     for (auto itrShapeMNK = mxnxkTile.begin(); itrShapeMNK != mxnxkTile.end();
          itrShapeMNK++, i++) {
       auto upperBound =
           dyn_cast<MemRefType>(brgemmOp.getOperand(swap_i[i]).getType())
               .getShape()[1];
-
       // Tile size should not be greater than the upperBound
       if ((*itrShapeMNK) > upperBound)
         return failure();
@@ -111,7 +109,6 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
       Value zeroCst = rewriter.create<arith::ConstantIndexOp>(loc, 0);
       Value ubCstTiledLoop =
           rewriter.create<arith::ConstantIndexOp>(loc, upperBound);
-
       Value stepCstTiledLoop =
           rewriter.create<arith::ConstantIndexOp>(loc, *itrShapeMNK);
       // Creates M, N, and K tile loops
@@ -122,10 +119,10 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
 
       // Stores the induction variable with respect to the operands mapping it's
       // subview.
-      if (i == 0) {
+      if (i == 0) { // Stores iv for M loop
         inductionVars[0][1] = loopOp.getInductionVar();
         inductionVars[2][0] = loopOp.getInductionVar();
-      } else if (i == 1) {
+      } else if (i == 1) { //stores iv for N loop, creates batch loop, and maps iv of batch loop
         inductionVars[1][2] = loopOp.getInductionVar();
         inductionVars[2][1] = loopOp.getInductionVar();
         // Creates reduction loop after the N loop
@@ -140,7 +137,7 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
         inductionVars[0][0] = redloopOp.getInductionVar();
         inductionVars[1][0] = redloopOp.getInductionVar();
 
-      } else if (i == 2) {
+      } else if (i == 2) { // stores iv for k-loop
         inductionVars[0][2] = loopOp.getInductionVar();
         inductionVars[1][1] = loopOp.getInductionVar();
       }
