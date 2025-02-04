@@ -22,6 +22,12 @@ namespace mlir {
 namespace vnni {
 namespace utils {
 
+// Returns True if the current architecture supports AMX instructions.
+bool hasAMX() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SPR) &&
+         (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
 unsigned getVnniBlockingFactor(Type type, Operation *op) {
   unsigned blockingFactor = 0;
 

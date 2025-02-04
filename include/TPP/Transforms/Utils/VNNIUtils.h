@@ -28,13 +28,15 @@ class LinalgOp;
 
 namespace vnni {
 namespace utils {
-
 enum class VnniOperandRank {
   TRANSPOSE = 3,
   GEMM = 3,
   BRGEMM_INS = 4,
   BRGEMM_OUTS = 3
 };
+
+// Returns True if the current architecture supports AMX instructions.
+bool hasAMX();
 
 // Return the VNNI blocking factor if it can be determined for the given type or
 // zero, otherwise.
