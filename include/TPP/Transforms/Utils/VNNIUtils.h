@@ -28,7 +28,7 @@ class LinalgOp;
 
 namespace vnni {
 namespace utils {
-
+bool hasAMX();
 enum class VnniOperandRank {
   TRANSPOSE = 3,
   GEMM = 3,
