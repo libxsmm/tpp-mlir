@@ -16,8 +16,8 @@ else()
 
   FetchContent_Declare(
     xsmm_dnn
-    URL https://github.com/libxsmm/libxsmm-dnn/archive/a6305b41322a0b39be541e09443de424b4285cf7.tar.gz
-    URL_HASH SHA256=dccc4292991361786a61bd00c020d6916e746051c693a3873920cbab05b538c3
+    URL https://github.com/libxsmm/libxsmm-dnn/archive/6757af7d214a49b06e5289b9784b4b99b4a35aaf.tar.gz
+    URL_HASH SHA256=f7c879f2aed6a1562f3e15ea57637845181c6ae4267ec71975ab7b11cd16dfa4
   )
 
   FetchContent_GetProperties(xsmm_dnn)
