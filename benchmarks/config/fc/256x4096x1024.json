@@ -5,14 +5,14 @@
       "type": "XSMM-DNN",
       "benchmark": "xsmm_dnn_mlp",
       "environment": { "OMP_NUM_THREADS": "1" },
-      "flags": [ "100", "256", "3", "F", "64", "64", "64", "0", "0", "1024", "4096" ],
+      "flags": [ "100", "256", "3", "F", "64", "64", "64", "0", "1", "1024", "4096" ],
       "extensions": [ "(avx2|asimd)" ]
     },
     "fc_fp32_omp_16_dnn": {
       "type": "XSMM-DNN",
       "benchmark": "xsmm_dnn_mlp",
-      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "100", "256", "3", "F", "64", "64", "64", "0", "0", "1024", "4096" ],
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0", "LIBXSMM_DNN_DISABLE_SFC": "1" },
+      "flags": [ "100", "256", "3", "F", "64", "64", "64", "0", "1", "1024", "4096" ],
       "extensions": [ "(avx2|asimd)" ]
     }
   }},
@@ -22,14 +22,14 @@
       "type": "XSMM-DNN",
       "benchmark": "xsmm_dnn_mlp",
       "environment": { "OMP_NUM_THREADS": "1" },
-      "flags": [ "100", "256", "3", "F", "64", "64", "64", "1", "1", "1024", "4096" ],
+      "flags": [ "100", "256", "3", "F", "64", "64", "64", "1", "2", "1024", "4096" ],
       "extensions": [ "(avx2|asimd)" ]
     },
     "fc_bf16_omp_16_dnn": {
       "type": "XSMM-DNN",
       "benchmark": "xsmm_dnn_mlp",
-      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "100", "256", "3", "F", "64", "64", "64", "1", "1", "1024", "4096" ],
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0", "LIBXSMM_DNN_DISABLE_SFC": "1" },
+      "flags": [ "100", "256", "3", "F", "64", "64", "64", "1", "2", "1024", "4096" ],
       "extensions": [ "(avx2|asimd)" ]
     }
   }},
