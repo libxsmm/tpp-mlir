@@ -226,10 +226,10 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
     // Erase the old vector contract operation
     for (auto result : contractOp->getResults()) {
       for (auto *userOp : result.getUsers()) {
-        userOp->erase();
+        rewriter.eraseOp(userOp);
       }
     }
-    contractOp.erase();
+    rewriter.eraseOp(contractOp);
 
     return success();
   }
