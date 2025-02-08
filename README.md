@@ -75,7 +75,7 @@ If you don't want to build with OneDNN, disable with the CMake flag `-DUSE_OneDN
 
 ```sh
 # Clone
-git clone https://github.com/plaidml/tpp-mlir.git
+git clone https://github.com/libxsmm/tpp-mlir.git
 mkdir tpp-mlir/build
 pushd tpp-mlir/build
 
