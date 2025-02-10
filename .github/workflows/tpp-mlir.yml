@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: GCC Release
-        run: "echo ${{github.event.pull_request.labels}}"
+        run: "echo ${{github.event.pull_request.labels.*.name}}"
         # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
         #     'KIND=Release COMPILER=gcc CHECK=1 ONEDNN=1 \
         #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: GCC Debug
-        run: "echo ${{github.event.pull_request.labels}}"
+        run: "echo ${{github.event.pull_request.labels.*.name}}"
         # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
         #     'KIND=Debug COMPILER=gcc CHECK=1 ONEDNN=1 \
         #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clang Release
-        run: "echo ${{github.event.pull_request.labels}}"
+        run: "echo ${{github.event.pull_request.labels.*.name}}"
         # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
         #     'KIND=Release COMPILER=clang LINKER=lld CHECK=1 ONEDNN=1 \
         #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clang Debug Sanitizers
-        run: "echo ${{github.event.pull_request.labels}}"
+        run: "echo ${{github.event.pull_request.labels.*.name}}"
         # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
         #         'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 ONEDNN=1 \
         #         ${{ github.workspace }}/scripts/github/build_tpp.sh'"
