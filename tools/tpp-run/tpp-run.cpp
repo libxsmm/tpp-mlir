@@ -95,6 +95,8 @@ llvm::cl::opt<std::string> triple("triple", llvm::cl::desc("Target triple"),
                                   llvm::cl::init("x86_64-linux-gnu"));
 #elif defined(__aarch64__)
                                   llvm::cl::init("aarch64-linux-gnu"));
+#elif defined(__riscv) && 64 == (__riscv_xlen)
+                                  llvm::cl::init("riscv64-linux-gnu"));
 #else
 #error Unsupported architecture
 #endif
@@ -107,6 +109,8 @@ llvm::cl::opt<std::string>
             llvm::cl::init("nehalem"));
 #elif defined(__aarch64__)
             llvm::cl::init("cortex-a53"));
+#elif defined(__riscv) && 64 == (__riscv_xlen)
+            llvm::cl::init(""));
 #else
 #error Unsupported architecture
 #endif
@@ -119,6 +123,8 @@ llvm::cl::opt<std::string>
             llvm::cl::init("sse4.2"));
 #elif defined(__aarch64__)
             llvm::cl::init("neon"));
+#elif defined(__riscv) && 64 == (__riscv_xlen)
+            llvm::cl::init(""));
 #else
 #error Unsupported architecture
 #endif
