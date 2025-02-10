@@ -27,8 +27,8 @@ jobs:
   Check_LLVM:
     if: ${{ github.event_name }} == "push" || \
         (${{ github.event_name }} == "pull_request" && \
-            (contains(github.event.pull_request.labels.*.name, 'quick-benchmark') || \
-             contains(github.event.pull_request.labels.*.name, 'full-benchmark')))
+            (contains(github.event.pull_request.labels, 'quick-benchmark') || \
+             contains(github.event.pull_request.labels, 'full-benchmark')))
     uses: ./.github/workflows/tpp-llvm.yml
     secrets: inherit
 
@@ -37,8 +37,8 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_EMR_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            (contains(github.event.pull_request.labels.*.name, 'quick-benchmark') || \
-             contains(github.event.pull_request.labels.*.name, 'full-benchmark')))
+            (contains(github.event.pull_request.labels, 'quick-benchmark') || \
+             contains(github.event.pull_request.labels, 'full-benchmark')))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -54,8 +54,8 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_EMR_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            (contains(github.event.pull_request.labels.*.name, 'quick-benchmark') || \
-             contains(github.event.pull_request.labels.*.name, 'full-benchmark')))
+            (contains(github.event.pull_request.labels, 'quick-benchmark') || \
+             contains(github.event.pull_request.labels, 'full-benchmark')))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_ZEN_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            contains(github.event.pull_request.labels.*.name, 'full-benchmark'))
+            contains(github.event.pull_request.labels, 'full-benchmark'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_ZEN_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            contains(github.event.pull_request.labels.*.name, 'full-benchmark'))
+            contains(github.event.pull_request.labels, 'full-benchmark'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +103,7 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_CLX_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            contains(github.event.pull_request.labels.*.name, 'full-benchmark'))
+            contains(github.event.pull_request.labels, 'full-benchmark'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +119,7 @@ jobs:
     if: ${{ github.event_name }} == "push" || \
         ${{ inputs.RUN_CLX_BENCH }} == 1 || \
         (${{ github.event_name }} == "pull_request" && \
-            contains(github.event.pull_request.labels.*.name, 'full-benchmark'))
+            contains(github.event.pull_request.labels, 'full-benchmark'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
