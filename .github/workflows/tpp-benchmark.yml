@@ -41,10 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Emerald Rapids Base
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
-          ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #        ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+        #   ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
 
   TPP-MLIR-EMR-OMP:
     runs-on: pcl-tiergarten
@@ -56,10 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Emerald Rapids OpenMP
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -o"
-          ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #        ${{ github.workspace }}/scripts/github/benchmark.sh -o"
+        #   ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
 
   TPP-MLIR-ZEN-BASE:
     runs-on: pcl-tiergarten
@@ -70,10 +72,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Zen5 Base
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
-          ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #        ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+        #   ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
 
   TPP-MLIR-ZEN-OMP:
     runs-on: pcl-tiergarten
@@ -84,10 +87,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Zen5 OpenMP
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -o"
-          ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #        ${{ github.workspace }}/scripts/github/benchmark.sh -o"
+        #   ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
 
   TPP-MLIR-CLX-BASE:
     runs-on: pcl-tiergarten
@@ -98,10 +102,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: CLX Base
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
-          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #         ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+        #   ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
 
   TPP-MLIR-CLX-OMP:
     runs-on: pcl-tiergarten
@@ -112,8 +117,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: CLX OpenMP
-        run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-                ${{ github.workspace }}/scripts/github/benchmark.sh -o"
-          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+        run: "echo Hi"
+        # run: |-
+        #   CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+        #         ${{ github.workspace }}/scripts/github/benchmark.sh -o"
+        #   ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
         

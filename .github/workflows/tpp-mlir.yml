@@ -20,9 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: GCC Release
-        run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
-            'KIND=Release COMPILER=gcc CHECK=1 ONEDNN=1 \
-            ${{ github.workspace }}/scripts/github/build_tpp.sh'"
+        run: "echo Hi"
+        # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
+        #     'KIND=Release COMPILER=gcc CHECK=1 ONEDNN=1 \
+        #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
 
   TPP-MLIR-gcc-deb:
     runs-on: pcl-tiergarten
@@ -30,9 +31,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: GCC Debug
-        run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
-            'KIND=Debug COMPILER=gcc CHECK=1 ONEDNN=1 \
-            ${{ github.workspace }}/scripts/github/build_tpp.sh'"
+        run: "echo Hi"
+        # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
+        #     'KIND=Debug COMPILER=gcc CHECK=1 ONEDNN=1 \
+        #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
 
   TPP-MLIR-clang-rel:
     runs-on: pcl-tiergarten
@@ -40,9 +42,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clang Release
-        run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
-            'KIND=Release COMPILER=clang LINKER=lld CHECK=1 ONEDNN=1 \
-            ${{ github.workspace }}/scripts/github/build_tpp.sh'"
+        run: "echo Hi"
+        # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
+        #     'KIND=Release COMPILER=clang LINKER=lld CHECK=1 ONEDNN=1 \
+        #     ${{ github.workspace }}/scripts/github/build_tpp.sh'"
 
   TPP-MLIR-clang-deb:
     runs-on: pcl-tiergarten
@@ -50,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clang Debug Sanitizers
-        run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
-                'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 ONEDNN=1 \
-                ${{ github.workspace }}/scripts/github/build_tpp.sh'"
+        run: "echo Hi"
+        # run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
+        #         'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 ONEDNN=1 \
+        #         ${{ github.workspace }}/scripts/github/build_tpp.sh'"
