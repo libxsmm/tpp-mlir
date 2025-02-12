@@ -137,19 +137,18 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
       return rewriter.notifyMatchFailure(
           contractOp, "Invalid rank for batch reduce operation");
 
+    if (reductionCount == 3 &&
+        (vectorReadOpLhsType.getRank() != 4 || vectorReadOpRhsRank != 4))
+      return rewriter.notifyMatchFailure(
+          contractOp, "Invalid rank for batch reduce operation with vnni layout");
+
     if (reductionCount == 1)
       return rewriter.notifyMatchFailure(
           contractOp, "Batch matmul operation not supported yet");
 
-    if (reductionCount > 2)
+    if (reductionCount > 3)
       return rewriter.notifyMatchFailure(
           contractOp, "The vector contract operation is not a gemm");
-
-    // Check the K-dim to be 1
-    int64_t K =
-        vectorReadOpLhsType.getDimSize(vectorReadOpLhsType.getRank() - 1);
-    if (K != 1)
-      return rewriter.notifyMatchFailure(contractOp, "K dim is not 1");
 
     // Check whether the linalg tiling + vector contract pattern matches for the
     // 4-nested loop structure
