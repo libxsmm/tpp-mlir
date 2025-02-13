@@ -1,5 +1,4 @@
-//===- BrgemmLinalgTiling.cpp -----------------------------------------*-
-//C++-*-===//
+//===- BrgemmLinalgTiling.cpp -----------------------------------------*-C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -28,6 +27,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/RegionUtils.h"
+#include "TPP/Transforms/Utils/VNNIUtils.h"
 #include "llvm/Support/Debug.h"
 #define DEBUG_TYPE "brgemm-linalg-tiling"
 
@@ -58,9 +58,9 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
       return failure();
 
     // Check whether the tile sizes are valid
-    if (options.registerTileShape.size() != 3 &&
-        options.registerTileShape.size() != 2)
-      return failure();
+    if (options.registerTileShape.size() != 3) 
+      return rewriter.notifyMatchFailure(brgemmOp,
+                                         "Invalid user input tile sizes. Should be <m,n,k>");
 
     // Check the whether the operation is brmatmul fp32 or bf16 type using
     // reduction count
@@ -69,23 +69,41 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
     int reductionCount =
         std::count(brgemmIteratorTypes.begin(), brgemmIteratorTypes.end(),
                    utils::IteratorType::reduction);
-    if (reductionCount != 2 && reductionCount != 3)
-      return failure();
+
+    if (reductionCount == 0)
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "Batch matmul operation not supported yet");
+
+    if (reductionCount == 1)
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "Matmul operation not supported yet");
+
+    if (reductionCount > 3)
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "The operation is not a gemm");
+
+    auto tensorShapeLhs =
+        dyn_cast<MemRefType>(brgemmOp.getOperand(0).getType()).getShape();
+    auto tensorShapeRhs =
+        dyn_cast<MemRefType>(brgemmOp.getOperand(1).getType()).getShape();
+
+    if (reductionCount == 2 &&
+        (tensorShapeLhs.size() != 3 || tensorShapeRhs.size() != 3))
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "Invalid rank for batch reduce operation");
+
+    if (reductionCount == 3 && !vnni::utils::isInVnniLayout(brgemmOp))
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "Failed matching for batch reduce operation with vnni layout");
 
     //  Get the register blocking tile shape from the user input
-    SmallVector<int64_t> mxnxkTile(3);
-    for (size_t i = 0; i < options.registerTileShape.size(); i++) {
-      mxnxkTile[i] = options.registerTileShape[i];
-    }
-
-    // Set the K tile to 1, if the user not provided (it is fp32 target)
-    if (options.registerTileShape.size() == 2)
-      mxnxkTile[2] = 1;
+    SmallVector<int64_t> mxnxkTile(options.registerTileShape.begin(),
+                                    options.registerTileShape.end());
 
     // k-tile size adjusted based on the vnni layout for bf16 type
-    auto tensorShape =
+    if (vnni::utils::isInVnniLayout(brgemmOp)) {
+      auto tensorShape =
         dyn_cast<MemRefType>(brgemmOp.getOperand(0).getType()).getShape();
-    if (tensorShape.size() == 4 && options.registerTileShape.size() == 3) {
       mxnxkTile[2] = mxnxkTile[2] / tensorShape[3];
     }
 
@@ -144,15 +162,9 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
     }
 
     // DS to assist while creating new subviews with correct indices and shapes
-    SmallVector<int64_t> mxkTile(2);
-    SmallVector<int64_t> kxnTile(2);
-    SmallVector<int64_t> mxnTile(2);
-    mxkTile[0] = mxnxkTile[0];
-    mxkTile[1] = mxnxkTile[2];
-    kxnTile[0] = mxnxkTile[2];
-    kxnTile[1] = mxnxkTile[1];
-    mxnTile[0] = mxnxkTile[0];
-    mxnTile[1] = mxnxkTile[1];
+    SmallVector<int64_t> mxkTile{mxnxkTile[0], mxnxkTile[2]};
+    SmallVector<int64_t> kxnTile{mxnxkTile[2], mxnxkTile[1]};
+    SmallVector<int64_t> mxnTile{mxnxkTile[0], mxnxkTile[1]};
 
     SmallVector<SmallVector<int64_t>> tileshapes{mxkTile, kxnTile, mxnTile};
     // Creating subviews

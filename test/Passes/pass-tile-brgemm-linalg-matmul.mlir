@@ -1,4 +1,4 @@
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32" --split-input-file  | FileCheck -check-prefix=CONF1 %s
+// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32,1" --split-input-file  | FileCheck -check-prefix=CONF1 %s
 // RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=32,32,32" --canonicalize --split-input-file  | FileCheck -check-prefix=CONF2 %s
 
 module {
