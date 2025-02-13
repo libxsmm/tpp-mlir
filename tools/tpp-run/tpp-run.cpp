@@ -23,6 +23,7 @@
 #include "llvm/Target/TargetOptions.h"
 
 #include "TPP/Transforms/Utils/TensorInit.h"
+#include "libxsmm.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -270,6 +271,8 @@ int main(int argc, char **argv) {
   if (failed(validateInput()))
     return 1;
 
+  // Initialize the underlying platform
+  libxsmm_init();
   // Initialize the LLVM machinery
   llvm::InitLLVM y(argc, argv);
   llvm::InitializeNativeTarget();

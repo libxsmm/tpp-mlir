@@ -22,6 +22,7 @@
 #include "TPP/Dialect/Perf/PerfOps.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
 #include "TPP/PassUtils.h"
+#include "TPP/Transforms/Utils/VNNIUtils.h"
 #include "mlir/Transforms/Passes.h"
 
 #include <string>
@@ -187,7 +188,9 @@ private:
       pm.addPass(createPrintIRPass());
 
     // Lower to LLVM
-    pm.addPass(createConvertVectorToLLVMPass());
+    ConvertVectorToLLVMPassOptions options;
+    options.amx = vnni::utils::hasAMX() ? true : false;
+    pm.addPass(createConvertVectorToLLVMPass(options));
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
     pm.addPass(createConvertSCFToCFPass());
     if (defParallel)
