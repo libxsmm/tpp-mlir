@@ -128,6 +128,18 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
         std::count(contractIteratorTypes.begin(), contractIteratorTypes.end(),
                    vector::IteratorType::reduction);
 
+    if (reductionCount == 0)
+      return rewriter.notifyMatchFailure(
+          contractOp, "Matmul operation not supported yet");
+
+    if (reductionCount == 1)
+      return rewriter.notifyMatchFailure(
+          contractOp, "Batch matmul operation not supported yet");
+
+    if (reductionCount > 3)
+      return rewriter.notifyMatchFailure(
+          contractOp, "The vector contract operation is not a gemm");
+
     auto vectorReadOpLhsType = cast<ShapedType>(vectorReadOpLhs.getType());
     auto vectorReadOpRhsRank =
         (cast<ShapedType>(vectorReadOpRhs.getType())).getRank();
@@ -137,19 +149,10 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
       return rewriter.notifyMatchFailure(
           contractOp, "Invalid rank for batch reduce operation");
 
-    if (reductionCount == 1)
+    if (reductionCount == 3 &&
+        (vectorReadOpLhsType.getRank() != 4 || vectorReadOpRhsRank != 4))
       return rewriter.notifyMatchFailure(
-          contractOp, "Batch matmul operation not supported yet");
-
-    if (reductionCount > 2)
-      return rewriter.notifyMatchFailure(
-          contractOp, "The vector contract operation is not a gemm");
-
-    // Check the K-dim to be 1
-    int64_t K =
-        vectorReadOpLhsType.getDimSize(vectorReadOpLhsType.getRank() - 1);
-    if (K != 1)
-      return rewriter.notifyMatchFailure(contractOp, "K dim is not 1");
+          contractOp, "Invalid rank for batch reduce operation with vnni layout");
 
     // Check whether the linalg tiling + vector contract pattern matches for the
     // 4-nested loop structure
