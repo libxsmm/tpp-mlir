@@ -72,11 +72,11 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
 
     if (reductionCount == 0)
       return rewriter.notifyMatchFailure(
-          brgemmOp, "Batch matmul operation not supported yet");
+          brgemmOp, "Matmul operation not supported yet");
 
     if (reductionCount == 1)
       return rewriter.notifyMatchFailure(
-          brgemmOp, "Matmul operation not supported yet");
+          brgemmOp, "Batch matmul operation not supported yet");
 
     if (reductionCount > 3)
       return rewriter.notifyMatchFailure(
@@ -107,28 +107,27 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
       mxnxkTile[2] = mxnxkTile[2] / tensorShape[3];
     }
 
-    size_t i = 0;
     SmallVector<int> swap_i = {0, 2, 1};
     std::map<int, std::map<int, Value>> inductionVars;
 
     // For M, N, and K loops
     scf::ForOp innermostForLoop;
     // Creating the tiled loops
-    for (auto itrShapeMNK = mxnxkTile.begin(); itrShapeMNK != mxnxkTile.end();
-         itrShapeMNK++, i++) {
+    for (auto [i, itrShapeMNK] : llvm::enumerate(mxnxkTile)) {
       auto upperBound =
           dyn_cast<MemRefType>(brgemmOp.getOperand(swap_i[i]).getType())
               .getShape()[1];
       // Tile size should not be greater than the upperBound
-      if ((*itrShapeMNK) > upperBound)
-        return failure();
+      if ((itrShapeMNK) > upperBound)
+	return rewriter.notifyMatchFailure(
+          brgemmOp, "Tile size is greater than the dimension");
 
       Location loc = brgemmOp.getLoc();
       Value zeroCst = rewriter.create<arith::ConstantIndexOp>(loc, 0);
       Value ubCstTiledLoop =
           rewriter.create<arith::ConstantIndexOp>(loc, upperBound);
       Value stepCstTiledLoop =
-          rewriter.create<arith::ConstantIndexOp>(loc, *itrShapeMNK);
+          rewriter.create<arith::ConstantIndexOp>(loc, itrShapeMNK);
       // Creates M, N, and K tile loops
       scf::ForOp loopOp = rewriter.create<scf::ForOp>(
           brgemmOp.getLoc(), zeroCst, ubCstTiledLoop, stepCstTiledLoop);
@@ -201,7 +200,7 @@ struct LinalgOpTiling : OpRewritePattern<BrgemmOp> {
       }
 
       auto subview = rewriter.create<memref::SubViewOp>(
-          brgemmOp.getLoc(), MemRefType(), input, offsets, shape, strides);
+          brgemmOp.getLoc(), input, offsets, shape, strides);
       brgemmOp.setOperand(i, subview);
     }
 
