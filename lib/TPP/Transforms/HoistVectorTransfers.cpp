@@ -128,6 +128,18 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
         std::count(contractIteratorTypes.begin(), contractIteratorTypes.end(),
                    vector::IteratorType::reduction);
 
+    if (reductionCount == 0)
+      return rewriter.notifyMatchFailure(
+          contractOp, "Matmul operation not supported yet");
+
+    if (reductionCount == 1)
+      return rewriter.notifyMatchFailure(
+          contractOp, "Batch matmul operation not supported yet");
+
+    if (reductionCount > 3)
+      return rewriter.notifyMatchFailure(
+          contractOp, "The vector contract operation is not a gemm");
+
     auto vectorReadOpLhsType = cast<ShapedType>(vectorReadOpLhs.getType());
     auto vectorReadOpRhsRank =
         (cast<ShapedType>(vectorReadOpRhs.getType())).getRank();
@@ -141,14 +153,6 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
         (vectorReadOpLhsType.getRank() != 4 || vectorReadOpRhsRank != 4))
       return rewriter.notifyMatchFailure(
           contractOp, "Invalid rank for batch reduce operation with vnni layout");
-
-    if (reductionCount == 1)
-      return rewriter.notifyMatchFailure(
-          contractOp, "Batch matmul operation not supported yet");
-
-    if (reductionCount > 3)
-      return rewriter.notifyMatchFailure(
-          contractOp, "The vector contract operation is not a gemm");
 
     // Check whether the linalg tiling + vector contract pattern matches for the
     // 4-nested loop structure
