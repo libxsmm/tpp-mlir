@@ -17,7 +17,7 @@ module attributes {gpu.container_module} {
       %b1 = gpu.block_id  y
       %t0 = gpu.thread_id  x
       %t1 = gpu.thread_id  y
-      gpu.printf "Block (%lld, %lld, 1) - Thread (%lld, %lld, 1)\n" %b0, %b1, %t0, %t1  : index, index, index, index
+      gpu.printf "Block (%lld, %lld, 1) - Thread (%lld, %lld, 1)\n", %b0, %b1, %t0, %t1  : index, index, index, index
       gpu.return
     }
   }

@@ -9,8 +9,6 @@ func.func @matmul(%A: tensor<4x8xf32>,
 // CHECK: llvm.func @xsmm_gemm_invoke
 // CHECK: llvm.func @xsmm_gemm_dispatch
 // CHECK: llvm.func @matmul(%[[ARG0:.+]]: !llvm.ptr,
-// CHECK:   llvm.insertvalue
-// CHECK:   llvm.mlir.constant
 // CHECK:   llvm.call @xsmm_gemm_dispatch
 // CHECK:   llvm.call @xsmm_gemm_invoke
 // CHECK:   llvm.return

@@ -195,22 +195,25 @@ private:
     pm.addPass(createSCFToControlFlowPass());
     if (defParallel)
       pm.addPass(createConvertOpenMPToLLVMPass());
-    pm.addPass(createConvertMathToLLVMPass());
 
     pm.addNestedPass<func::FuncOp>(createGpuAsyncRegionPass());
     pm.addPass(createGpuToLLVMConversionPass());
     GpuModuleToBinaryPassOptions gpuModuleToBinaryPassOptions;
     gpuModuleToBinaryPassOptions.compilationTarget = "fatbin";
     pm.addPass(createGpuModuleToBinaryPass(gpuModuleToBinaryPassOptions));
+    pm.addPass(createConvertMathToLLVMPass());
     pm.addPass(createAsyncToAsyncRuntimePass());
     pm.addPass(createAsyncRuntimeRefCountingPass());
     pm.addPass(createConvertAsyncToLLVMPass());
+    pm.addPass(createConvertIndexToLLVMPass());
 
     pm.addPass(createConvertFuncToLLVMPass());
 
-    pm.addNestedPass<func::FuncOp>(createArithToLLVMConversionPass());
-    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-    pm.addNestedPass<func::FuncOp>(createCSEPass());
+    pm.addPass(createArithToLLVMConversionPass());
+    pm.addPass(createConvertControlFlowToLLVMPass());
+    pm.addPass(createUBToLLVMConversionPass());
+    pm.addPass(createCanonicalizerPass());
+    pm.addPass(createCSEPass());
     pm.addPass(createReconcileUnrealizedCastsPass());
 
     // Anything useful has been lowered by now.

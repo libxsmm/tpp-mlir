@@ -832,6 +832,7 @@ struct SimplifyAndCanonicalizePack
 void mlir::tpp::populateSimplifyPacking(RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
   linalg::populateSimplifyPackAndUnpackPatterns(patterns);
+  linalg::populateFoldPackUnpackIntoTensorEmptyPatterns(patterns);
   tensor::populateFoldTensorEmptyPatterns(patterns);
   linalg::PackOp::getCanonicalizationPatterns(patterns, ctx);
   linalg::UnPackOp::getCanonicalizationPatterns(patterns, ctx);
@@ -849,6 +850,8 @@ void mlir::tpp::populateSimplifyPacking(RewritePatternSet &patterns) {
       patterns, [](OpOperand *operand) {
         return isa<tensor::ExpandShapeOp>(operand->get().getDefiningOp());
       });
+  ctx->getLoadedDialect<linalg::LinalgDialect>()->getCanonicalizationPatterns(
+      patterns);
   ctx->getLoadedDialect<tensor::TensorDialect>()->getCanonicalizationPatterns(
       patterns);
   patterns.add<FoldUnPackIntoInsertSlice>(ctx);

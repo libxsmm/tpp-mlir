@@ -77,6 +77,7 @@ private:
     pm.addNestedPass<gpu::GPUModuleOp>(createConvertFuncToLLVMPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createArithToLLVMConversionPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createConvertIndexToLLVMPass());
+    pm.addNestedPass<gpu::GPUModuleOp>(createUBToLLVMConversionPass());
 
     GpuNVVMAttachTargetOptions nvvmTargetOptions;
     nvvmTargetOptions.triple = gpuTriple;
@@ -85,12 +86,11 @@ private:
     pm.addPass(createGpuNVVMAttachTarget(nvvmTargetOptions));
 
     // Create CUDA kernels.
-    pm.addNestedPass<gpu::GPUModuleOp>(createStripDebugInfoPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createCanonicalizerPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createCSEPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createReconcileUnrealizedCastsPass());
 
-    // Cleanup IR.
+    // // Cleanup IR.
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
 #endif // TPP_CUDA_ENABLE
