@@ -51,7 +51,7 @@ cmake -G Ninja ../llvm \
    -DLLVM_BUILD_EXAMPLES=ON \
    -DLLVM_INSTALL_UTILS=ON \
    -DLLVM_TARGETS_TO_BUILD="host" \
-   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+   -DCMAKE_BUILD_TYPE=Release \
    -DLLVM_ENABLE_ASSERTIONS=ON \
    -DCMAKE_C_COMPILER=clang \
    -DCMAKE_CXX_COMPILER=clang++ \
@@ -82,7 +82,7 @@ pushd tpp-mlir/build
 # Build & test
 # Please, make sure to use clang to build TPP-MLIR
 cmake -G Ninja .. \
-   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+   -DCMAKE_BUILD_TYPE=Release \
    -DMLIR_DIR=$CUSTOM_LLVM_ROOT/lib/cmake/mlir \
    -DLLVM_EXTERNAL_LIT=$CUSTOM_LLVM_ROOT/bin/llvm-lit \
    -DCMAKE_C_COMPILER=clang \
