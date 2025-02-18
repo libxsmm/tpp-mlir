@@ -158,7 +158,7 @@ void Bufferize::runOnOperation() {
     bufferization::buildBufferDeallocationPipeline(passManager, options);
   }
 
-  passManager.addPass(createBufferizationToMemRefPass());
+  passManager.addPass(createConvertBufferizationToMemRefPass());
   if (failed(runPipeline(passManager, moduleOp)))
     return signalPassFailure();
 }

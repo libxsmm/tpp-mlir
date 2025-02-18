@@ -674,7 +674,7 @@ struct PackVNNI : public tpp::impl::PackVNNIBase<PackVNNI> {
     RewritePatternSet patterns(ctx);
     linalg::populateLinalgDeGeneralizationPatterns(patterns);
     patterns.add<VNNIOnMatmul, VNNIOnBRGemm>(ctx);
-    tensor::populateSimplifyPackAndUnpackPatterns(patterns);
+    linalg::populateSimplifyPackAndUnpackPatterns(patterns);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
@@ -831,7 +831,7 @@ struct SimplifyAndCanonicalizePack
 
 void mlir::tpp::populateSimplifyPacking(RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
-  tensor::populateSimplifyPackAndUnpackPatterns(patterns);
+  linalg::populateSimplifyPackAndUnpackPatterns(patterns);
   tensor::populateFoldTensorEmptyPatterns(patterns);
   linalg::PackOp::getCanonicalizationPatterns(patterns, ctx);
   linalg::UnPackOp::getCanonicalizationPatterns(patterns, ctx);

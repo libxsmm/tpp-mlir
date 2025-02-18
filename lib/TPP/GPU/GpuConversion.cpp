@@ -58,7 +58,7 @@ private:
   void constructPipeline() override {
     // Map loops into GPU kernels.
     pm.addNestedPass<func::FuncOp>(createGpuMapParallelLoopsPass());
-    pm.addNestedPass<func::FuncOp>(createParallelLoopToGpuPass());
+    pm.addNestedPass<func::FuncOp>(createConvertParallelLoopToGpuPass());
     pm.addPass(createCleanup());
 
     // First lower linalg using custom patterns then fall back to

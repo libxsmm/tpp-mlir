@@ -93,7 +93,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
     auto alloca = rewriter.create<memref::AllocaOp>(
         op.getLoc(), MemRefType::get({64}, rewriter.getI8Type()));
 
-    ValueRange tileConfigInputs{alloca};
+    SmallVector<Value> tileConfigInputs{alloca};
     rewriter.create<mlir::xsmm::IntelAMXTileConfigOp>(
         op.getLoc(), tileConfigSetup, tileConfigInputs);
 
@@ -107,7 +107,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
         xsmm::utils::getDataType(rewriter, op.getOperand(1).getType()),
         invokeOperands);
 
-    ValueRange tileResetInputs{alloca};
+    SmallVector<Value> tileResetInputs{alloca};
     rewriter.create<mlir::xsmm::IntelAMXTileConfigOp>(
         op.getLoc(), tileConfigReset, tileResetInputs);
 

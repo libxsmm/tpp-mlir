@@ -884,7 +884,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
 
   // DPAS only works with F32 accumulators.
   auto dpasResType =
-      VectorType::get(dpasTypeC.getShape(), FloatType::getF32(ctx));
+      VectorType::get(dpasTypeC.getShape(), Float32Type::get(ctx));
 
   // Extend the accumulation values if needed.
   auto convOutPrecision = !typeC.getElementType().isF32();

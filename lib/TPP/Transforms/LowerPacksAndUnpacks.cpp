@@ -112,7 +112,7 @@ static void fuseOrTilePacks(RewriterBase &rewriter, FunctionOpInterface func) {
             forLoops);
     if (!fusedProducer)
       continue;
-    rewriter.replaceOp(consumerPackOp, tilingResult->replacements);
+    rewriter.replaceOp(consumerPackOp, tilingResult->mergeResult.replacements);
   }
 
   // Tile packs.
@@ -124,7 +124,7 @@ static void fuseOrTilePacks(RewriterBase &rewriter, FunctionOpInterface func) {
         rewriter, cast<TilingInterface>(packOp.getOperation()), tileSizes);
     if (failed(tilingResult))
       continue;
-    rewriter.replaceOp(packOp, tilingResult->replacements);
+    rewriter.replaceOp(packOp, tilingResult->mergeResult.replacements);
   }
 
   // Tile unpacks.
@@ -136,7 +136,7 @@ static void fuseOrTilePacks(RewriterBase &rewriter, FunctionOpInterface func) {
         rewriter, cast<TilingInterface>(unPackOp.getOperation()), tileSizes);
     if (failed(tilingResult))
       continue;
-    rewriter.replaceOp(unPackOp, tilingResult->replacements);
+    rewriter.replaceOp(unPackOp, tilingResult->mergeResult.replacements);
   }
 }
 
@@ -215,7 +215,7 @@ class LowerPacksAndUnPacks
             unpackTilingOptions);
         if (failed(tilingResult))
           return signalPassFailure();
-        rewriter.replaceOp(unPackOp, tilingResult->replacements);
+        rewriter.replaceOp(unPackOp, tilingResult->mergeResult.replacements);
       });
       getOperation()->walk([&](linalg::PackOp packOp) {
         SmallVector<int64_t> tiles(packOp.getSourceType().getRank(), 1);
@@ -226,7 +226,7 @@ class LowerPacksAndUnPacks
             packTilingOptions);
         if (failed(tilingResult))
           return signalPassFailure();
-        rewriter.replaceOp(packOp, tilingResult->replacements);
+        rewriter.replaceOp(packOp, tilingResult->mergeResult.replacements);
       });
       RewritePatternSet patterns(&getContext());
       patterns.add<linalg::DecomposeOuterUnitDimsUnPackOpPattern,

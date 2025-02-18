@@ -138,14 +138,16 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
   assert(rank == strides.size() && "expect rank == strides");
 
   Location loc = linalgOp.getLoc();
-  Type reducedType =
-      (linalgOp.hasPureTensorSemantics())
-          ? tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-                desiredResultRank, cast<RankedTensorType>(operandType), offsets,
-                sizes, strides)
-          : memref::SubViewOp::inferRankReducedResultType(
-                getExpectedResultMemRefShape(sizes, desiredResultRank),
-                cast<MemRefType>(operandType), offsets, sizes, strides);
+  Type reducedType;
+  if (linalgOp.hasPureTensorSemantics()) {
+    reducedType = tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+        desiredResultRank, cast<RankedTensorType>(operandType), offsets, sizes,
+        strides);
+  } else {
+    reducedType = memref::SubViewOp::inferRankReducedResultType(
+        getExpectedResultMemRefShape(sizes, desiredResultRank),
+        cast<MemRefType>(operandType), offsets, sizes, strides);
+  }
 
   Operation *extractOperation =
       (linalgOp.hasPureTensorSemantics())
