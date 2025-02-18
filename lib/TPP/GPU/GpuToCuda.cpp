@@ -90,7 +90,7 @@ private:
     pm.addNestedPass<gpu::GPUModuleOp>(createCSEPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createReconcileUnrealizedCastsPass());
 
-    // // Cleanup IR.
+    // Cleanup IR.
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
 #endif // TPP_CUDA_ENABLE
