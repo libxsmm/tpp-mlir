@@ -238,7 +238,7 @@ public:
     RewritePatternSet patterns(ctx);
     // TODO: Add cleanup patterns to minimize data copies.
     patterns.add<TransferDataToGpu>(ctx);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

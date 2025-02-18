@@ -114,7 +114,7 @@ struct ConvInitSimplify
   void runOnOperation() override {
     RewritePatternSet patterns(getOperation().getContext());
     patterns.add<EliminateZeroInitAndAddBiasToInit>(patterns.getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

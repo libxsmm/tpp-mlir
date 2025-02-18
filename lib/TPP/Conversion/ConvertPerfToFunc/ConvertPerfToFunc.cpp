@@ -242,7 +242,7 @@ struct ConvertPerfToFunc
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     populatePerfToFuncPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

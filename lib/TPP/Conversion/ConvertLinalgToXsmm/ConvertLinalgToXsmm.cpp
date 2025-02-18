@@ -847,7 +847,7 @@ void ConvertLinalgToXsmm::runOnOperation() {
   SmallVector<StringRef> skipPatterns(skipOperations.begin(),
                                       skipOperations.end());
   tpp::populateLinalgToXsmmPatterns(patterns, skipPatterns);
-  if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+  if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
     return signalPassFailure();
 }
 

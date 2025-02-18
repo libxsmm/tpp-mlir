@@ -273,7 +273,7 @@ struct VectorContractToOuterproduct
     RewritePatternSet patterns(context);
     patterns.add<VectorContractToOuterproductPattern>(context);
 
-    if (failed(applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
+    if (failed(applyPatternsGreedily(funcOp, std::move(patterns)))) {
       signalPassFailure();
     }
   }

@@ -31,7 +31,7 @@ struct TestForToForAllRewrite
 void TestForToForAllRewrite::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   linalgx::utils::populateScfForToForAllRewritePattern(patterns);
-  (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  (void)applyPatternsGreedily(getOperation(), std::move(patterns));
 }
 
 namespace mlir {

@@ -724,7 +724,7 @@ struct TileConsumerAndFuseProducers
       // Attempt to recover named ops.
       RewritePatternSet patterns(&ctx);
       linalg::populateLinalgDeGeneralizationPatterns(patterns);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     int64_t numIters = this->numIters;
@@ -749,7 +749,7 @@ struct TileConsumerAndFuseProducers
         // TODO: Remove the generalization of named ops after resolving the
         // above dependency with "populateFoldUnitExtentDimsViaSlicesPatterns".
         linalg::populateLinalgNamedOpsGeneralizationPatterns(patterns);
-        (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+        (void)applyPatternsGreedily(getOperation(), std::move(patterns));
       }
     } while (--numIters);
 
@@ -757,7 +757,7 @@ struct TileConsumerAndFuseProducers
       // Patterns for scf.for.
       RewritePatternSet patterns(&ctx);
       patterns.add<ReplaceIterArgs>(&ctx);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     {
@@ -765,7 +765,7 @@ struct TileConsumerAndFuseProducers
       RewritePatternSet patterns(&ctx);
       if (this->useForAll)
         linalgx::utils::populateScfForToForAllRewritePattern(patterns);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     {
@@ -773,7 +773,7 @@ struct TileConsumerAndFuseProducers
       RewritePatternSet patterns(&ctx);
       linalg::populateLinalgDeGeneralizationPatterns(patterns);
       scf::ForallOp::getCanonicalizationPatterns(patterns, &ctx);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
   }
 };
@@ -804,7 +804,7 @@ struct ElementWiseFusion : tpp::impl::ElementWiseFusionBase<ElementWiseFusion> {
 
     linalg::populateElementwiseOpsFusionPatterns(patterns,
                                                  fuseElementwiseOpsControlFn);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

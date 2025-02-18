@@ -190,7 +190,7 @@ struct HasStaticStrides {
     SmallVector<int64_t> strides;
     if (auto memRefType = dyn_cast_or_null<MemRefType>(operandType)) {
       int64_t offset;
-      if (failed(getStridesAndOffset(memRefType, strides, offset)))
+      if (failed(memRefType.getStridesAndOffset(strides, offset)))
         return false;
       if (llvm::any_of(strides, [](int64_t stride) {
             return stride == ShapedType::kDynamic;

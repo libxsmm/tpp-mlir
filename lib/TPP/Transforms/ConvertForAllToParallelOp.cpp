@@ -40,7 +40,7 @@ struct ConvertForAllToParallelOp
   void runOnOperation() override {
     RewritePatternSet patterns(getOperation().getContext());
     patterns.add<ConvertForAllToParallelOpImpl>(patterns.getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

@@ -127,7 +127,7 @@ struct ConvertLinalgToFunc
     auto *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<ConvertMatmulOp>(ctx);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

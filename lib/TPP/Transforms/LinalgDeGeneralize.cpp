@@ -33,7 +33,7 @@ struct LinalgDeGeneralize
     func::FuncOp func = getOperation();
     RewritePatternSet patterns(&getContext());
     linalg::populateLinalgDeGeneralizationPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(func.getBody(), std::move(patterns));
+    (void)applyPatternsGreedily(func.getBody(), std::move(patterns));
   }
 };
 

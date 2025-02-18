@@ -81,7 +81,7 @@ struct GpuInlineConstants
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     populateGpuInlineConstantsPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

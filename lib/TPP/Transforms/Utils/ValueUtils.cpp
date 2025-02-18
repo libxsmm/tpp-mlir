@@ -102,7 +102,7 @@ FailureOr<SmallVector<int64_t>> getStaticStrides(MemRefType valueType) {
   auto memrefType = cast<MemRefType>(valueType);
   SmallVector<int64_t> strides;
   int64_t offset;
-  if (failed(getStridesAndOffset(memrefType, strides, offset))) {
+  if (failed(memrefType.getStridesAndOffset(strides, offset))) {
     return failure();
   }
   if (llvm::any_of(strides, [](int64_t stride) {

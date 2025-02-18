@@ -186,21 +186,21 @@ class LowerPacksAndUnPacks
       RewritePatternSet patterns(ctx);
       linalgx::utils::populateScfForToForAllRewritePattern(patterns);
       scf::ForallOp::getCanonicalizationPatterns(patterns, ctx);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     // Step3. Simplify packs and unpacks.
     {
       RewritePatternSet patterns(ctx);
       mlir::tpp::populateSimplifyPacking(patterns);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     // Step4. Generalize to linalg.
     {
       RewritePatternSet patterns(ctx);
       patterns.add<LowerPackPattern, LowerUnPackPattern>(ctx);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     // Step5. Fallback on tile by one + generalization patterns.
@@ -232,8 +232,7 @@ class LowerPacksAndUnPacks
       patterns.add<linalg::DecomposeOuterUnitDimsUnPackOpPattern,
                    linalg::DecomposeOuterUnitDimsPackOpPattern>(&getContext());
       tensor::populateMergeConsecutiveInsertExtractSlicePatterns(patterns);
-      if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                              std::move(patterns)))) {
+      if (failed(applyPatternsGreedily(getOperation(), std::move(patterns)))) {
         return signalPassFailure();
       }
     }
@@ -246,7 +245,7 @@ class LowerPacksAndUnPacks
           ->getCanonicalizationPatterns(patterns);
       ctx->getLoadedDialect<tensor::TensorDialect>()
           ->getCanonicalizationPatterns(patterns);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
   }
 };

@@ -43,7 +43,7 @@ struct DecomposeAggregatedOps
   void runOnOperation() override {
     RewritePatternSet patterns(getOperation().getContext());
     patterns.add<DecomposeAggregateOpsImpl>(patterns.getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

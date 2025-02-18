@@ -562,7 +562,7 @@ struct PackMatmul : public tpp::impl::PackMatmulBase<PackMatmul> {
     linalg::populateBlockPackMatmulPatterns(patterns, packControlFn);
     linalg::populateLinalgDeGeneralizationPatterns(patterns);
 
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
@@ -598,7 +598,7 @@ struct PackConv2DNchwFchw
     MLIRContext *ctx = getOperation().getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<DoItOnConv2DNchwFchw>(ctx, blockingFactors);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
@@ -634,7 +634,7 @@ struct PackConv2DNhwcHwcf
     MLIRContext *ctx = getOperation().getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<DoItOnConv2DNhwcHwcf>(ctx, blockingFactors);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
@@ -675,7 +675,7 @@ struct PackVNNI : public tpp::impl::PackVNNIBase<PackVNNI> {
     linalg::populateLinalgDeGeneralizationPatterns(patterns);
     patterns.add<VNNIOnMatmul, VNNIOnBRGemm>(ctx);
     tensor::populateSimplifyPackAndUnpackPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
@@ -686,7 +686,7 @@ struct PropagatePackUnPack
     RewritePatternSet patterns(ctx);
     linalg::populateDataLayoutPropagationPatterns(
         patterns, [](OpOperand *operand) { return true; });
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
@@ -823,7 +823,7 @@ struct SimplifyAndCanonicalizePack
     MLIRContext *ctx = getOperation().getContext();
     RewritePatternSet patterns(ctx);
     tpp::populateSimplifyPacking(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

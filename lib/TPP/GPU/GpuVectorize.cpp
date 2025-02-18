@@ -109,7 +109,7 @@ struct GpuVectorize : public tpp::impl::GpuVectorizeBase<GpuVectorize> {
     vector::TransferReadOp::getCanonicalizationPatterns(patterns, ctx);
     vector::TransferWriteOp::getCanonicalizationPatterns(patterns, ctx);
 
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

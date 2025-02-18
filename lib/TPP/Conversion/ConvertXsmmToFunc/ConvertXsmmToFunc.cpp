@@ -432,7 +432,7 @@ struct ConvertXsmmToFunc
                  ConvertGemmDispatchOp, ConvertBrgemmDispatchOp,
                  ConvertFusedBrgemmOp, ConvertIntelAMXTileConfigDispatchOp>(
         patterns.getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

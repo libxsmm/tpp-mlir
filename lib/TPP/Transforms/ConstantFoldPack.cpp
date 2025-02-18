@@ -83,7 +83,7 @@ struct ConstantFoldPack
     linalg::populateConstantFoldLinalgOperations(
         patterns, [](OpOperand *) -> bool { return true; });
 
-    (void)applyPatternsAndFoldGreedily(module, std::move(patterns));
+    (void)applyPatternsGreedily(module, std::move(patterns));
   }
 };
 

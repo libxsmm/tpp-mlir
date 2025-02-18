@@ -105,7 +105,7 @@ struct ConvertPerfToLoops
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     populatePerfToLoopsPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

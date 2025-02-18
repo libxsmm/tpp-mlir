@@ -122,7 +122,7 @@ struct FoldAddIntoDest
     RewritePatternSet patterns(ctx);
     patterns.add<FoldAddIntoDestRewrite>(ctx);
 
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

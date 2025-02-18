@@ -381,7 +381,7 @@ void VectorContractToFMA::runOnOperation() {
   RewritePatternSet patterns(context);
   patterns.add<VectorContractToFMAPattern>(context, ctx);
 
-  if (failed(applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
+  if (failed(applyPatternsGreedily(funcOp, std::move(patterns)))) {
     signalPassFailure();
   }
 }

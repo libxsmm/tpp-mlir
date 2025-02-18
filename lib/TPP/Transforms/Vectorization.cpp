@@ -117,7 +117,7 @@ struct VectorizationPass
     populateCombinePatterns(patterns);
     vector::populateVectorTransferPermutationMapLoweringPatterns(patterns);
     vector::populateVectorReductionToContractPatterns(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 } // namespace tpp

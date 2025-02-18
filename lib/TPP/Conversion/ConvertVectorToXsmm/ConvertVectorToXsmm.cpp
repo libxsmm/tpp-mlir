@@ -248,7 +248,7 @@ struct ConvertVectorToXsmm
 
   void runOnOperation() final {
     PatternRewriter rewriter(&getContext());
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patterns))) {
+    if (failed(applyPatternsGreedily(getOperation(), patterns))) {
       signalPassFailure();
     }
   }

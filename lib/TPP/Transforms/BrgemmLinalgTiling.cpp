@@ -230,8 +230,7 @@ struct BrgemmLinalgTiling : public tpp::impl::BrgemmLinalgTilingBase<BrgemmLinal
     GreedyRewriteConfig config;
     config.strictMode = GreedyRewriteStrictness::ExistingOps;
 
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
-                                       config);
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };
 } // namespace tpp

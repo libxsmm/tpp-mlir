@@ -192,7 +192,7 @@ struct FoldIntoEltwise : tpp::impl::FoldIntoEltwiseBase<FoldIntoEltwise> {
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<BroadcastIntoEltwise, FillIntoMax>(patterns.getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 
