@@ -104,7 +104,7 @@ private:
     if (linalgToLoops) {
       // Lower linalg directly to loops.
       // Skip all TPP transformations.
-      // Generalize tensor.pack and tensor.unpack.
+      // Generalize linalg.pack and linalg.unpack.
       pm.addPass(createLowerPacksAndUnPacks());
       pm.addNestedPass<func::FuncOp>(createDecomposeAggregatedOps());
       pm.addPass(createBufferize());
@@ -120,7 +120,7 @@ private:
       TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose};
       pm.addPass(createTppMapping(tppMappingOptions));
 
-      // Generalize tensor.pack and tensor.unpack.
+      // Generalize linalg.pack and linalg.unpack.
       pm.addPass(createLowerPacksAndUnPacks());
       pm.addPass(createCleanup());
 

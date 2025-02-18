@@ -3,7 +3,7 @@
 // RUN: FileCheck %s
 
 func.func @vnni_packing(%arg0: tensor<16x16xbf16>, %arg1: tensor<8x16x2xbf16>) -> tensor<8x16x2xbf16> {
-  %pack = tensor.pack %arg0 inner_dims_pos = [0] inner_tiles = [2] into %arg1 : tensor<16x16xbf16> -> tensor<8x16x2xbf16>
+  %pack = linalg.pack %arg0 inner_dims_pos = [0] inner_tiles = [2] into %arg1 : tensor<16x16xbf16> -> tensor<8x16x2xbf16>
   return %pack : tensor<8x16x2xbf16>
 }
 

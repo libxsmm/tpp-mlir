@@ -262,26 +262,26 @@ def CombineXsmmOpPass : Pass<"combine-xsmm-op-optimization", "func::FuncOp"> {
 }
 
 def PropagatePackUnPack : Pass<"propagate-pack-and-unpack", "func::FuncOp"> {
-  let summary = "Propagate tensor.pack and tensor.unpack";
+  let summary = "Propagate linalg.pack and linalg.unpack";
   let description = [{
-    Attempt to push tensor.pack and tensor.unpack at the boundaries. Currently,
+    Attempt to push linalg.pack and linalg.unpack at the boundaries. Currently,
     it propagates through linalg element-wise operations. Only one operand in the
-    generic must come from a tensor.pack/tensor.unpack.
+    generic must come from a linalg.pack/linalg.unpack.
   }];
 }
 
 def SimplifyAndCanonicalizePack : Pass<"simplify-pack", "func::FuncOp"> {
-  let summary = "Simplify and canonicalize tensor.pack";
+  let summary = "Simplify and canonicalize linalg.pack";
   let description = [{
-    Apply `tensor.pack` and `tensor.unpack` canonicalization and simplification
+    Apply `linalg.pack` and `linalg.unpack` canonicalization and simplification
     patterns.
   }];
 }
 
 def ConstantFoldPack : Pass<"constant-fold-pack", "ModuleOp"> {
-  let summary = "Constant fold tensor.pack";
+  let summary = "Constant fold linalg.pack";
   let description = [{
-    Reduce pack overhead by folding tensor.pack into constant tensors.
+    Reduce pack overhead by folding linalg.pack into constant tensors.
   }];
   let dependentDialects = ["linalg::LinalgDialect",
                            "tensor::TensorDialect",

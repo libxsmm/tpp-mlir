@@ -15,11 +15,11 @@ func.func @conv_2d_nchw_fchw(%i: tensor<14x512x28x28xf32>, %f: tensor<1024x512x1
 // CHECK-SAME:  %[[ARG1:.+]]: tensor<1024x512x1x1xf32>,
 // CHECK-SAME:  %[[ARG2:.+]]: tensor<14x1024x28x28xf32>) -> tensor<14x1024x28x28xf32> {
 // CHECK: %[[BUF0:.+]] = tensor.empty() : tensor<14x16x28x28x32xf32>
-// CHECK: %[[PACK0:.+]] = tensor.pack %[[ARG0]] inner_dims_pos = [1] inner_tiles = [32] into %[[BUF0]] : tensor<14x512x28x28xf32> -> tensor<14x16x28x28x32xf32>
+// CHECK: %[[PACK0:.+]] = linalg.pack %[[ARG0]] inner_dims_pos = [1] inner_tiles = [32] into %[[BUF0]] : tensor<14x512x28x28xf32> -> tensor<14x16x28x28x32xf32>
 // CHECK: %[[BUF1:.+]] = tensor.empty() : tensor<32x16x1x1x32x32xf32>
-// CHECK: %[[PACK1:.+]] = tensor.pack %[[ARG1]] inner_dims_pos = [1, 0] inner_tiles = [32, 32] into %[[BUF1]] : tensor<1024x512x1x1xf32> -> tensor<32x16x1x1x32x32xf32>
+// CHECK: %[[PACK1:.+]] = linalg.pack %[[ARG1]] inner_dims_pos = [1, 0] inner_tiles = [32, 32] into %[[BUF1]] : tensor<1024x512x1x1xf32> -> tensor<32x16x1x1x32x32xf32>
 // CHECK: %[[BUF2:.+]] = tensor.empty() : tensor<14x32x28x28x32xf32>
-// CHECK: %[[PACK2:.+]] = tensor.pack %[[ARG2]] inner_dims_pos = [1] inner_tiles = [32] into %[[BUF2]] : tensor<14x1024x28x28xf32> -> tensor<14x32x28x28x32xf32>
+// CHECK: %[[PACK2:.+]] = linalg.pack %[[ARG2]] inner_dims_pos = [1] inner_tiles = [32] into %[[BUF2]] : tensor<14x1024x28x28xf32> -> tensor<14x32x28x28x32xf32>
 // CHECK: %[[VAL:.+]] = linalg.generic {indexing_maps = [#[[MAP0]], #[[MAP1]], #[[MAP2]]], iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel", "reduction", "reduction", "reduction", "reduction"]} ins(%[[PACK0]], %[[PACK1]] : tensor<14x16x28x28x32xf32>, tensor<32x16x1x1x32x32xf32>) outs(%[[PACK2]] : tensor<14x32x28x28x32xf32>)
-// CHECK: %[[OUT:.+]] = tensor.unpack %[[VAL]] inner_dims_pos = [1] inner_tiles = [32] into %[[ARG2]] : tensor<14x32x28x28x32xf32> -> tensor<14x1024x28x28xf32>
+// CHECK: %[[OUT:.+]] = linalg.unpack %[[VAL]] inner_dims_pos = [1] inner_tiles = [32] into %[[ARG2]] : tensor<14x32x28x28x32xf32> -> tensor<14x1024x28x28xf32>
 // CHECK: return %[[OUT]] : tensor<14x1024x28x28xf32>

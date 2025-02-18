@@ -172,12 +172,12 @@ Should be fused with the user(s).
 GEMM ops have transposed versions, we should use this op to annotate operands.
 
 ## Tensor pack
-The tensor operation `tensor.pack` does a "block transpose" (n,m <-> m,n) copies.
+The tensor operation `linalg.pack` does a "block transpose" (n,m <-> m,n) copies.
 We lower this to a series of `tpp.copy` into temporary tiles if needed.
 But the idea is that all constant tensors would have been packed by the compiler already and all input packs would be combined at the beginning.
 
 ## Tensor Unpack
-The tensor operation `tensor.unpack` does a "block transpose" (n,m <-> m,n) copies.
+The tensor operation `linalg.unpack` does a "block transpose" (n,m <-> m,n) copies.
 
 ## VNNI Pack
 Packs into VNNI shape.

@@ -1,7 +1,7 @@
 // RUN: tpp-opt %s -lower-packs-unpacks -split-input-file | FileCheck %s
 
 func.func @matmul_pack(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x32x32x32xbf16>) -> tensor<16x32x32x32xbf16> {
-  %pack = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg1 : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
+  %pack = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg1 : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
   return %pack : tensor<16x32x32x32xbf16>
 }
 
@@ -21,7 +21,7 @@ func.func @matmul_pack(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x32x32x32xb
 // -----
 
 func.func @matmul_unpack(%arg0: tensor<16x16x32x32xbf16>, %arg1: tensor<512x512xbf16>) -> tensor<512x512xbf16> {
-  %unpack = tensor.unpack %arg0 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg1 : tensor<16x16x32x32xbf16> -> tensor<512x512xbf16>
+  %unpack = linalg.unpack %arg0 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg1 : tensor<16x16x32x32xbf16> -> tensor<512x512xbf16>
   return %unpack : tensor<512x512xbf16>
 }
 
@@ -42,9 +42,9 @@ func.func @matmul_unpack(%arg0: tensor<16x16x32x32xbf16>, %arg1: tensor<512x512x
 
 func.func @pack_fusion(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x32x16x32x2xbf16>) -> tensor<16x32x16x32x2xbf16> {
   %1 = tensor.empty() : tensor<16x32x32x32xbf16>
-  %pack_0 = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
+  %pack_0 = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
     : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
-  %pack_1 = tensor.pack %pack_0 inner_dims_pos = [2] inner_tiles = [2] into %arg1
+  %pack_1 = linalg.pack %pack_0 inner_dims_pos = [2] inner_tiles = [2] into %arg1
     : tensor<16x32x32x32xbf16> -> tensor<16x32x16x32x2xbf16>
   return %pack_1 : tensor<16x32x16x32x2xbf16>
 }
@@ -71,11 +71,11 @@ func.func @pack_fusion(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x32x16x32x2
 func.func @expect_to_fuse_first_and_second(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x32x16x32x2xbf16>,
   %arg2: tensor<8x32x16x32x2x2xbf16>) -> tensor<8x32x16x32x2x2xbf16> {
   %1 = tensor.empty() : tensor<16x32x32x32xbf16>
-  %pack_0 = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
+  %pack_0 = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
     : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
-  %pack_1 = tensor.pack %pack_0 inner_dims_pos = [2] inner_tiles = [2] into %arg1
+  %pack_1 = linalg.pack %pack_0 inner_dims_pos = [2] inner_tiles = [2] into %arg1
     : tensor<16x32x32x32xbf16> -> tensor<16x32x16x32x2xbf16>
-  %pack_2 = tensor.pack %pack_1 inner_dims_pos = [0] inner_tiles = [2] into %arg2
+  %pack_2 = linalg.pack %pack_1 inner_dims_pos = [0] inner_tiles = [2] into %arg2
     : tensor<16x32x16x32x2xbf16> -> tensor<8x32x16x32x2x2xbf16>
   return %pack_2 : tensor<8x32x16x32x2x2xbf16>
 }
@@ -102,9 +102,9 @@ func.func @expect_to_fuse_first_and_second(%arg0: tensor<1024x512xbf16>, %arg1: 
 
 func.func @expect_not_to_fuse(%arg0: tensor<1024x512xbf16>, %arg1: tensor<8x32x32x32x2xbf16>) -> tensor<8x32x32x32x2xbf16> {
   %1 = tensor.empty() : tensor<16x32x32x32xbf16>
-  %pack_0 = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
+  %pack_0 = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
     : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
-  %pack_1 = tensor.pack %pack_0 inner_dims_pos = [0] inner_tiles = [2] into %arg1
+  %pack_1 = linalg.pack %pack_0 inner_dims_pos = [0] inner_tiles = [2] into %arg1
     : tensor<16x32x32x32xbf16> -> tensor<8x32x32x32x2xbf16>
   return %pack_1 : tensor<8x32x32x32x2xbf16>
 }
@@ -128,9 +128,9 @@ func.func @expect_not_to_fuse(%arg0: tensor<1024x512xbf16>, %arg1: tensor<8x32x3
 
 func.func @pack_fusion_outer_only(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16x16x32x32x2xbf16>) -> tensor<16x16x32x32x2xbf16> {
   %1 = tensor.empty() : tensor<16x32x32x32xbf16>
-  %pack_0 = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
+  %pack_0 = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1
     : tensor<1024x512xbf16> -> tensor<16x32x32x32xbf16>
-  %pack_1 = tensor.pack %pack_0 inner_dims_pos = [1] inner_tiles = [2] into %arg1
+  %pack_1 = linalg.pack %pack_0 inner_dims_pos = [1] inner_tiles = [2] into %arg1
     : tensor<16x32x32x32xbf16> -> tensor<16x16x32x32x2xbf16>
   return %pack_1 : tensor<16x16x32x32x2xbf16>
 }
@@ -157,7 +157,7 @@ func.func @pack_fusion_outer_only(%arg0: tensor<1024x512xbf16>, %arg1: tensor<16
 // -----
 
 func.func @vnni_packing(%arg0: tensor<16x16xbf16>, %arg1: tensor<8x16x2xbf16>) -> tensor<8x16x2xbf16> {
-  %pack = tensor.pack %arg0 inner_dims_pos = [0] inner_tiles = [2] into %arg1 : tensor<16x16xbf16> -> tensor<8x16x2xbf16>
+  %pack = linalg.pack %arg0 inner_dims_pos = [0] inner_tiles = [2] into %arg1 : tensor<16x16xbf16> -> tensor<8x16x2xbf16>
   return %pack : tensor<8x16x2xbf16>
 }
 

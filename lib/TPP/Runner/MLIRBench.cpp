@@ -88,13 +88,13 @@ LogicalResult MLIRBench::findKernel(StringRef name) {
 
   } else {
     // If there is no entry function, and multiple functions, bail
-    return module.emitError("No valid entry point, use mlir-cpu-runner");
+    return module.emitError("No valid entry point, use mlir-runner");
   }
 
   // Ignore functions that return more than one result
   auto funcType = kernel.getFunctionType();
   if (funcType.getNumResults() > 1)
-    return module.emitError("Multiple return values, use mlir-cpu-runner");
+    return module.emitError("Multiple return values, use mlir-runner");
 
   return success();
 }

@@ -192,7 +192,7 @@ private:
     options.amx = vnni::utils::hasAMX();
     pm.addPass(createConvertVectorToLLVMPass(options));
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
-    pm.addPass(createConvertSCFToCFPass());
+    pm.addPass(createSCFToControlFlowPass());
     if (defParallel)
       pm.addPass(createConvertOpenMPToLLVMPass());
     pm.addPass(createConvertMathToLLVMPass());

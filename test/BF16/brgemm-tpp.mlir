@@ -16,7 +16,7 @@ func.func @brgemm(%arg0: tensor<32x4x4xbf16>, %arg1: tensor<32x4x4xbf16>,
 // CHECK-SAME:  %[[ARG2:.+]]: tensor<4x4xbf16>
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[ARG0]] {{\[}}[0], [1], [2, 3]] output_shape{{.*}}: tensor<32x4x4xbf16> into tensor<32x4x{{2|1}}x{{2|4}}xbf16>
 // CHECK: %[[EMPTY:.+]] = tensor.empty() : tensor<32x{{2|1}}x4x{{2|4}}xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG1]] inner_dims_pos = [1] inner_tiles = [{{2|4}}]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG1]] inner_dims_pos = [1] inner_tiles = [{{2|4}}]
 // CHECK-SAME:  into %[[EMPTY]] : tensor<32x4x4xbf16> -> tensor<32x{{2|1}}x4x{{2|4}}xbf16>
 // CHECK: %{{.+}} = linalg.generic
 // CHECK-SAME:  indexing_maps = [#[[MAP]], #[[MAP1]], #[[MAP2]]]

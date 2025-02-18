@@ -40,14 +40,14 @@ func.func @conv_2d_nhwc_hwcf(%arg0: tensor<1x113x113x64xf32>, %arg1: tensor<3x3x
 // CHECK-DAG: %[[C8:.+]] = arith.constant 8 : index
 // CHECK-DAG: %[[C111:.+]] = arith.constant 111 : index
 // Conv as matmul
-// CHECK-COUNT-3: tensor.pack
+// CHECK-COUNT-3: linalg.pack
 // CHECK: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C8]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C111]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C2]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
 // CHECK:   linalg.matmul
-// CHECK: tensor.unpack
+// CHECK: linalg.unpack
 
 // -----
 
@@ -65,13 +65,13 @@ func.func @conv_2d_nchw_fchw(%i: tensor<14x512x28x28xf32>, %f: tensor<1024x512x1
 // CHECK-DAG: %[[C14:.+]] = arith.constant 14 : index
 // CHECK-DAG: %[[C16:.+]] = arith.constant 16 : index
 // CHECK-DAG: %[[C28:.+]] = arith.constant 28 : index
-// CHECK-COUNT-3: tensor.pack
+// CHECK-COUNT-3: linalg.pack
 // CHECK: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C14]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C28]] step %[[C1]]
 // CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C16]] step %[[C1]]
 // CHECK: linalg.matmul
-// CHECK: tensor.unpack
+// CHECK: linalg.unpack
 
 // -----
 
@@ -96,7 +96,7 @@ func.func @pack_matmul(
 }
 
 // CHECK-LABEL: pack_matmul
-// CHECK-COUNT-2: tensor.pack
+// CHECK-COUNT-2: linalg.pack
 // Packed matmul
 // CHECK:    %{{.+}} = scf.forall (%{{.+}}, %{{.+}}) in (4, 4)
 // CHECK:     %{{.+}} = linalg.batch_reduce_matmul ins(%{{.+}}, %{{.+}} : tensor<4x32x32xf32>, tensor<4x32x32xf32>)
@@ -107,12 +107,12 @@ func.func @pack_matmul(
 func.func @fold_const_pack() ->  tensor<8x2x1x1x32x32xi64> {
   %cst = arith.constant dense<1> : tensor<1x1x64x256xi64>
   %0 = tensor.empty() : tensor<8x2x1x1x32x32xi64>
-  %pack = tensor.pack %cst outer_dims_perm = [3, 2, 0, 1] inner_dims_pos = [2, 3] inner_tiles = [32, 32] into %0 : tensor<1x1x64x256xi64> -> tensor<8x2x1x1x32x32xi64>
+  %pack = linalg.pack %cst outer_dims_perm = [3, 2, 0, 1] inner_dims_pos = [2, 3] inner_tiles = [32, 32] into %0 : tensor<1x1x64x256xi64> -> tensor<8x2x1x1x32x32xi64>
   return  %pack : tensor<8x2x1x1x32x32xi64>
 }
 
 // CHECK-LABEL: func.func @fold_const_pack(
-// CHECK-NOT: tensor.pack
+// CHECK-NOT: linalg.pack
 // CHECK: %[[CST:.+]] = arith.constant dense<1> : tensor<8x2x1x1x32x32xi64>
 // CHECK-NEXT: return %[[CST]] : tensor<8x2x1x1x32x32xi64>
 
@@ -126,18 +126,18 @@ func.func @fold_const_pack() ->  tensor<8x2x1x1x32x32xi64> {
 func.func @propagate_pack_unpack(%arg0: tensor<128x512xf32>, %arg1: tensor<512x256xf32>, %arg2: tensor<128x256xf32>) -> tensor<128x256xf32> {
   %cst = arith.constant 0.000000e+00 : f32
   %0 = tensor.empty() : tensor<4x16x32x32xf32>
-  %pack = tensor.pack %arg0 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %0 : tensor<128x512xf32> -> tensor<4x16x32x32xf32>
+  %pack = linalg.pack %arg0 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %0 : tensor<128x512xf32> -> tensor<4x16x32x32xf32>
   %1 = tensor.empty() : tensor<8x16x32x32xf32>
-  %pack_0 = tensor.pack %arg1 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1 : tensor<512x256xf32> -> tensor<8x16x32x32xf32>
+  %pack_0 = linalg.pack %arg1 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %1 : tensor<512x256xf32> -> tensor<8x16x32x32xf32>
   %2 = tensor.empty() : tensor<4x8x32x32xf32>
-  %pack_1 = tensor.pack %arg2 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %2 : tensor<128x256xf32> -> tensor<4x8x32x32xf32>
+  %pack_1 = linalg.pack %arg2 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %2 : tensor<128x256xf32> -> tensor<4x8x32x32xf32>
   %3 = linalg.generic {indexing_maps = [#map, #map1, #map2], iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]} ins(%pack, %pack_0 : tensor<4x16x32x32xf32>, tensor<8x16x32x32xf32>) outs(%pack_1 : tensor<4x8x32x32xf32>) {
     ^bb0(%in: f32, %in_2: f32, %out: f32):
       %5 = arith.mulf %in, %in_2 : f32
       %6 = arith.addf %out, %5 : f32
       linalg.yield %6 : f32
   } -> tensor<4x8x32x32xf32>
-  %unpack = tensor.unpack %3 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg2 : tensor<4x8x32x32xf32> -> tensor<128x256xf32>
+  %unpack = linalg.unpack %3 inner_dims_pos = [0, 1] inner_tiles = [32, 32] into %arg2 : tensor<4x8x32x32xf32> -> tensor<128x256xf32>
   %4 = linalg.generic {indexing_maps = [#map3], iterator_types = ["parallel", "parallel"]} outs(%unpack : tensor<128x256xf32>) {
     ^bb0(%out: f32):
       %5 = arith.maximumf %out, %cst : f32
@@ -148,7 +148,7 @@ func.func @propagate_pack_unpack(%arg0: tensor<128x512xf32>, %arg1: tensor<512x2
 
 // CHECK-LABEL: propagate_pack_unpack
 // CHECK: linalg.batch_reduce_matmul
-// CHECK-NOT: tensor.unpack
+// CHECK-NOT: linalg.unpack
 // CHECK: linalg.generic
 
 // -----
@@ -201,7 +201,7 @@ func.func @tile_and_fuse(%arg0: tensor<64x64xf32>, %arg1: tensor<64x64xf32>,
 }
 
 // CHECK-LABEL: tile_and_fuse(
-// CHECK-COUNT-2: tensor.pack
+// CHECK-COUNT-2: linalg.pack
 // Fused matmul and relu
 // CHECK: scf.forall
 // CHECK: linalg.batch_reduce_matmul{{.*}}ins(%{{.+}}, %{{.+}} : tensor<2x32x32xf32>, tensor<2x32x32xf32>)

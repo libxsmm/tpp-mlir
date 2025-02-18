@@ -16,7 +16,7 @@ func.func @brgemm(%arg0: tensor<32x4x4xbf16>, %arg1: tensor<32x4x4xbf16>,
 // CHECK-SAME:  %[[ARG2:.+]]: tensor<4x4xbf16>
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[ARG0]] {{\[}}[0], [1], [2, 3]] output_shape{{.*}}: tensor<32x4x4xbf16> into tensor<32x4x{{2|1}}x{{2|4}}xbf16>
 // CHECK: %[[EMPTY:.+]] = tensor.empty() : tensor<32x{{2|1}}x4x{{2|4}}xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG1]]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG1]]
 // CHECK-SAME:  inner_dims_pos = [1] inner_tiles = [{{2|4}}] into %[[EMPTY]]
 // CHECK-SAME:  : tensor<32x4x4xbf16> -> tensor<32x{{2|1}}x4x{{2|4}}xbf16>
 // CHECK: linalg.generic
@@ -71,7 +71,7 @@ func.func @prepacked_matmul(%pack: tensor<4x4x32x32xbf16>, %pack_0: tensor<4x4x3
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[ARG0]] {{\[}}[0], [1], [2], [3, 4]]
 // CHECK-SAME: output_shape{{.*}}: tensor<4x4x32x32xbf16> into tensor<4x4x32x{{16|8}}x{{2|4}}xbf16>
 // CHECK: %[[EMPTY:.+]] = tensor.empty() : tensor<4x4x{{16|8}}x32x{{2|4}}xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG1]] inner_dims_pos = [2] inner_tiles = [{{2|4}}] into %[[EMPTY]]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG1]] inner_dims_pos = [2] inner_tiles = [{{2|4}}] into %[[EMPTY]]
 // CHECK-SAME:  : tensor<4x4x32x32xbf16> -> tensor<4x4x{{16|8}}x32x{{2|4}}xbf16>
 // CHECK: {{.+}} = linalg.generic
 // CHECK-SAME:  indexing_maps = [#[[MAP]], #[[MAP1]], #[[MAP2]]]
@@ -102,7 +102,7 @@ func.func @already_packed_matmul(%arg0: tensor<4x4x32x16x2xbf16>, %arg1: tensor<
 
 // CHECK-LABEL: already_packed_matmul
 // CHECK-NOT: expand_shape
-// CHECK-NOT: tensor.pack
+// CHECK-NOT: linalg.pack
 // CHECK: linalg.generic
 
 // -----
@@ -128,7 +128,7 @@ func.func @no_pack_invalid_reduction_map(%arg0: tensor<3x16x8xbf16>,
 
 // CHECK: no_pack_invalid_reduction_map
 // CHECK-NOT: expand_shape
-// CHECK-NOT: tensor.pack
+// CHECK-NOT: linalg.pack
 // CHECK: linalg.generic
 
 // -----
@@ -154,5 +154,5 @@ func.func @no_pack_not_contraction(%arg0: tensor<4x4x32x32xbf16>, %arg1: tensor<
 
 // CHECK: no_pack_not_contraction
 // CHECK-NOT: expand_shape
-// CHECK-NOT: tensor.pack
+// CHECK-NOT: linalg.pack
 // CHECK: linalg.generic

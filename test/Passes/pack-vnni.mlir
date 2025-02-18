@@ -21,7 +21,7 @@ module attributes {
 // CHECK-SAME:  %[[ARG2:.+]]: tensor<32x32xbf16>
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[ARG0]] {{\[}}[0], [1], [2, 3]]
 // CHECK-SAME: output_shape{{.*}}: tensor<5x32x64xbf16> into tensor<5x32x32x2xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG1]]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG1]]
 // CHECK-SAME:  inner_dims_pos = [1] inner_tiles = [2]
 // CHECK-SAME:  : tensor<5x64x32xbf16> -> tensor<5x32x32x2xbf16>
 // CHECK: linalg.generic
@@ -53,7 +53,7 @@ module attributes {
 // CHECK-SAME:  %[[ARG2:.+]]: tensor<32x32xbf16>
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[ARG0]] {{\[}}[0], [1], [2, 3]]
 // CHECK-SAME: output_shape{{.*}}: tensor<5x32x64xbf16> into tensor<5x32x16x4xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG1]]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG1]]
 // CHECK-SAME:  inner_dims_pos = [1] inner_tiles = [4]
 // CHECK-SAME:  : tensor<5x64x32xbf16> -> tensor<5x16x32x4xbf16>
 // CHECK: linalg.generic

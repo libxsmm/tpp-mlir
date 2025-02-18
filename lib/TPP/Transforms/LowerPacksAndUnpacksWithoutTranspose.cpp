@@ -39,7 +39,7 @@ namespace {
 
 /// Wrapper around linalg::lowerPack which undoes the transpose that might have
 /// happened. Single user genericOp's indexing_maps is corrected accordingly.
-void lowerPackAndFoldTranspose(tensor::PackOp packOp,
+void lowerPackAndFoldTranspose(linalg::PackOp packOp,
                                linalg::GenericOp genericOp, uint operandIdx,
                                PatternRewriter &rewriter) {
   auto packInversionPerm = tensor::getPackInverseDestPerm(packOp);
@@ -67,7 +67,7 @@ struct LowerPackOnInputsFoldingTranspose
     : public OpRewritePattern<linalg::GenericOp> {
   // Is only called with single-user packOp operands, so callback can always
   // find the (use by the) linalg.generic that is the target of the pattern.
-  using ControlFn = std::function<bool(tensor::PackOp)>;
+  using ControlFn = std::function<bool(linalg::PackOp)>;
   ControlFn controlFn;
 
   LowerPackOnInputsFoldingTranspose(MLIRContext *context,
@@ -81,7 +81,7 @@ struct LowerPackOnInputsFoldingTranspose
     for (auto &&[operandIdx, inOperand] :
          llvm::enumerate(genericOp.getInputs())) {
       auto packOp =
-          dyn_cast_if_present<tensor::PackOp>(inOperand.getDefiningOp());
+          dyn_cast_if_present<linalg::PackOp>(inOperand.getDefiningOp());
 
       if (!packOp || !packOp->hasOneUse() || (controlFn && !controlFn(packOp)))
         continue;
@@ -99,7 +99,7 @@ struct LowerPackUnpackOnOutputFoldingTranspose
     : public OpRewritePattern<linalg::GenericOp> {
   // Is only called with single-user packOp operands, so callback can always
   // find the (use by the) linalg.generic that is the target of the pattern.
-  using ControlFn = std::function<bool(tensor::PackOp, tensor::UnPackOp)>;
+  using ControlFn = std::function<bool(linalg::PackOp, linalg::UnPackOp)>;
   ControlFn controlFn;
 
   LowerPackUnpackOnOutputFoldingTranspose(MLIRContext *context,
@@ -120,9 +120,9 @@ struct LowerPackUnpackOnOutputFoldingTranspose
         continue;
 
       auto packOp =
-          dyn_cast_if_present<tensor::PackOp>(outOperand.getDefiningOp());
+          dyn_cast_if_present<linalg::PackOp>(outOperand.getDefiningOp());
       auto unpackOp =
-          llvm::dyn_cast<tensor::UnPackOp>(*(result.getUsers().begin()));
+          llvm::dyn_cast<linalg::UnPackOp>(*(result.getUsers().begin()));
 
       if (!packOp || !packOp->hasOneUse() || !unpackOp)
         continue;
@@ -188,7 +188,7 @@ struct LowerPacksAndUnpacksWithoutTranspose
 
     RewritePatternSet patterns(ctx);
     patterns.add<LowerPackOnInputsFoldingTranspose>(
-        ctx, [](tensor::PackOp packOp) {
+        ctx, [](linalg::PackOp packOp) {
           // Only lower packOps whose argument is not a constant.
           return !llvm::dyn_cast_if_present<arith::ConstantOp>(
               packOp.getOperand(0).getDefiningOp());

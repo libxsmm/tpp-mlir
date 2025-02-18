@@ -58,13 +58,13 @@ static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
   SmallVector<int64_t> staticTiles;
   dispatchIndexOpFoldResults(tiles, dynamicTiles, staticTiles);
   RankedTensorType result =
-      tensor::PackOp::inferPackedType(cast<RankedTensorType>(input.getType()),
+      linalg::PackOp::inferPackedType(cast<RankedTensorType>(input.getType()),
                                       staticTiles, innerDimsPos, outerDimsPerm);
   auto inputType = cast<RankedTensorType>(input.getType());
   ArrayRef<int64_t> shape = result.getShape();
   Value output =
       builder.create<tensor::EmptyOp>(loc, shape, inputType.getElementType());
-  return builder.create<tensor::PackOp>(loc, input, output, innerDimsPos, tiles,
+  return builder.create<linalg::PackOp>(loc, input, output, innerDimsPos, tiles,
                                         /*paddingValue=*/std::nullopt,
                                         outerDimsPerm);
 }
@@ -76,7 +76,7 @@ static Value toUnPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
                                 ArrayRef<int64_t> outerDimsPerm) {
   if (auto fillOp = output.getDefiningOp<linalg::FillOp>())
     output = fillOp.getOutputs()[0];
-  return builder.create<tensor::UnPackOp>(loc, input, output, innerDimPos,
+  return builder.create<linalg::UnPackOp>(loc, input, output, innerDimPos,
                                           tiles, outerDimsPerm);
 }
 
@@ -690,25 +690,25 @@ struct PropagatePackUnPack
   }
 };
 
-// Fold a tensor.unpack into an scf.parallel_insert.
+// Fold a linalg.unpack into an scf.parallel_insert.
 //
 // The pattern looks like:
 //
-// %p = tensor.pack %a into %b
+// %p = linalg.pack %a into %b
 // %l = scf.forall ... iter_args(%0 = %p) {
 // ...
 // }
-// %u = tensor.unpack %l into %c
+// %u = linalg.unpack %l into %c
 //
 // We will rewrite as:
 //
 // %l = scf.forall ... iter_args(%0 = %a) {
 // ...
 // }
-struct FoldUnPackIntoInsertSlice : public OpRewritePattern<tensor::UnPackOp> {
-  using OpRewritePattern<tensor::UnPackOp>::OpRewritePattern;
+struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
+  using OpRewritePattern<linalg::UnPackOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(tensor::UnPackOp unPackOp,
+  LogicalResult matchAndRewrite(linalg::UnPackOp unPackOp,
                                 PatternRewriter &rewriter) const override {
     if (!unPackOp.getOuterDimsPerm().empty())
       return failure();
@@ -731,8 +731,8 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<tensor::UnPackOp> {
     // Create a new scf.forall operation, updating its output.
     Value loopOperand =
         forallOp.getTiedOpOperand(forallOp->getResult(0))->get();
-    tensor::PackOp packOp =
-        dyn_cast_or_null<tensor::PackOp>(loopOperand.getDefiningOp());
+    linalg::PackOp packOp =
+        dyn_cast_or_null<linalg::PackOp>(loopOperand.getDefiningOp());
     if (!packOp)
       return failure();
     Value newLoopOperand = packOp.getSource();
@@ -833,8 +833,8 @@ void mlir::tpp::populateSimplifyPacking(RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
   tensor::populateSimplifyPackAndUnpackPatterns(patterns);
   tensor::populateFoldTensorEmptyPatterns(patterns);
-  tensor::PackOp::getCanonicalizationPatterns(patterns, ctx);
-  tensor::UnPackOp::getCanonicalizationPatterns(patterns, ctx);
+  linalg::PackOp::getCanonicalizationPatterns(patterns, ctx);
+  linalg::UnPackOp::getCanonicalizationPatterns(patterns, ctx);
   tensor::ExtractSliceOp::getCanonicalizationPatterns(patterns, ctx);
   tensor::CollapseShapeOp::getCanonicalizationPatterns(patterns, ctx);
   tensor::CastOp::getCanonicalizationPatterns(patterns, ctx);

@@ -19,15 +19,15 @@ func.func @matmul_static(
 // CHECK-LABEL: matmul_static
 // CHECK-SAME: %[[ARG0:.+]]: tensor<256x512xbf16>, %[[ARG1:.+]]: tensor<512x1024xbf16>, %[[ARG2:.+]]: tensor<256x1024xbf16>
 // CHECK: %[[EMPTY_0:.+]] =  tensor.empty() : tensor<8x16x32x32xbf16>
-// CHECK: %[[PACK:.+]] = tensor.pack %[[ARG0]] outer_dims_perm = [0, 1] inner_dims_pos = [0, 1] inner_tiles = [32, 32]
+// CHECK: %[[PACK:.+]] = linalg.pack %[[ARG0]] outer_dims_perm = [0, 1] inner_dims_pos = [0, 1] inner_tiles = [32, 32]
 // CHECK-SAME:  into %[[EMPTY_0]] : tensor<256x512xbf16> -> tensor<8x16x32x32xbf16>
 // CHECK: %[[EMPTY_1:.+]] = tensor.empty() : tensor<32x16x32x32xbf16>
-// CHECK: %[[PACK_0:.+]] = tensor.pack %[[ARG1]] outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32]
+// CHECK: %[[PACK_0:.+]] = linalg.pack %[[ARG1]] outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32]
 // CHECK-SAME:  into %{{.+}} : tensor<512x1024xbf16> -> tensor<32x16x32x32xbf16>
 // CHECK: %[[VNNI_A:.+]] = tensor.expand_shape %[[PACK]] {{\[}}[0], [1], [2], [3, 4]]
 // CHECK-SAME: output_shape{{.*}}: tensor<8x16x32x32xbf16> into tensor<8x16x32x{{16|8}}x{{2|4}}xbf16>
 // CHECK: %[[EMPTY_2:.+]] = tensor.empty() : tensor<32x16x{{16|8}}x32x{{2|4}}xbf16>
-// CHECK: %[[PACK_1:.+]] = tensor.pack %[[PACK_0]] inner_dims_pos = [2] inner_tiles = [{{2|4}}] into %[[EMPTY_2]]
+// CHECK: %[[PACK_1:.+]] = linalg.pack %[[PACK_0]] inner_dims_pos = [2] inner_tiles = [{{2|4}}] into %[[EMPTY_2]]
 // CHECK-SAME:  : tensor<32x16x32x32xbf16> -> tensor<32x16x{{16|8}}x32x{{2|4}}xbf16>
 // CHECK: %{{.+}} = scf.forall (%[[ARG3:.+]], %[[ARG4:.+]]) in (8, 32) shared_outs(%[[ARG5:.+]] = %[[ARG2]])
 // CHECK: %[[APPLY:.+]] = affine.apply #[[MAP]](%[[ARG3]])

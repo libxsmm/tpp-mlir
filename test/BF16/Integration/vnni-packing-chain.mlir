@@ -6,10 +6,10 @@
 
 func.func @vnni_packing(%arg0: tensor<32x32xbf16>, %arg1: tensor<2x2x8x16x2xbf16>) -> tensor<2x2x8x16x2xbf16> {
   %0 = tensor.empty() : tensor<2x2x16x16xbf16>
-  %pack = tensor.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [16, 16]
+  %pack = linalg.pack %arg0 outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [16, 16]
     into %0 : tensor<32x32xbf16> -> tensor<2x2x16x16xbf16>
   // IR: xsmm_unary_invoke
-  %vnni_pack = tensor.pack %pack inner_dims_pos = [2] inner_tiles = [2]
+  %vnni_pack = linalg.pack %pack inner_dims_pos = [2] inner_tiles = [2]
     into %arg1 : tensor<2x2x16x16xbf16> -> tensor<2x2x8x16x2xbf16>
   return %vnni_pack : tensor<2x2x8x16x2xbf16>
 }

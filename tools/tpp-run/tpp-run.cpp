@@ -192,7 +192,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
 
 std::unique_ptr<llvm::Module> lowerToLLVMIR(Operation *module,
                                             llvm::LLVMContext &llvmContext) {
-  // Default lowering for mlir-cpu-runner
+  // Default lowering for mlir-runner
   auto llvmModule = translateModuleToLLVMIR(module, llvmContext);
   assert(llvmModule);
 

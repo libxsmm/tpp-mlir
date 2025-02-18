@@ -28,11 +28,11 @@ namespace tpp {
 
 namespace {
 
-// Helper pattern - lower tensor.pack operations that pack constants.
-struct LowerConstantPacking : public OpRewritePattern<tensor::PackOp> {
-  using OpRewritePattern<tensor::PackOp>::OpRewritePattern;
+// Helper pattern - lower linalg.pack operations that pack constants.
+struct LowerConstantPacking : public OpRewritePattern<linalg::PackOp> {
+  using OpRewritePattern<linalg::PackOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(tensor::PackOp packOp,
+  LogicalResult matchAndRewrite(linalg::PackOp packOp,
                                 PatternRewriter &rewriter) const override {
     auto constOp = packOp.getSource().getDefiningOp<arith::ConstantOp>();
     if (!constOp)
@@ -52,7 +52,7 @@ struct LowerConstantPacking : public OpRewritePattern<tensor::PackOp> {
       return rewriter.notifyMatchFailure(
           packOp, "expects destination with static shape");
 
-    // If it is a splat constant, skip and let tensor.pack folder to handle this
+    // If it is a splat constant, skip and let linalg.pack folder to handle this
     // case.
     if (denseAttr.isSplat())
       return rewriter.notifyMatchFailure(
@@ -77,7 +77,7 @@ struct ConstantFoldPack
     // Apply canonicalization to fold trivial cases and linalg constant folders
     // to cleanup lowered packs.
     linalg::FillOp::getCanonicalizationPatterns(patterns, ctx);
-    tensor::PackOp::getCanonicalizationPatterns(patterns, ctx);
+    linalg::PackOp::getCanonicalizationPatterns(patterns, ctx);
     tensor::populateRewriteAsConstantPatterns(
         patterns, [](OpOperand *) -> bool { return true; });
     linalg::populateConstantFoldLinalgOperations(

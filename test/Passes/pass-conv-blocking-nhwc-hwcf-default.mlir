@@ -17,15 +17,15 @@ func.func @conv_2d_nhwc_hwcf(%arg0: tensor<1x113x113x64xf32>, %arg1: tensor<3x3x
 // CHECK-SAME: %[[ARG1:.+]]: tensor<3x3x64x256xf32>,
 // CHECK-SAME: %[[ARG2:.+]]: tensor<1x111x111x256xf32>)
 // CHECK: %[[BUF0:.+]] = tensor.empty() : tensor<1x2x113x113x32xf32>
-// CHECK: %[[PACK0:.+]] = tensor.pack %[[ARG0]]
+// CHECK: %[[PACK0:.+]] = linalg.pack %[[ARG0]]
 // CHECK-SAME:  outer_dims_perm = [0, 3, 1, 2] inner_dims_pos = [3] inner_tiles = [32]
 // CHECK-SAME:  into %[[BUF0]] : tensor<1x113x113x64xf32> -> tensor<1x2x113x113x32xf32>
 // CHECK: %[[BUF1:.+]] = tensor.empty() : tensor<8x2x3x3x32x32xf32>
-// CHECK: %[[PACK1:.+]] = tensor.pack %[[ARG1]]
+// CHECK: %[[PACK1:.+]] = linalg.pack %[[ARG1]]
 // CHECK-SAME:  outer_dims_perm = [3, 2, 0, 1] inner_dims_pos = [2, 3] inner_tiles = [32, 32]
 // CHECK-SAME:  into %[[BUF1]] : tensor<3x3x64x256xf32> -> tensor<8x2x3x3x32x32xf32>
 // CHECK: %[[BUF2:.+]] = tensor.empty() : tensor<1x8x111x111x32xf32>
-// CHECK: %[[PACK2:.+]] = tensor.pack %[[ARG2]]
+// CHECK: %[[PACK2:.+]] = linalg.pack %[[ARG2]]
 // CHECK-SAME:  outer_dims_perm = [0, 3, 1, 2] inner_dims_pos = [3] inner_tiles = [32]
 // CHECK-SAME:  into %[[BUF2]] : tensor<1x111x111x256xf32> -> tensor<1x8x111x111x32xf32>
 // CHECK: %[[GEN:.+]] = linalg.generic {
@@ -33,7 +33,7 @@ func.func @conv_2d_nhwc_hwcf(%arg0: tensor<1x113x113x64xf32>, %arg1: tensor<3x3x
 // CHECK-SAME:  iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel", "reduction", "reduction", "reduction", "reduction"]}
 // CHECK-SAME:  ins(%[[PACK0]], %[[PACK1]]
 // CHECK-SAME:  outs(%[[PACK2]]
-// CHECK: %[[RES:.+]] = tensor.unpack %[[GEN]]
+// CHECK: %[[RES:.+]] = linalg.unpack %[[GEN]]
 // CHECK-SAME:  outer_dims_perm = [0, 3, 1, 2] inner_dims_pos = [3] inner_tiles = [32]
 // CHECK-SAME:  into %[[ARG2]] : tensor<1x8x111x111x32xf32> -> tensor<1x111x111x256xf32>
 // CHECK: return %[[RES]] : tensor<1x111x111x256xf32>

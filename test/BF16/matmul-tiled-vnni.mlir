@@ -48,7 +48,7 @@ module {
 // CHECK: %{{.+}}: tensor<32x128x4x4xbf16>) -> tensor<32x128x4x4xbf16> {
 // CHECK: scf.for
 // CHECK: scf.for
-// CHECK:       %{{.+}} = tensor.pack
+// CHECK:       %{{.+}} = linalg.pack
 // CHECK:  %{{.+}} = linalg.generic
 // CHECK-SAME: indexing_maps = [#[[MAP]], #[[MAP1]], #[[MAP2]]]
 // CHECK-SAME: iterator_types = ["reduction", "parallel", "parallel", "reduction", "reduction"]

@@ -21,15 +21,15 @@ func.func @matmul_and_relu(%arg0: tensor<128x128xf32>, %arg1: tensor<128x128xf32
 // CHECK-SAME:    %[[ARG1:[0-9a-z]+]]: tensor<128x128xf32>
 // CHECK-SAME:    %[[ARG2:[0-9a-z]+]]: tensor<128x128xf32>) -> tensor<128x128xf32> {
 // CHECK: %[[BUF0:.+]] = tensor.empty() : tensor<4x4x32x32xf32>
-// CHECK: %[[PACK0:.+]] = tensor.pack %[[ARG0]]
+// CHECK: %[[PACK0:.+]] = linalg.pack %[[ARG0]]
 // CHECK-SAME:  inner_dims_pos = [0, 1] inner_tiles = [32, 32]
 // CHECK-SAME:  into %[[BUF0]] : tensor<128x128xf32> -> tensor<4x4x32x32xf32>
 // CHECK: %[[BUF1:.+]] = tensor.empty() : tensor<4x4x32x32xf32>
-// CHECK: %[[PACK1:.+]] = tensor.pack %[[ARG1]]
+// CHECK: %[[PACK1:.+]] = linalg.pack %[[ARG1]]
 // CHECK-SAME:  outer_dims_perm = [1, 0] inner_dims_pos = [0, 1] inner_tiles = [32, 32]
 // CHECK-SAME:  into %[[BUF1]] : tensor<128x128xf32> -> tensor<4x4x32x32xf32>
 // CHECK: %[[BUF2:.+]] = tensor.empty() : tensor<4x4x32x32xf32>
-// CHECK: %[[PACK2:.+]] = tensor.pack %[[ARG2]]
+// CHECK: %[[PACK2:.+]] = linalg.pack %[[ARG2]]
 // CHECK-SAME:  inner_dims_pos = [0, 1] inner_tiles = [32, 32]
 // CHECK-SAME:  into %[[BUF2]] : tensor<128x128xf32> -> tensor<4x4x32x32xf32>
 // CHECK: %[[LOOP:.+]] = scf.forall (%[[ARG3:.+]], %[[ARG4:.+]]) in (4, 4)
