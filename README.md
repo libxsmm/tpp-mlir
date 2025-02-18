@@ -95,6 +95,8 @@ popd
 
 To enable experimental GPU support see: [GPU/README.md](lib/TPP/GPU/README.md)
 
+In the example above, we are building both LLVM/MLIR and tpp-mlir in relese mode. You can easily change the build type by adopting the `-DCMAKE_BUILD_TYPE` option, e.g. `=DCMAKE_BUILD_TYPE=RelWithDebInfo`. 
+
 ### Conda Environment
 
 Every modern Linux and MacOS system should be able to build our project without glitches, however, you may have an older OS or some special condisiont (cluster environment).
