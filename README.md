@@ -30,7 +30,7 @@ If you're having trouble with your build, you can use Conda to create a minimal 
 git clone https://github.com/llvm/llvm-project.git
 
 # checking out a tpp-mlir compatible version of llvm-project
-wget https://raw.githubusercontent.com/plaidml/tpp-mlir/main/build_tools/llvm_version.txt
+wget https://raw.githubusercontent.com/libxsmm/tpp-mlir/main/build_tools/llvm_version.txt
 pushd llvm-project
 git checkout `cat ../llvm_version.txt`
 popd
@@ -101,14 +101,14 @@ Every modern Linux and MacOS system should be able to build our project without 
 As each operating system has its own package manager and package names, we opted for providing instructions for the user-level package manager ```conda```.
 This environment has been successfully tested on top of a Fedora Server minimal installation with less than 400 system-wide packages being installed.
 
-Initial Setup (using Conda):
+Initial Setup (using Conda via Miniforge):
 ```sh
 export TPPMLIR_WORKSPACE_DIR=/foo
 cd ${TPPMLIR_WORKSPACE_DIR}
 export ARCH_NAME=$(uname -m)
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${ARCH_NAME}.sh
-bash Miniconda3-latest-Linux-${ARCH_NAME}.sh -b -p ${TPPMLIR_WORKSPACE_DIR}/miniconda3
-eval "$(${TPPMLIR_WORKSPACE_DIR}/miniconda3/bin/conda shell.bash hook)"
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${ARCH_NAME}.sh
+bash Miniforge3-Linux-${ARCH_NAME}.sh -b -p ${TPPMLIR_WORKSPACE_DIR}/miniforge3
+eval "$(${TPPMLIR_WORKSPACE_DIR}/miniforge3/bin/conda shell.bash hook)"
 conda activate
 
 conda install -y cmake ninja git clang clangxx llvm lld llvm-openmp llvm-tools binutils
@@ -124,7 +124,7 @@ Reloading the environment  after conda deactivate/logout/reboot:
 ```sh
 export TPPMLIR_WORKSPACE_DIR=/foo
 cd ${TPPMLIR_WORKSPACE_DIR}
-eval "$(${TPPMLIR_WORKSPACE_DIR}/miniconda3/bin/conda shell.bash hook)"
+eval "$(${TPPMLIR_WORKSPACE_DIR}/miniforge3/bin/conda shell.bash hook)"
 conda activate
 ```
 
