@@ -12,7 +12,7 @@ if(USE_OpenMP)
     # Only if we found an "llvm" path that we need to add
     find_library(LLVM_OMP NAMES omp libomp libomp.so libomp.so.5)
     find_library(PTHREAD NAMES pthread libpthread libpthread.a libpthread.so)
-    if (NOT LLVM_OMP)
+    if (NOT LLVM_OMP OR NOT PTHREAD)
       message(FATAL_ERROR "LLVM OpenMP required but not found")
     endif()
     set(OPENMP_FOUND ON)
