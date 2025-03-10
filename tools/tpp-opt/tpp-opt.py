@@ -8,10 +8,14 @@ from argparse import ArgumentParser
 from mlir import ir
 from mlir.ir import Context, Location, InsertionPoint
 from mlir.dialects import transform
-from mlir.dialects.transform import structured
+from mlir.dialects.transform import structured, loop
 
 
 GpuBackend = Enum("GpuBackend", [("intel", "intel"), ("cuda", "cuda")])
+
+
+class PipelineInterrupt(Exception):
+  pass
 
 
 # Wrapper to addresss verbosity
@@ -326,7 +330,8 @@ def MainSchedule(**config):
     named_sequence = transform.NamedSequenceOp(
       "__transform_main",
       [transform.AnyOpType.get()],  # input types
-      [transform.AnyOpType.get()],  # output types
+      [],  # output types
+      # [transform.AnyOpType.get()],  # output types
       arg_attrs=[{"transform.readonly": ir.UnitAttr.get()}],
     )
     with InsertionPoint(named_sequence.body):
@@ -338,8 +343,12 @@ def MainSchedule(**config):
         deduplicate=True,
       )
 
-      mod = DefaultPipeline(mod, **config)
-      transform.YieldOp(mod)
+      try:
+        mod = DefaultPipeline(mod, **config)
+      except PipelineInterrupt:
+        pass
+      finally:
+        transform.YieldOp()
   return module
 
 
@@ -356,7 +365,7 @@ def config_from_args(args: Sequence[str]):
   parser.add_argument("--rhs-tile", type=csints, default="8,16")
   parser.add_argument("--def-parallel", action="store_true")
   parser.add_argument("--vector-to-xsmm", action="store_true")
-  parser.add_argument("--vector-to-kernels", action="store_true")
+  parser.add_argument("--vector-to-kernel", action="store_true")
   parser.add_argument("--linalg-to-vector", action="store_true")
   parser.add_argument(
     "--lower-pack-unpack-without-transpose", action="store_true"
