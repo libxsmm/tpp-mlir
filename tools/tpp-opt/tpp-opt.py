@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 from mlir import ir
 from mlir.ir import Context, Location, InsertionPoint
 from mlir.dialects import transform
-from mlir.dialects.transform import structured, loop
+from mlir.dialects.transform import structured
 
 
 GpuBackend = Enum("GpuBackend", [("intel", "intel"), ("cuda", "cuda")])
@@ -76,7 +76,7 @@ def TppMapping(
 
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
-def LinalgLowering(mod, /, *, skip_operations: Sequence[str] = None, **_config):
+def LinalgLowering(mod, /, *, skip_operations: Sequence[str] = (), **_config):
   func = Match(mod, ops={"func.func"})
   func = ApplyRegisteredPass(
     func,
@@ -118,16 +118,11 @@ def LowLevelParallelization(
   # not have any side effects and can be safely moved outside of loop body.
   func = Match(mod, ops={"func.func"})
   func = ApplyRegisteredPass(func, "loop-invariant-code-motion")
-  ApplyRegisteredPass(func, "hoist-vector-transfer")
   # Run cleanup after LICM to allow CSE to eliminate common operations now
   # that they are hoisted out of loops.
   mod = CleanUp(mod)
-  tile_sizes = ",".join(str(n) for n in parallel_task_grid)
-  mod = ApplyRegisteredPass(
-    mod,
-    "scf-parallel-loop-tiling",
-    options=f"parallel-loop-tile-sizes={tile_sizes}",
-  )
+  options = "tile-sizes=" + ",".join(map(str, parallel_task_grid))
+  mod = ApplyRegisteredPass(mod, "scf-parallel-loop-tiling", options=options)
   return mod
 
 
@@ -158,8 +153,7 @@ def DefaultTpp(
   vector_to_xsmm: bool = False,
   vector_to_kernel: bool = False,
   linalg_to_loops: bool = False,
-  lhs_tile: Sequence[int] = None,  # NB: should be `Seq["certain pos ints"]`
-  rhs_tile: Sequence[int] = None,  # NB: should be `Seq["certain pos ints"]`
+  register_blocking: Optional[Sequence[int]] = None,
   **config,
 ):
   # We currently have four flows:
@@ -179,8 +173,8 @@ def DefaultTpp(
   # level.
   if linalg_to_vector or vector_to_kernel:
     skip_ops |= {"all"}
-  elif vector_to_xsmm:
-    skip_ops |= {"transpose", "vnni"}
+  if vector_to_xsmm:
+    skip_ops = {"unary", "transpose", "vnni"}
 
   mod = ApplyRegisteredPass(mod, "fold-add-into-dest")
   if linalg_to_loops:
@@ -204,14 +198,14 @@ def DefaultTpp(
     ApplyRegisteredPass(func, "lower-packs-unpacks")
     mod = CleanUp(mod)
     func = Match(mod, ops={"func.func"})
+    # Decompose Aggregated operations. These ops currently do not bufferize.
+    # Once this is possible we can move this pass after bufferization.
     ApplyRegisteredPass(func, "decompose-aggregated-ops")
-    transform.PrintOp(target=mod, name="before-bufferize")
     mod = ApplyRegisteredPass(mod, "bufferize")
     mod = LinalgLowering(mod, skip_operations=skip_ops, **config)
     if linalg_to_vector or force_linalg_to_vector:
       func = Match(mod, ops={"func.func"})
-      options = "lhsTile=" + ",".join(str(n) for n in lhs_tile)
-      options += " " + "rhsTile=" + ",".join(str(n) for n in rhs_tile)
+      options = "registerTileShape=" + ",".join(map(str, register_blocking))
       func = ApplyRegisteredPass(func, "brgemm-linalg-tiling", options=options)
       func = ApplyRegisteredPass(func, "loop-invariant-code-motion")
       ApplyRegisteredPass(func, "vectorization-pass")
@@ -256,17 +250,24 @@ def DefaultPipeline(
   /,
   *,
   def_parallel: bool = False,
+  has_amx: bool = False,
   gpu_backend: Optional[GpuBackend] = None,
   **config,
 ):
-  transform.PrintOp(target=mod)
-  if not gpu_backend:
-    mod = DefaultTpp(mod, **config)
-  else:
-    assert False, "not implemented for now"
+  if "early" in config["dump"]:
+    transform.PrintOp(target=mod, name="DUMP: stage-early")
+
+  if gpu_backend:
+    assert False, "GpuPipeline bundle not implemented for now"
     # Bail out early for Intel GPU. The rest of the lowering is performed by IMEX.
     if gpu_backend == "intel":
+      transform.PrintOp(target=mod)
       return mod
+  else:
+    mod = DefaultTpp(mod, **config)
+
+  if "mid" in config["dump"]:
+    transform.PrintOp(target=mod, name="DUMP: stage-mid")
 
   # Partial lowering.
   mod = ApplyRegisteredPass(mod, "expand-strided-metadata")
@@ -279,10 +280,13 @@ def DefaultPipeline(
   mod = ApplyRegisteredPass(mod, "arith-expand")
   mod = ApplyRegisteredPass(mod, "lower-affine")
 
-  transform.PrintOp(target=mod, name="HERE!")
+  if "late" in config["dump"]:
+    transform.PrintOp(target=mod, name="DUMP: stage-late")
 
   # Lower to LLVM
-  mod = ApplyRegisteredPass(mod, "convert-vector-to-llvm")
+  # TODO: call libxsmm to figure out if AMX is available
+  options = f"amx={int(has_amx)}"
+  mod = ApplyRegisteredPass(mod, "convert-vector-to-llvm", options=options)
   mod = ApplyRegisteredPass(mod, "finalize-memref-to-llvm")
   mod = ApplyRegisteredPass(mod, "convert-scf-to-cf")
   if def_parallel:
@@ -303,11 +307,14 @@ def DefaultPipeline(
     mod = ApplyRegisteredPass(mod, "async-runtime-ref-counting")
     mod = ApplyRegisteredPass(mod, "convert-async-to-llvm")
 
+  mod = ApplyRegisteredPass(mod, "convert-math-to-llvm")
+  mod = ApplyRegisteredPass(mod, "convert-index-to-llvm")
+
   mod = ApplyRegisteredPass(mod, "convert-func-to-llvm")
-  # FIXME: once llvm-project is updated, add -convert-arith-to-llvm and -convert-cf-to-llvm here
   func = Match(mod, ops={"func.func"})
   func = ApplyRegisteredPass(func, "convert-arith-to-llvm")
-  # func = ApplyRegisteredPass(func, "convert-cf-to-llvm")
+  func = ApplyRegisteredPass(func, "convert-cf-to-llvm")
+  func = ApplyRegisteredPass(func, "convert-ub-to-llvm")
   func = ApplyRegisteredPass(func, "canonicalize")
   transform.ApplyCommonSubexpressionEliminationOp(func)
   mod = ApplyRegisteredPass(mod, "reconcile-unrealized-casts")
@@ -317,6 +324,9 @@ def DefaultPipeline(
   # This step aims to avoid errors caused by frontend leftovers.
   # See issue: #704
   transform.ApplyDeadCodeEliminationOp(mod)
+
+  if "llvm" in config["dump"]:
+    transform.PrintOp(target=mod, name="DUMP: stage-llvm")
 
   return mod
 
@@ -361,14 +371,25 @@ def config_from_args(args: Sequence[str]):
     "--gpu", choices=[o.value for o in GpuBackend], dest="gpu_backend"
   )
   parser.add_argument("--parallel-task-grid", type=csints, default="2,8")
-  parser.add_argument("--lhs-tile", type=csints, default="8,8")
-  parser.add_argument("--rhs-tile", type=csints, default="8,16")
+  parser.add_argument("--register-blocking", type=csints, default="8,32")
   parser.add_argument("--def-parallel", action="store_true")
+  parser.add_argument("--has-amx", action="store_true")
   parser.add_argument("--vector-to-xsmm", action="store_true")
   parser.add_argument("--vector-to-kernel", action="store_true")
   parser.add_argument("--linalg-to-vector", action="store_true")
   parser.add_argument(
     "--lower-pack-unpack-without-transpose", action="store_true"
+  )
+
+  def dump_args_parser(arg: str):
+    stages = arg.split(",")
+    for stage in stages:
+      if stage not in {"early", "mid", "late", "llvm"}:
+        raise ValueError(f"unrecognized stage '{stage}'")
+    return set(stages)
+
+  parser.add_argument(
+    "--dump", type=dump_args_parser, dest="dump", default=set()
   )
 
   return vars(parser.parse_args(args))
