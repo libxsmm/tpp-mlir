@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'arm'))
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'arm')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     steps:
       # Step 2: Set up AWS CLI
       - name: Set up AWS CLI
