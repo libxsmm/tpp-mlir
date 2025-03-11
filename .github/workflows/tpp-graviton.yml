@@ -1,0 +1,46 @@
+name: LIBXSMM Arm Graviton 3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+
+env:
+  NPROCS_LIMIT_LINK: 8
+  NUM_ITER: 100
+
+jobs:
+  ec2-start:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 2: Set up AWS CLI
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      # Step 3: Start EC2 instance
+      - name: Start EC2 instance
+        run: |
+          aws ec2 start-instances --instance-ids i-06347807c1743f85d
+
+  TPP-MLIR-ARM:
+    runs-on: [ self-hosted, graviton ]
+    if: |
+      (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'arm'))
+    needs: ec2-start
+    steps:
+      - uses: actions/checkout@v4
+      - name: Graviton 3 Full Test and Benchmarks
+        run: |-
+          scripts/github/check_llvm.sh || \
+          KIND=Release COMPILER=clang \
+          ${{ github.workspace }}/scripts/github/build_llvm.sh
+          KIND=Release COMPILER=clang LINKER=lld  CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p -o"
