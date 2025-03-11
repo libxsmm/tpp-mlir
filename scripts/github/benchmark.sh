@@ -69,6 +69,9 @@ fi
 
 # Build
 "${SCRIPT_DIR}/github/build_tpp.sh"
+if [ "$?" != 0 ]; then
+  exit 1
+fi
 
 # Benchmark
 benchmark () {
