@@ -14,7 +14,9 @@ env:
 jobs:
   ec2-start:
     runs-on: ubuntu-latest
-
+    if: |
+      (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'arm'))
     steps:
       # Step 2: Set up AWS CLI
       - name: Set up AWS CLI
@@ -32,7 +34,7 @@ jobs:
   TPP-MLIR-ARM:
     runs-on: [ self-hosted, graviton ]
     if: |
-      (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'arm'))
     needs: ec2-start
     steps:
