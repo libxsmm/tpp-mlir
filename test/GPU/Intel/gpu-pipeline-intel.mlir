@@ -3,12 +3,12 @@
 // RUN:  -split-input-file | \
 // RUN: FileCheck %s
 
-func.func @linalg_matmul(%arg0: tensor<4096x4096xf16>,
-                 %arg1: tensor<4096x4096xf16>,
-                 %arg2: tensor<4096x4096xf16>) -> tensor<4096x4096xf16> {
-  %0 = linalg.matmul ins(%arg0, %arg1 : tensor<4096x4096xf16>, tensor<4096x4096xf16>)
-                     outs(%arg2 : tensor<4096x4096xf16>) -> tensor<4096x4096xf16>
-  return %0 : tensor<4096x4096xf16>
+func.func @linalg_matmul(%arg0: tensor<128x1024xf16>,
+                 %arg1: tensor<1024x1024xf16>,
+                 %arg2: tensor<128x1024xf16>) -> tensor<128x1024xf16> {
+  %0 = linalg.matmul ins(%arg0, %arg1 : tensor<128x1024xf16>, tensor<1024x1024xf16>)
+                     outs(%arg2 : tensor<128x1024xf16>) -> tensor<128x1024xf16>
+  return %0 : tensor<128x1024xf16>
 }
 
 // CHECK: module attributes {gpu.container_module}
