@@ -110,12 +110,6 @@ void DuplicateFill::runOnOperation() {
   });
 }
 
-static LogicalResult defaultMemCpyFn(OpBuilder &builder, Location loc,
-                                     Value from, Value to) {
-  builder.create<linalg::CopyOp>(loc, from, to);
-  return success();
-}
-
 void Bufferize::runOnOperation() {
   ModuleOp moduleOp = getOperation();
 
@@ -128,17 +122,15 @@ void Bufferize::runOnOperation() {
   passManager.addPass(bufferization::createEmptyTensorToAllocTensorPass());
 
   // One-shot.
-  bufferization::OneShotBufferizationOptions buffOpts;
+  bufferization::OneShotBufferizePassOptions buffOpts;
   buffOpts.bufferizeFunctionBoundaries = true;
-  buffOpts.setFunctionBoundaryTypeConversion(
-      bufferization::LayoutMapOption::IdentityLayoutMap);
-  buffOpts.memCpyFn = defaultMemCpyFn;
+  buffOpts.functionBoundaryTypeConversion = "identity-layout-map";
   bool runOnlyAnalysis = this->testAnalysisOnly || this->printConflicts;
   if (runOnlyAnalysis) {
     buffOpts.printConflicts = this->printConflicts;
     buffOpts.testAnalysisOnly = this->testAnalysisOnly;
   }
-  passManager.addPass(bufferization::createOneShotBufferizePass(buffOpts));
+  passManager.addPass(createOneShotBufferizePass(buffOpts));
 
   if (!runOnlyAnalysis) {
     passManager.addPass(bufferization::createDropEquivalentBufferResultsPass());

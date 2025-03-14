@@ -1175,6 +1175,28 @@ struct ConvertCopyOp : public OpRewritePattern<linalg::CopyOp> {
   }
 };
 
+struct ConvertMemRefCopyOp : public OpRewritePattern<memref::CopyOp> {
+  using OpRewritePattern<memref::CopyOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(memref::CopyOp copyOp,
+                                PatternRewriter &rewriter) const override {
+    Value source = copyOp.getSource();
+    Value dest = copyOp.getTarget();
+    auto unaryInfo =
+        xsmm::utils::getUnaryInfo(source, dest, xsmm::UnaryFlags::NONE);
+    if (failed(unaryInfo))
+      return failure();
+    auto flags = rewriter.getArrayAttr(xsmm::UnaryFlagsAttr::get(
+        rewriter.getContext(), xsmm::UnaryFlags::NONE));
+    xsmm::UnaryKindAttr kind = xsmm::UnaryKindAttr::get(
+        rewriter.getContext(), xsmm::UnaryKind::IDENTITY);
+    SmallVector<Value> operands{source, dest};
+    xsmm::utils::replaceOpWithUnary(rewriter, copyOp, operands, *unaryInfo,
+                                    flags, kind);
+    return success();
+  }
+};
+
 } // namespace
 
 void mlir::tpp::populateLinalgToXsmmPatterns(
@@ -1212,7 +1234,7 @@ void mlir::tpp::populateLinalgToXsmmPatterns(
       patterns.add<ConvertTransposeOpToUnaryTranspose>(ctx);
       LLVM_DEBUG(llvm::dbgs() << "[LinalgToXsmm] adding transpose\n");
     } else if (pattern == "copy") {
-      patterns.add<ConvertCopyOp>(ctx);
+      patterns.add<ConvertCopyOp, ConvertMemRefCopyOp>(ctx);
       LLVM_DEBUG(llvm::dbgs() << "[LinalgToXsmm] adding copy\n");
     } else if (pattern == "unary") {
       patterns.add<ConvertGenericToUnary>(ctx);
