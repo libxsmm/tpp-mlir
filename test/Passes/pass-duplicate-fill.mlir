@@ -186,9 +186,9 @@ func.func @matmuls(%arg0: tensor<32x32xf32>, %arg1: tensor<32x32xf32>) -> tensor
 // CHECK-LABEL: matmuls_1
 func.func @matmuls_1(%arg0: tensor<32x32xf32>, %arg1: tensor<32x32xf32>) -> tensor<32x32xf32> {
   // BUFF-COUNT-3: memref.alloc
-  // BUFF-COUNT-1: linalg.copy
+  // BUFF-COUNT-1: memref.copy
   // BUFFNOTDUP-COUNT-3: memref.alloc
-  // BUFFNOTDUP-COUNT-1: linalg.copy
+  // BUFFNOTDUP-COUNT-1: memref.copy
   // CHECK-COUNT-2: linalg.fill
   %0 = tensor.empty() : tensor<32x32xf32>
   %cst = arith.constant 0.0 : f32

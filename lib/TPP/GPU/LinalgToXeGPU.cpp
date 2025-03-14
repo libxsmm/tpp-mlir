@@ -1102,11 +1102,13 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
       for (int n = 0; n < numTilesN; n++) {
         int cIdx = m * numTilesN + n;
 
-        Value result = rewriter
-                           .create<xegpu::DpasOp>(
-                               loc, dpasResType, dpasVecA.getTile(m, k),
-                               dpasVecB.getTile(k, n), dpasResults[cIdx])
-                           .getResult();
+        Value result =
+            rewriter
+                .create<xegpu::DpasOp>(loc, TypeRange{dpasResType},
+                                       ValueRange{dpasVecA.getTile(m, k),
+                                                  dpasVecB.getTile(k, n),
+                                                  dpasResults[cIdx]})
+                .getResult();
 
         // Update sub-tile partial result.
         dpasResults[cIdx] = result;

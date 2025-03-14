@@ -218,7 +218,7 @@ std::unique_ptr<llvm::Module> lowerToLLVMIR(Operation *module,
     targetOptions.UnsafeFPMath = true;
     targetOptions.AllowFPOpFusion = llvm::FPOpFusion::FPOpFusionMode::Fast;
     targetMachine.reset(target->createTargetMachine(
-        triple, cpuName, "+" + fpuName, targetOptions,
+        llvm::Triple(triple), cpuName, "+" + fpuName, targetOptions,
         /* reloc model */ std::nullopt,
         /* code model */ std::nullopt, codeGenOpt));
     if (!targetMachine) {
