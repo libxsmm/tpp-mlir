@@ -75,5 +75,6 @@ ${DIFF_TOOL} -a ${DELTA} -r ${DELTA} -i ${BASELINE} ${OUTPUT}
 
 if [ $? -eq 0 ]; then
   echo "The outputs are compatible to DELTA=${DELTA}"
+else
   exit 1
 fi
