@@ -2,6 +2,30 @@
 
 These scripts are used to debug the compiler output.
 
+## Check Accuracy
+
+### Purpose
+
+To run an MLIR program through `tpp-run` and compare the output with the baseline (`linalg-to-loops`).
+
+### Usage
+
+Options:
+* `-b bin_dir`: The binary directory (usually `build/bin`)
+* `-o "opt1 opt2 ..."`: `tpp-run` options
+* `-d 0.005`: FP Delta allowance (default `0.01`)
+* `-e entry`: Name of entry function (default `entry`)
+* `-i file.mlir`: Input MLIR file
+
+Examples:
+```
+// Runs tpp-run on file.mlir and compares linalg-to-loops with the default pipeline
+./scripts/debug/check_accuracy.sh -i file.mlir
+
+// Compares linalg-to-loops with vector-to-kernels to 0.005 precision in outputs
+./scripts/debug/check_accuracy.sh -i file.mlir -o "--vector-to-kernels" -d 0.005
+```
+
 ## Debug All Passes
 
 ### Purpose
