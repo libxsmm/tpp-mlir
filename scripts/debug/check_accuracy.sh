@@ -17,7 +17,7 @@ while getopts "b:o:d:e:i:" arg; do
       BIN_DIR=$(realpath ${OPTARG})
       ;;
     o)
-      TPP_OPT_FLAGS=${OPTARG}
+      TPP_RUN_FLAGS=${OPTARG}
       ;;
     d)
       DELTA=${OPTARG}
@@ -62,10 +62,10 @@ if [ ! -s ${BASELINE} ]; then
 fi
 
 ## Get payload IR
-echo "Producing dump at ${OUTPUT} (${TPP_OPT_FLAGS})"
+echo "Producing dump at ${OUTPUT} (${TPP_RUN_FLAGS})"
 ${TPP_RUN} \
   -e ${ENTRY} -entry-point-result=void \
-  ${TPP_OPT_FLAGS} \
+  ${TPP_RUN_FLAGS} \
   "${INPUT_FILE}" \
   > ${OUTPUT}
 
