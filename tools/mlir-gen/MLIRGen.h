@@ -75,7 +75,7 @@ class MLIRGenerator {
   bool enableSoftmax;
 
   /// List of linalg output Op kind which can be generated
-  enum class OutputOpKind { Generic, NamedOp };
+  enum class OutputOpKind { Generic, Contract, NamedOp };
 
   /// Kind of linalg output Op to be generated
   OutputOpKind outputOpKind;
@@ -155,6 +155,9 @@ class MLIRGenerator {
 
   /// Creates linalg named matmul
   Value lowerNamedMatmul(Value, Value, Value);
+
+  /// Creates linalg contract
+  Value lowerContract(Value, Value, Value);
 
   /// Creates a bias add in the current function
   /// Args: Input, Output (same for in-place)

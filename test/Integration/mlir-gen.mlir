@@ -8,10 +8,18 @@
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void
 
 // Matmul only
-// RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void
+// RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
+// RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 --output=generic | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
+// RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 --output=contract | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
+// RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 --output=named | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
+// RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 --output=named --keep-generic-matmul | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
 
 // Constant values
 // RUN: mlir-gen --kernel=const --bias --relu --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=CONSTANT
+// RUN: mlir-gen --kernel=const --bias --relu --batch=10 --layers=10,10 --output=generic | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=CONSTANT
+// RUN: mlir-gen --kernel=const --bias --relu --batch=10 --layers=10,10 --output=contract | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=CONSTANT
+// RUN: mlir-gen --kernel=const --bias --relu --batch=10 --layers=10,10 --output=named | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=CONSTANT
+// RUN: mlir-gen --kernel=const --bias --relu --batch=10 --layers=10,10 --output=named --keep-generic-matmul | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=CONSTANT
 
 // Kernel - matmul
 // RUN: mlir-gen --kernel=args --seed=123 --float-type=f32 --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL
@@ -22,6 +30,8 @@
 // Packed versions
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
+
+// MATMUL:( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 )
 
 // CONSTANT:( 11, 11, 11, 11, 11, 11, 11, 11, 11, 11 )
 

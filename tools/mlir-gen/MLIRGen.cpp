@@ -85,9 +85,12 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   auto optOutputOpKind =
       llvm::StringSwitch<std::optional<OutputOpKind>>(outputOpKindStr)
           .CaseLower("generic", OutputOpKind::Generic)
+          .CaseLower("contract", OutputOpKind::Contract)
           .CaseLower("named", OutputOpKind::NamedOp)
           .Default(std::nullopt);
   assert(optOutputOpKind && "Invalid output Op kind");
+  assert(!(optOutputOpKind == OutputOpKind::Contract && keepGenericMatmul) &&
+         "Can't keep generic matmul with contract");
   outputOpKind = *optOutputOpKind;
 
   // Parse kernel type
@@ -181,7 +184,7 @@ Value MLIRGenerator::createLayer(LayerArgs &args) {
   if (outputOpKind == OutputOpKind::Generic) {
     chain = lowerBiasAdd(chain, args.bias.value, args.output.value);
     chain = lowerRelu(chain, args.output.value);
-  } else if (outputOpKind == OutputOpKind::NamedOp) {
+  } else {
     chain = lowerNamedBiasAdd(chain, args.bias.value, args.output.value);
     chain = lowerNamedRelu(chain, args.output.value);
   }
@@ -190,7 +193,7 @@ Value MLIRGenerator::createLayer(LayerArgs &args) {
   if (args.index == layers.size() - 1) {
     if (outputOpKind == OutputOpKind::Generic) {
       chain = lowerSoftmax(chain, args.output.value);
-    } else if (outputOpKind == OutputOpKind::NamedOp) {
+    } else {
       chain = lowerNamedSoftmax(chain, args.output.value);
     }
   }
@@ -405,9 +408,10 @@ Value MLIRGenerator::lowerMatmul(Value input, Value weight, Value output) {
                                                   reassociationIndices);
   }
 
-  if (outputOpKind == OutputOpKind::Generic ||
-      (outputOpKind == OutputOpKind::NamedOp && keepGenericMatmul)) {
+  if (outputOpKind == OutputOpKind::Generic || keepGenericMatmul) {
     chain = lowerGenericMatmul(input, weight, output);
+  } else if (outputOpKind == OutputOpKind::Contract) {
+    chain = lowerContract(input, weight, output);
   } else if (outputOpKind == OutputOpKind::NamedOp) {
     chain = lowerNamedMatmul(input, weight, output);
   }
@@ -440,6 +444,21 @@ Value MLIRGenerator::lowerGenericMatmul(Value input, Value weight,
           .getResult(0);
 
   return matmul;
+}
+
+Value MLIRGenerator::lowerContract(Value input, Value weight, Value output) {
+  // Matmul as a linalg.contract
+  SmallVector<Attribute> maps;
+  maps.push_back(AffineMapAttr::get(getMap(input, MAP_MATMUL_INPUT)));   // { 0, 2 }
+  maps.push_back(AffineMapAttr::get(getMap(weight, MAP_MATMUL_WEIGHT))); // { 2, 1 }
+  maps.push_back(AffineMapAttr::get(getMap(output, MAP_MATMUL_OUTPUT))); // { 0, 1 }
+  auto contract = builder
+                      .create<linalg::ContractOp>(
+                          loc, output.getType(), ValueRange{input, weight}, ValueRange{output},
+                          builder.getArrayAttr(maps))
+                      .getResult(0);
+
+  return contract;
 }
 
 Value MLIRGenerator::lowerBiasAdd(Value input, Value bias, Value output) {

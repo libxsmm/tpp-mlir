@@ -33,8 +33,8 @@ using namespace mlir;
 
 // Kind of linalg Op, generic or nameed ops
 llvm::cl::opt<std::string> outputOpKind(
-    "output", llvm::cl::desc("Specifies linalg op kind generic or named"),
-    llvm::cl::value_desc("generic,named"), llvm::cl::init("generic"));
+    "output", llvm::cl::desc("Specifies linalg op kind generic, contract or named"),
+    llvm::cl::value_desc("generic,contract,named"), llvm::cl::init("generic"));
 
 // Enable emission of generic matmul when outputKind is named op
 llvm::cl::opt<bool> keepGenericMatmul(
