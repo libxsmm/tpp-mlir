@@ -125,7 +125,7 @@ llvm::cl::opt<std::string>
 #elif defined(__aarch64__)
             llvm::cl::init("neon"));
 #elif defined(__riscv) && 64 == (__riscv_xlen)
-            llvm::cl::init("rv64imafdcv"));
+            llvm::cl::init("rv64imafdcvh_zicsr_zifencei_zvl256b_zve64d"));
 #else
 #error Unsupported architecture
 #endif
