@@ -125,7 +125,8 @@ llvm::cl::opt<std::string>
 #elif defined(__aarch64__)
             llvm::cl::init("neon"));
 #elif defined(__riscv) && 64 == (__riscv_xlen)
-            llvm::cl::init("rv64imafdcvh_zicsr_zifencei_zvl256b_zve64d"));
+            // https://discourse.llvm.org/t/generating-riscv-code-from-mlir/85863/9
+            llvm::cl::init("64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b"));
 #else
 #error Unsupported architecture
 #endif
