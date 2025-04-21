@@ -124,7 +124,7 @@ void Bufferize::runOnOperation() {
   // One-shot.
   bufferization::OneShotBufferizePassOptions buffOpts;
   buffOpts.bufferizeFunctionBoundaries = true;
-  buffOpts.functionBoundaryTypeConversion = "identity-layout-map";
+  buffOpts.functionBoundaryTypeConversion = bufferization::LayoutMapOption::IdentityLayoutMap;
   bool runOnlyAnalysis = this->testAnalysisOnly || this->printConflicts;
   if (runOnlyAnalysis) {
     buffOpts.printConflicts = this->printConflicts;
