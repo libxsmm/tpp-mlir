@@ -29,3 +29,8 @@ llvm_update_compile_flags(mlir-gen)
 target_link_libraries(mlir-gen PRIVATE ${LIBS})
 
 install(TARGETS mlir-gen RUNTIME DESTINATION bin)
+
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/mlir-gen.py
+        ${CMAKE_BINARY_DIR}/bin/mlir-gen.py
+        COPYONLY)

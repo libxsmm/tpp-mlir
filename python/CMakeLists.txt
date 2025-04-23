@@ -47,6 +47,18 @@ declare_mlir_python_extension(TPPPythonSources.DialectExtension
   PYTHON_BINDINGS_LIBRARY nanobind
 )
 
+declare_mlir_python_sources(TPPPythonSources.Gen
+  ADD_TO_PARENT TPPPythonSources
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
+  SOURCES
+  mlir/tpp/gen/__init__.py
+  mlir/tpp/gen/__main__.py
+  mlir/tpp/gen/einsum.py
+  mlir/tpp/gen/generic.py
+  mlir/tpp/gen/named.py
+  mlir/tpp/gen/utils.py
+)
+
 declare_mlir_python_sources(TPPPythonSources.Sched
   ADD_TO_PARENT TPPPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
