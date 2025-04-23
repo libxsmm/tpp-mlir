@@ -45,6 +45,7 @@ def main(args: Sequence[str]) -> ir.Module:
 
     assert not config["softmax"], "not implemented yet"
     assert config["vnni"] == 0 or config["float_type"] == "bf16"
+    assert len(config["layers"]) >= 2, "at least one layer is required"
 
     if True:  # NB: delimits modification of global state
         gen.utils.CONSTANTS_AS_SPLATS = config["splats"]
@@ -83,7 +84,7 @@ def main(args: Sequence[str]) -> ir.Module:
                 assert (
                     n_block % vnni_block == 0
                 ), "incompatible tile sizes for N and VNNI dims"
-                # TODO(RM): double check vs MLIRGen.cpp as this seems bonkers to me:
+                # TODO(RM): double check vs MLIRGen.cpp:
                 shape = (
                     n_as_num_outputs // n_block,
                     k_as_num_inputs // k_block,
@@ -92,7 +93,7 @@ def main(args: Sequence[str]) -> ir.Module:
                     vnni_block,
                 )
             else:
-                # TODO(RM): double check vs MLIRGen.cpp as this seems bonkers to me:
+                # TODO(RM): double check vs MLIRGen.cpp:
                 shape = (
                     n_as_num_outputs // n_block,
                     k_as_num_inputs // k_block,
@@ -133,9 +134,11 @@ def main(args: Sequence[str]) -> ir.Module:
     }[config["output"]]
 
     with ir.Context(), ir.Location.name(" ".join(sys.argv)):
-        elem_type = {"bf16": ir.BF16Type.get(), "f32": ir.F32Type.get()}[
-            config["float_type"]
-        ]
+        elem_type = {
+            "bf16": ir.BF16Type.get(),
+            "f16": ir.F16Type.get(),
+            "f32": ir.F32Type.get(),
+        }[config["float_type"]]
 
         overall_args_types = [input_tensor_type((batch_size, num_inputs), elem_type)]
 
