@@ -78,6 +78,9 @@ def vector_to_xsmm(mod, **_config):
     return mod
 
 
+vector_to_xsmm_bundle = vector_to_xsmm  # Due to name clash with cmd option.
+
+
 __all__.append(vector_to_xsmm.__name__)
 
 
@@ -151,7 +154,7 @@ def default_tpp_passes(
     vector_to_xsmm: bool = False,
     vector_to_kernel: bool = False,
     linalg_to_loops: bool = False,
-    register_blocking: Optional[Sequence[int]] = None,
+    register_blocking: Sequence[int] = [],
     **config,
 ):
     # We currently have four flows:
@@ -211,7 +214,7 @@ def default_tpp_passes(
             # it fuses outer tiling loops and it results in no pattern
             # matching for hoisting pass. Moved inside VectorToKernel Path.
             if vector_to_xsmm:
-                mod = vector_to_xsmm(mod)
+                mod = vector_to_xsmm_bundle(mod)
             if vector_to_kernel:
                 mod = vector_to_kernel(mod)
         mod = cleanup(mod)
