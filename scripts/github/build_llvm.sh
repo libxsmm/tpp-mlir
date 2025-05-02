@@ -101,6 +101,8 @@ if [ "${GPU}" ]; then
   source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
 fi
 
+pip install --upgrade --user -r ${SRC_DIR}/benchmarks/harness/requirements.txt
+
 echo "Environment configured successfully"
 
  # Configure LLVM
