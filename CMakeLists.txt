@@ -43,6 +43,28 @@ endif()
 set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules")
 
+# Nanobind for Python bindings
+if (CMAKE_VERSION VERSION_LESS 3.18)
+  set(PYTHON_DEV_MODULE Development)
+else()
+  set(PYTHON_DEV_MODULE Development.Module)
+endif()
+
+find_package(Python 3.8 COMPONENTS Interpreter ${PYTHON_DEV_MODULE} REQUIRED)
+
+# Nanobind docs say "Without this addition, binding code may run slowly and produce large binaries.":
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
+# Detect the pip/conda-installed nanobind package and import it into CMake
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+find_package(nanobind CONFIG REQUIRED)
+message (STATUS "Nanobind found")
+
 set(TPP_MAIN_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include")
 set(TPP_GEN_INCLUDE_DIR "${PROJECT_BINARY_DIR}/include")
 
@@ -71,6 +93,7 @@ include(sanitizers)
 # Sub directories
 add_subdirectory(include)
 add_subdirectory(lib)
+add_subdirectory(python)
 add_subdirectory(runtime)
 add_subdirectory(tools)
 add_subdirectory(test)
