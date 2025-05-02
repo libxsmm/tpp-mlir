@@ -102,7 +102,7 @@ if [ "${GPU}" ]; then
 fi
 
 # Necessary for building Python-bindngs.
-pip install --upgrade --user -r nanobind pybind11
+pip install --upgrade --user nanobind pybind11
 
 echo "Environment configured successfully"
 
