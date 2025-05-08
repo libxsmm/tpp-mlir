@@ -56,7 +56,14 @@ declare_mlir_python_sources(TPPPythonSources.Sched
   tpp/sched/bundles.py
   tpp/sched/common.py
   tpp/sched/main.py
-  tpp/sched/util.py
+  tpp/sched/utils.py
+)
+
+declare_mlir_python_sources(TPPPythonSources.Xsmm
+  ADD_TO_PARENT TPPPythonSources
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
+  SOURCES
+  tpp/xsmm/utils.py
 )
 
 ################################################################################

@@ -1,4 +1,5 @@
 // RUN: tpp-opt %s -tpp-mapping -split-input-file | FileCheck %s
+// RUN: tpp-sched --bundle=tpp-mapping %s --split-input-file | FileCheck %s
 
 // We don't expect to block as the blocking factor do not create full tiles.
 func.func @conv_to_matmul(%img: tensor<1x5x5x3xf32>, %filter: tensor<3x3x3x8xf32>, %out: tensor<1x3x3x8xf32>) -> tensor<1x3x3x8xf32> {

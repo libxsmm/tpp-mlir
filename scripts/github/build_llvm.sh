@@ -101,7 +101,7 @@ if [ "${GPU}" ]; then
   source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
 fi
 
-# Necessary for building Python-bindngs.
+# Necessary for building Python-bindings.
 pip install --upgrade --user nanobind pybind11
 
 echo "Environment configured successfully"

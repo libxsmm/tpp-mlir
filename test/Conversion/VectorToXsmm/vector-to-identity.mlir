@@ -1,4 +1,5 @@
 // RUN: tpp-opt --vector-to-xsmm  %s --split-input-file | FileCheck %s
+// RUN: tpp-sched --bundle=vector-to-xsmm  %s --split-input-file | FileCheck %s
 
 func.func @identity(%arg0: memref<512xf32>, %arg1: memref<128x512xf32>) {
   %c0 = arith.constant 0 : index

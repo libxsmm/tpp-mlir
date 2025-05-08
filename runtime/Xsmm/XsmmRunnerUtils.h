@@ -19,6 +19,8 @@
 #include "mlir/ExecutionEngine/Float16bits.h"
 #include "mlir/ExecutionEngine/RunnerUtils.h"
 
+extern "C" MLIR_RUNNERUTILS_EXPORT bool xsmm_has_amx();
+
 extern "C" MLIR_RUNNERUTILS_EXPORT int64_t
 xsmm_gemm_dispatch(const libxsmm_datatype, int64_t, int64_t, int64_t, int64_t,
                    int64_t, int64_t, const libxsmm_gemm_flags);

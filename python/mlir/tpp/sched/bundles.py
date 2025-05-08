@@ -2,16 +2,18 @@ from typing import Optional, Sequence
 
 from mlir.dialects import transform
 from .common import apply_registered_pass, match
-from .util import GpuBackend, PipelineInterrupt
+from .utils import GpuBackend, PipelineInterrupt
+
+from ..xsmm import utils as xsmm_utils
 
 
 __all__ = []
 
 
 # TODO: consider making into a NamedSequence to call with IncludeOp
-def cleanup(op):
+def cleanup(op, **_config):
     op = apply_registered_pass(op, "canonicalize")
-    transform.ApplyCommonSubexpressionEliminationOp(op)
+    op = apply_registered_pass(op, "cse")
     return op
 
 
@@ -78,10 +80,10 @@ def vector_to_xsmm(mod, **_config):
     return mod
 
 
-vector_to_xsmm_bundle = vector_to_xsmm  # Due to name clash with cmd option.
-
-
 __all__.append(vector_to_xsmm.__name__)
+
+
+vector_to_xsmm_bundle = vector_to_xsmm  # Due to name clash with cmd option.
 
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
@@ -254,7 +256,6 @@ def default_pipeline(
     /,
     *,
     def_parallel: bool = False,
-    enable_amx: bool = False,
     gpu_backend: Optional[GpuBackend] = None,
     **config,
 ):
@@ -273,6 +274,12 @@ def default_pipeline(
     if "mid" in config["dump"]:
         transform.PrintOp(target=mod, name="DUMP: stage-mid")
 
+    # Bail out early for Intel GPU.
+    # The rest of the lowering is performed by IMEX.
+    if gpu_backend == "intel":
+        transform.PrintOp(target=mod)
+        return mod
+
     # Partial lowering.
     mod = apply_registered_pass(mod, "expand-strided-metadata")
     mod = apply_registered_pass(mod, "convert-tensor-to-linalg")
@@ -288,8 +295,11 @@ def default_pipeline(
         transform.PrintOp(target=mod, name="DUMP: stage-late")
 
     # Lower to LLVM
-    # TODO: call libxsmm to figure out if AMX is available
-    options = f"enable-amx={int(enable_amx)}"
+    # TODO: add support for detecting target architecture, i.e. to replicate:
+    #     #if defined(__x86_64__)
+    #	    options.x86Vector = true;
+    #     #endif
+    options = f"enable-amx={int(xsmm_utils.has_amx())}"
     mod = apply_registered_pass(mod, "convert-vector-to-llvm", options=options)
     mod = apply_registered_pass(mod, "finalize-memref-to-llvm")
     mod = apply_registered_pass(mod, "convert-scf-to-cf")
@@ -307,27 +317,30 @@ def default_pipeline(
         mod = apply_registered_pass(
             mod, "gpu-module-to-binary", options="compilation-target=fatbin"
         )
+    mod = apply_registered_pass(mod, "convert-math-to-llvm")
+    if gpu_backend:
         mod = apply_registered_pass(mod, "async-to-async-runtime")
         mod = apply_registered_pass(mod, "async-runtime-ref-counting")
         mod = apply_registered_pass(mod, "convert-async-to-llvm")
 
-    mod = apply_registered_pass(mod, "convert-math-to-llvm")
     mod = apply_registered_pass(mod, "convert-index-to-llvm")
 
     mod = apply_registered_pass(mod, "convert-func-to-llvm")
+    mod = apply_registered_pass(mod, "convert-arith-to-llvm")
     func = match(mod, ops={"func.func"})
-    func = apply_registered_pass(func, "convert-arith-to-llvm")
     func = apply_registered_pass(func, "convert-cf-to-llvm")
+    if def_parallel:
+        func = apply_registered_pass(func, "convert-omp-to-llvm")
     func = apply_registered_pass(func, "convert-ub-to-llvm")
-    func = apply_registered_pass(func, "canonicalize")
-    transform.ApplyCommonSubexpressionEliminationOp(func)
+    mod = apply_registered_pass(mod, "canonicalize")
+    mod = apply_registered_pass(mod, "cse")
     mod = apply_registered_pass(mod, "reconcile-unrealized-casts")
 
     # Anything useful has been lowered by now.
     # Cleanup IR by removing any dead symbols.
     # This step aims to avoid errors caused by frontend leftovers.
     # See issue: #704
-    transform.ApplyDeadCodeEliminationOp(mod)
+    mod = apply_registered_pass(mod, "symbol-dce")
 
     if "llvm" in config["dump"]:
         transform.PrintOp(target=mod, name="DUMP: stage-llvm")

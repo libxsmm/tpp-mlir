@@ -1,4 +1,5 @@
 // RUN: tpp-opt %s -default-tpp-passes -split-input-file | FileCheck %s
+// RUN: tpp-sched --bundle=default-tpp-passes %s --split-input-file | FileCheck %s
 
 func.func @fill_op(%arg0: memref<3x3xf32>) {
   %cst = arith.constant 0.0 : f32

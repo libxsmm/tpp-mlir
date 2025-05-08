@@ -1,6 +1,7 @@
 // RUN: tpp-run  --vector-to-XSMM %s -e entry -entry-point-result=void -print --seed 123 2>&1 | FileCheck %s
 // RUN: tpp-run --linalg-to-loops %s -e entry -entry-point-result=void -print --seed 123 2>&1 | FileCheck %s
 // RUN: tpp-opt --default-tpp-passes="vector-to-xsmm" %s  -mlir-print-ir-after=vectorization-pass  2>&1  | FileCheck %s --check-prefix=VECTOR
+// TODO(ROLF): -mlir-print-ir-after=vectorization-pass is an antipattern in tests, IMHO.
 // RUN: tpp-run  --vector-to-XSMM %s -e entry -entry-point-result=void -print-mlir=mid 2>&1 | FileCheck %s --check-prefix=XSMM
 
 module {
