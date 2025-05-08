@@ -22,6 +22,8 @@ __all__.append(cleanup.__name__)
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def tpp_mapping(mod, lower_pack_unpack_without_transpose: bool = False, **_config):
+    "High-level transforms that map operations to TPP-compatible forms."
+
     # Preprocess convolutions.
     func = match(mod, ops={"func.func"})
     apply_registered_pass(func, "conv-init-simplify")
@@ -59,6 +61,8 @@ __all__.append(tpp_mapping.__name__)
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def linalg_lowering(mod, /, *, skip_operations: Sequence[str] = (), **_config):
+    "Lower Linalg into combination of standard and local dialects."
+
     func = match(mod, ops={"func.func"})
     func = apply_registered_pass(
         func,
@@ -76,6 +80,9 @@ __all__.append(linalg_lowering.__name__)
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def vector_to_xsmm(mod, **_config):
+    """Vector-level transforms that map vector patterns to
+    libxsmm call pairs (dispatch, invoke)."""
+
     mod = apply_registered_pass(mod, "vector-to-xsmm")
     return mod
 
@@ -88,8 +95,14 @@ vector_to_xsmm_bundle = vector_to_xsmm  # Due to name clash with cmd option.
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def vector_to_kernel(mod, **_config):
+    """Vector-level transforms which map vector patterns to
+    specialized micro-kernels akin to libxsmm kernels."""
+
     func = match(mod, ops={"func.func"})
+    func = apply_registered_pass(func, "vector-contract-to-bf16dp")
     func = apply_registered_pass(func, "hoist-vector-transfer")
+    if xsmm_utils.has_amx():
+        func = apply_registered_pass(func, "vector-contract-to-amx")
     func = apply_registered_pass(func, "canonicalize")
     apply_registered_pass(func, "vector-contract-to-fma")
     return mod
@@ -106,6 +119,8 @@ def low_level_parallel(
     parallel_task_grid: Sequence[int],  # NB: should be `Seq["certain pos ints"]`
     **_config,
 ):
+    "Low-level parallelization, 2D blocking, AMX config"
+
     # Note that LICM should be performed before any function calls are generated
     # to ensure that ops which map directly to functions also get moved outside
     # of loops, if possible. This approach assumes that the function calls do
@@ -125,6 +140,8 @@ __all__.append(low_level_parallel.__name__)
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def lower_local_dialects(mod, **_config):
+    "Lower our Check and Perf dialects to standard dialects and function calls."
+
     func = match(mod, ops={"func.func"})
     func = apply_registered_pass(func, "convert-check-to-loops")
     apply_registered_pass(func, "convert-perf-to-loops")
@@ -137,6 +154,9 @@ __all__.append(lower_local_dialects.__name__)
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
 def postprocess(mod, /, **_config):
+    """Various post-processing transforms such as LICM, parallel loop fusion,
+    buffer deallocation, general cleanup etc."""
+
     # Postprocess buffers.
     func = match(mod, ops={"func.func"})
     apply_registered_pass(func, "buffer-hoisting")
@@ -264,10 +284,6 @@ def default_pipeline(
 
     if gpu_backend:
         assert False, "GpuPipeline bundle not implemented for now"
-        # Bail out early for Intel GPU. The rest of the lowering is performed by IMEX.
-        if gpu_backend == "intel":
-            # transform.PrintOp(target=mod)
-            return mod
     else:
         mod = default_tpp_passes(mod, **config)
 
@@ -297,15 +313,12 @@ def default_pipeline(
     # Lower to LLVM
     # TODO: add support for detecting target architecture, i.e. to replicate:
     #     #if defined(__x86_64__)
-    #	    options.x86Vector = true;
+    #     options.x86Vector = true;
     #     #endif
     options = f"enable-amx={int(xsmm_utils.has_amx())}"
     mod = apply_registered_pass(mod, "convert-vector-to-llvm", options=options)
     mod = apply_registered_pass(mod, "finalize-memref-to-llvm")
     mod = apply_registered_pass(mod, "convert-scf-to-cf")
-    if def_parallel:
-        mod = apply_registered_pass(mod, "convert-openmp-to-llvm")
-    mod = apply_registered_pass(mod, "convert-math-to-llvm")
 
     if gpu_backend:
         func = match(mod, ops={"func.func"})
@@ -324,7 +337,6 @@ def default_pipeline(
         mod = apply_registered_pass(mod, "convert-async-to-llvm")
 
     mod = apply_registered_pass(mod, "convert-index-to-llvm")
-
     mod = apply_registered_pass(mod, "convert-func-to-llvm")
     mod = apply_registered_pass(mod, "convert-arith-to-llvm")
     func = match(mod, ops={"func.func"})
