@@ -2,7 +2,6 @@
 // RUN:   FileCheck %s -check-prefix=IR
 
 // RUN: tpp-sched --bundle=default-tpp-passes %s | \
-// RUN:   tpp-opt -canonicalize | \
 // RUN:   FileCheck %s -check-prefix=IR
 
 // RUN: tpp-run %s \

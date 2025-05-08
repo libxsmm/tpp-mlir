@@ -3,7 +3,7 @@
 // RUN: FileCheck %s
 
 // RUN: tpp-opt -default-tpp-passes %s | FileCheck %s -check-prefix=IR
-// RUN: tpp-sched --bundle=default-tpp-passes %s | tpp-opt -canonicalize | FileCheck %s -check-prefix=IR
+// RUN: tpp-sched --bundle=default-tpp-passes %s | FileCheck %s -check-prefix=IR
 
 // IR-LABEL: entry
 func.func @entry(%A: tensor<64x96xf32>, %B: tensor<96x48xf32>,
