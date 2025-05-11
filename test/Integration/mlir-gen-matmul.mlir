@@ -2,6 +2,10 @@
 // RUN: mlir-gen --kernel=args --seed=0 --float-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=BF16
 // RUN: mlir-gen --kernel=args --seed=0 --float-type=f16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP16
 
+// RUN: mlir-gen.py --kernel=args --seed=0 --float-type=f32 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP32
+// RUN: mlir-gen.py --kernel=args --seed=0 --float-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=BF16
+// RUN: mlir-gen.py --kernel=args --seed=0 --float-type=f16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP16
+
 // FP32: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // FP32: // RUN{{.*}}-e entry -entry-point-result=void
 // FP32: // BENCH_TOTAL_FLOPS: 452984832

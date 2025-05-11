@@ -1,5 +1,7 @@
 // RUN: mlir-gen --output=named --kernel=args --bias --relu --seed=0 --float-type=f32 --batch=128 --layers=2304,768 2>&1 | FileCheck %s
 
+// RUN: mlir-gen.py --output=named --kernel=args --bias --relu --seed=0 --float-type=f32 --batch=128 --layers=2304,768 2>&1 | FileCheck %s
+
 // CHECK: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // CHECK: // RUN{{.*}}-e entry -entry-point-result=void
 // CHECK: // BENCH_TOTAL_FLOPS: 453181440
