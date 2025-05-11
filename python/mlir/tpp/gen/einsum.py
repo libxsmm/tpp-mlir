@@ -15,16 +15,7 @@ def times_weights(
     weights: ir.Value = get_weights(weights_or_weights_type)
     outputs: ir.Value = get_outputs(outputs_or_outputs_type)
 
-    # FIXME: due to duplicating C++ code, vnni dim is in middle instead of at end.
-    (
-        M,
-        N,
-        K,
-        vnni,
-        mb,
-        nb,
-        kb,
-    ) = [ir.AffineDimExpr.get(i) for i in range(7)]
+    M, N, K = [ir.AffineDimExpr.get(i) for i in range(3)]
 
     if weights.type.rank == 2:  # plain 2D weights
         affine_maps = [
@@ -33,15 +24,20 @@ def times_weights(
             affine_map(3, [M, N]),
         ]
     elif weights.type.rank == 4:  # tiled weights, no vnni blocking
+        mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 6)]
         affine_maps = [
             affine_map(6, [M, K, mb, kb]),
             affine_map(6, [N, K, kb, nb]),  # transposed K and N on B
             affine_map(6, [M, N, mb, nb]),
         ]
     elif weights.type.rank == 5:  # tiled weights with vnni blocking
+        # FIXME: due to duplicating C++ code, vnni dim is in middle instead of at end.
+        k_vnni, mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 7)]
+
         affine_maps = [
-            affine_map(7, [M, K, mb, kb, vnni]),
-            affine_map(7, [N, K, kb, nb, vnni]),  # transposed K and N on B
+            affine_map(7, [M, K, mb, kb, k_vnni]),
+            # TODO(RM): check if kb and (k_)vnni _not_ being contiguous makes sense.
+            affine_map(7, [N, K, kb, nb, k_vnni]),  # transposed K and N on B
             affine_map(7, [M, N, mb, nb]),
         ]
         vnni_block = weights.type.get_dim_size(4)

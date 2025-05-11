@@ -21,7 +21,7 @@ def times_weights(
     weights: ir.Value = get_weights(weights_or_weights_type)
     outputs: ir.Value = get_outputs(outputs_or_outputs_type)
 
-    M, N, K, mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(6)]
+    M, N, K = [ir.AffineDimExpr.get(i) for i in range(3)]
 
     if weights.type.rank == 2:  # plain 2D weights
         affine_maps = [
@@ -31,6 +31,7 @@ def times_weights(
         ]
         iterator_types = [parallel, parallel, reduction]
     elif weights.type.rank == 4:  # tiled weights, no vnni blocking
+        mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 6)]
         affine_maps = [
             affine_map(6, [M, K, mb, kb]),
             affine_map(6, [N, K, kb, nb]),  # transposed K and N on B
@@ -39,7 +40,7 @@ def times_weights(
         iterator_types = [parallel, parallel, reduction] * 2
     elif weights.type.rank == 5:  # tiled weights with vnni blocking
         # FIXME: due to duplicating C++ code, vnni dim is in middle instead of at end.
-        M, N, K, k_vnni, mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(7)]
+        k_vnni, mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 7)]
 
         affine_maps = [
             affine_map(7, [M, K, mb, kb, k_vnni]),
