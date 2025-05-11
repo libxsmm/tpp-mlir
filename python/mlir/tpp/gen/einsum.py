@@ -3,8 +3,8 @@ from typing import Union
 from mlir import ir
 from mlir.dialects import linalg, tensor
 
-from . import named
-from .utils import affine_map, get_outputs, get_weights
+from . import named, generic
+from .utils import get_outputs, get_weights
 
 
 def times_weights(
@@ -15,31 +15,9 @@ def times_weights(
     weights: ir.Value = get_weights(weights_or_weights_type)
     outputs: ir.Value = get_outputs(outputs_or_outputs_type)
 
-    M, N, K = [ir.AffineDimExpr.get(i) for i in range(3)]
+    affine_maps, _ = generic.affine_maps_and_iter_types(weights.type.rank)
 
-    if weights.type.rank == 2:  # plain 2D weights
-        affine_maps = [
-            affine_map(3, [M, K]),
-            affine_map(3, [K, N]),
-            affine_map(3, [M, N]),
-        ]
-    elif weights.type.rank == 4:  # tiled weights, no vnni blocking
-        mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 6)]
-        affine_maps = [
-            affine_map(6, [M, K, mb, kb]),
-            affine_map(6, [N, K, kb, nb]),  # transposed K and N on B
-            affine_map(6, [M, N, mb, nb]),
-        ]
-    elif weights.type.rank == 5:  # tiled weights with vnni blocking
-        # FIXME: due to duplicating C++ code, vnni dim is in middle instead of at end.
-        k_vnni, mb, nb, kb = [ir.AffineDimExpr.get(i) for i in range(3, 7)]
-
-        affine_maps = [
-            affine_map(7, [M, K, mb, kb, k_vnni]),
-            # TODO(RM): check if kb and (k_)vnni _not_ being contiguous makes sense.
-            affine_map(7, [N, K, kb, nb, k_vnni]),  # transposed K and N on B
-            affine_map(7, [M, N, mb, nb]),
-        ]
+    if weights.type.rank == 5:  # tiled weights with vnni blocking
         vnni_block = weights.type.get_dim_size(4)
         assert inputs.type.shape[-1] % vnni_block == 0
 
@@ -58,8 +36,6 @@ def times_weights(
             output_shape=[],
             static_output_shape=expanded_shape,
         )
-    else:
-        assert False
 
     return linalg.contract(inputs, weights, outs=[outputs], indexing_maps=affine_maps)
 
