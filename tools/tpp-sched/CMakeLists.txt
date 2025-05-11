@@ -6,4 +6,4 @@ file(CREATE_LINK
      SYMBOLIC)
 
 
-add_custom_target(tpp-sched DEPENDS ${CMAKE_BINARY_DIR}/bin/tpp-sched)
+add_custom_target(tpp-sched DEPENDS ${CMAKE_BINARY_DIR}/bin/tpp-sched TPPPythonModules)
