@@ -85,11 +85,12 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   auto optOutputOpKind =
       llvm::StringSwitch<std::optional<OutputOpKind>>(outputOpKindStr)
           .CaseLower("generic", OutputOpKind::Generic)
-          .CaseLower("contract", OutputOpKind::Contract)
+          .CaseLower("einsum", OutputOpKind::Einsum)
+          .CaseLower("contract", OutputOpKind::Einsum)
           .CaseLower("named", OutputOpKind::NamedOp)
           .Default(std::nullopt);
   assert(optOutputOpKind && "Invalid output Op kind");
-  assert(!(optOutputOpKind == OutputOpKind::Contract && keepGenericMatmul) &&
+  assert(!(optOutputOpKind == OutputOpKind::Einsum && keepGenericMatmul) &&
          "Can't keep generic matmul with contract");
   outputOpKind = *optOutputOpKind;
 
@@ -410,7 +411,7 @@ Value MLIRGenerator::lowerMatmul(Value input, Value weight, Value output) {
 
   if (outputOpKind == OutputOpKind::Generic || keepGenericMatmul) {
     chain = lowerGenericMatmul(input, weight, output);
-  } else if (outputOpKind == OutputOpKind::Contract) {
+  } else if (outputOpKind == OutputOpKind::Einsum) {
     chain = lowerContract(input, weight, output);
   } else if (outputOpKind == OutputOpKind::NamedOp) {
     chain = lowerNamedMatmul(input, weight, output);
@@ -565,7 +566,7 @@ Value MLIRGenerator::lowerNamedSoftmax(Value input, Value output) {
 
   // TODO: Add lowering of softmax to sequence of named Ops
   llvm_unreachable("Linalg named ops for softmax not implemented yet");
-  
+
   auto outTy = cast<ShapedType>(input.getType());
   // Softmax flops = 4 * M * N = 4 * prod(outputDims)
   int64_t softmaxFlops = 1;

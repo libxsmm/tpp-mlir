@@ -75,7 +75,7 @@ class MLIRGenerator {
   bool enableSoftmax;
 
   /// List of linalg output Op kind which can be generated
-  enum class OutputOpKind { Generic, Contract, NamedOp };
+  enum class OutputOpKind { Generic, Einsum, NamedOp };
 
   /// Kind of linalg output Op to be generated
   OutputOpKind outputOpKind;
