@@ -17,7 +17,7 @@ class ConstantInitKind(Enum):
     random = auto()
 
 CONSTANT_INIT_KIND = ConstantInitKind.ones
-GUASSIAN_SAMPLING = True
+GAUSSIAN_SAMPLING = True
 
 splat_value = 0.3
 
@@ -54,9 +54,9 @@ def floats(shape: abc.Sequence[int], elementType: ir.Type) -> np.ndarray:
         return np.frombuffer(element, np.float32)
 
     if isinstance(elementType, ir.BF16Type):
-        gen_elt = gen_bf16_gaussian if GUASSIAN_SAMPLING else gen_bf16_uniform
+        gen_elt = gen_bf16_gaussian if GAUSSIAN_SAMPLING else gen_bf16_uniform
     elif isinstance(elementType, ir.F32Type):
-        gen_elt = gen_f32_gaussian if GUASSIAN_SAMPLING else gen_f32_uniform
+        gen_elt = gen_f32_gaussian if GAUSSIAN_SAMPLING else gen_f32_uniform
     else:
         assert False
 
