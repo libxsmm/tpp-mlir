@@ -245,7 +245,7 @@ struct VectorContractToFMAPattern
     if (K != 1)
       return failure();
 
-    auto accSubview = accDefiningOp.getSource();
+    auto accSubview = accDefiningOp.getBase();
     Location loc = op.getLoc();
 
     // Create M different <1xN> subviews.
@@ -295,13 +295,13 @@ struct VectorContractToFMAPattern
                   ValueRange innerIterArgs) {
                 IRMapping mapping;
                 mapping.map(
-                    lhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+                    lhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                     iv);
                 mapping.map(
-                    lhsDefiningOp.getSource().getDefiningOp()->getOperand(3),
+                    lhsDefiningOp.getBase().getDefiningOp()->getOperand(3),
                     innerIv);
                 auto lhsClone = innerBuilder.clone(
-                    *lhsDefiningOp.getSource().getDefiningOp(), mapping);
+                    *lhsDefiningOp.getBase().getDefiningOp(), mapping);
 
                 // Load and broadcast individual elements
                 SmallVector<Value, 4> broadcasts;
@@ -319,13 +319,13 @@ struct VectorContractToFMAPattern
 
                 IRMapping rhsMapping;
                 rhsMapping.map(
-                    rhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+                    rhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                     iv);
                 rhsMapping.map(
-                    rhsDefiningOp.getSource().getDefiningOp()->getOperand(2),
+                    rhsDefiningOp.getBase().getDefiningOp()->getOperand(2),
                     innerIv);
                 auto rhsClone = innerBuilder.clone(
-                    *rhsDefiningOp.getSource().getDefiningOp(), rhsMapping);
+                    *rhsDefiningOp.getBase().getDefiningOp(), rhsMapping);
                 auto rowVec = innerBuilder.create<vector::LoadOp>(
                     loc, VectorType::get({N}, elementType),
                     rhsClone->getResult(0), ValueRange{c0, c0, c0});

@@ -392,7 +392,7 @@ struct VectorContractToAMXPattern
     int64_t M = accType.getDimSize(0);
     int64_t N = accType.getDimSize(1);
 
-    auto accSubview = accDefiningOp.getSource();
+    auto accSubview = accDefiningOp.getBase();
     Location loc = op.getLoc();
     scf::ForOp insertAt =
         getOutermostLoopWithIterargAccumulator(ctx.innerForOp, acc);
@@ -472,14 +472,14 @@ struct VectorContractToAMXPattern
       // Update index of LHS matrix subview for batch dimension if corresponding
       // loop is needed.
       if (iv)
-        mapping.map(lhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+        mapping.map(lhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                     iv);
       // Update index of LHS matrix subview for K dimension.
       mapping.map(
-          lhsDefiningOp.getSource().getDefiningOp()->getOperand(iv ? 3 : 1),
+          lhsDefiningOp.getBase().getDefiningOp()->getOperand(iv ? 3 : 1),
           innerIv);
       auto lhsClone = innerBuilder.clone(
-          *lhsDefiningOp.getSource().getDefiningOp(), mapping);
+          *lhsDefiningOp.getBase().getDefiningOp(), mapping);
       // Load matrix A tile
       SmallVector<Value, 4> aLoadTiles =
           createTileLoads(innerBuilder, loc, amxInputTilesOf16x32xBf16Ty,
@@ -489,14 +489,14 @@ struct VectorContractToAMXPattern
       // Update index of LHS matrix subview for batch dimension if corresponding
       // loop is needed.
       if (iv)
-        rhsMapping.map(rhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+        rhsMapping.map(rhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                        iv);
       // Update index of LHS matrix subview for K dimension.
       rhsMapping.map(
-          rhsDefiningOp.getSource().getDefiningOp()->getOperand(iv ? 2 : 1),
+          rhsDefiningOp.getBase().getDefiningOp()->getOperand(iv ? 2 : 1),
           innerIv);
       auto rhsClone = innerBuilder.clone(
-          *rhsDefiningOp.getSource().getDefiningOp(), rhsMapping);
+          *rhsDefiningOp.getBase().getDefiningOp(), rhsMapping);
       // Load matrix B tile, vnni factor and N tile size will be collapsed as
       // effective tilse size.
       SmallVector<Value, 4> bLoadTiles =
