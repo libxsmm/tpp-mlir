@@ -1,9 +1,5 @@
-# Use LIBXSMM (make PREFIX=/path/to/libxsmm) given by LIBXSMMROOT
-set(LIBXSMMROOT $ENV{LIBXSMMROOT})
-# Fetch LIBXSMM (even if LIBXSMMROOT is present)
-set(LIBXSMMFETCH $ENV{LIBXSMMFETCH})
-
-if(LIBXSMMROOT AND NOT LIBXSMMFETCH)
+# Make to pass full path to LIBXSMMROOT
+if(EXISTS ${LIBXSMMROOT})
   message(STATUS "Found LIBXSMM (${LIBXSMMROOT})")
   file(GLOB XSMM_SRCS LIST_DIRECTORIES false CONFIGURE_DEPENDS ${LIBXSMMROOT}/include/libxsmm/*.c)
   list(REMOVE_ITEM XSMM_SRCS ${LIBXSMMROOT}/include/libxsmm/libxsmm_generator_gemm_driver.c)
