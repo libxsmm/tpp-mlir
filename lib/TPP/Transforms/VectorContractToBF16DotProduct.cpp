@@ -516,7 +516,7 @@ struct BF16DotProduct : public impl::BF16DotProductBase<BF16DotProduct> {
     RewritePatternSet patterns(&getContext());
     populateBF16DotProductPatterns(patterns);
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };

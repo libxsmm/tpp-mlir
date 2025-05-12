@@ -202,7 +202,7 @@ struct BrgemmLinalgTiling
     RewritePatternSet patterns(&getContext());
     populateBrgemmLinalgTilingPatterns(patterns, options);
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
 
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }

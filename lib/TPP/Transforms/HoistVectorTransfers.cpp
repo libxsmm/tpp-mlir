@@ -250,7 +250,7 @@ struct HoistVectorTransfers
     RewritePatternSet patterns(&getContext());
     populateHoistVectorTransferPatterns(patterns);
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };
