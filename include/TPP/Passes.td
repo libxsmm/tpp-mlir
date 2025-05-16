@@ -633,4 +633,17 @@ def GpuVectorize : Pass<"gpu-vectorize", "ModuleOp"> {
                            "vector::VectorDialect"];
 }
 
+def X86Vectorizer : Pass<"x86-vectorizer"> {
+  let summary = "Vectorize ops for x86 targets.";
+  let description = [{
+    Convert ops targeting x86 to vectorized representation.
+  }];
+  let dependentDialects = ["scf::SCFDialect",
+                           "tensor::TensorDialect",
+                           "linalg::LinalgDialect",
+                           "math::MathDialect",
+                           "arith::ArithDialect",
+                           "vector::VectorDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
