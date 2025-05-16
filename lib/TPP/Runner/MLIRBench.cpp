@@ -388,7 +388,7 @@ LogicalResult MLIRBench::printResult(Operation *kernelCall) {
 
     if (isa<TensorType>(result.getType())) {
       result =
-          builder.create<bufferization::ToMemrefOp>(unkLoc, memrefType, result);
+          builder.create<bufferization::ToBufferOp>(unkLoc, memrefType, result);
     }
 
     auto outBuf = builder.create<memref::AllocOp>(unkLoc, memrefType);
