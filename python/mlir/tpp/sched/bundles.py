@@ -339,8 +339,8 @@ def default_pipeline(
     mod = apply_registered_pass(mod, "convert-index-to-llvm")
     mod = apply_registered_pass(mod, "convert-func-to-llvm")
     mod = apply_registered_pass(mod, "convert-arith-to-llvm")
+    mod = apply_registered_pass(mod, "convert-cf-to-llvm")
     func = match(mod, ops={"func.func"})
-    func = apply_registered_pass(func, "convert-cf-to-llvm")
     if def_parallel:
         func = apply_registered_pass(func, "convert-omp-to-llvm")
     func = apply_registered_pass(func, "convert-ub-to-llvm")
