@@ -26,4 +26,3 @@ module {
     return %alloc : memref<8x32x32x32xbf16>
   }
 }
-
