@@ -646,4 +646,17 @@ def RegisterBlocking : Pass<"register-blocking"> {
                            "arith::ArithDialect"];
 }
 
+def LinalgVectorize : Pass<"linalg-vectorize"> {
+  let summary = "Vectorize linalg ops.";
+  let description = [{
+    Applies vectorization and cleanup to lower all suitable
+    linalg ops into vectors.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "tensor::TensorDialect",
+                           "linalg::LinalgDialect",
+                           "math::MathDialect",
+                           "arith::ArithDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
