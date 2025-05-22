@@ -32,7 +32,7 @@ add_mlir_library(TPPTransforms
   VectorContractToFMA.cpp
   VectorContractToBF16DotProduct.cpp
   VectorContractToAMX.cpp
-  X86Vectorizer.cpp
+  RegisterBlocking.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${PROJECT_SOURCE_DIR}/include/TPP

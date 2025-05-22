@@ -633,17 +633,17 @@ def GpuVectorize : Pass<"gpu-vectorize", "ModuleOp"> {
                            "vector::VectorDialect"];
 }
 
-def X86Vectorizer : Pass<"x86-vectorizer"> {
-  let summary = "Vectorize ops for x86 targets.";
+def RegisterBlocking : Pass<"register-blocking"> {
+  let summary = "Block ops for register sizes.";
   let description = [{
-    Convert ops targeting x86 to vectorized representation.
+    Tile and post-process ops to bring them to hardware-friendly
+    shapes in preparation for vectorization.
   }];
   let dependentDialects = ["scf::SCFDialect",
                            "tensor::TensorDialect",
                            "linalg::LinalgDialect",
                            "math::MathDialect",
-                           "arith::ArithDialect",
-                           "vector::VectorDialect"];
+                           "arith::ArithDialect"];
 }
 
 #endif // TPP_DIALECT_TPP_PASSES

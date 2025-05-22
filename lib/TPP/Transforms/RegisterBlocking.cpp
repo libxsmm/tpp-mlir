@@ -1,4 +1,4 @@
-//===-X86Vectorizer.cpp ------------------------------------------*- C++-*-===//
+//===-RegisterBlocking.cpp ---------------------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,8 +20,6 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
-#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
-#include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -29,7 +27,7 @@
 
 namespace mlir {
 namespace tpp {
-#define GEN_PASS_DEF_X86VECTORIZER
+#define GEN_PASS_DEF_REGISTERBLOCKING
 #include "TPP/Passes.h.inc"
 } // namespace tpp
 } // namespace mlir
@@ -60,7 +58,7 @@ mapIteratorToDim(PatternRewriter &rewriter, AffineMap map, unsigned iterPos) {
   return map.getResultPosition(rewriter.getAffineDimExpr(iterPos));
 }
 
-struct VectorizeContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
+struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
 
   LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
@@ -180,17 +178,20 @@ struct VectorizeContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   }
 };
 
-struct X86Vectorizer
-    : public impl::X86VectorizerBase<X86Vectorizer> {
-  using X86VectorizerBase::X86VectorizerBase;
+struct RegisterBlocking : public impl::RegisterBlockingBase<RegisterBlocking> {
+  using RegisterBlockingBase::RegisterBlockingBase;
 
   void runOnOperation() override {
     auto *ctx = &getContext();
+
     RewritePatternSet patterns(ctx);
-    patterns.add<VectorizeContraction>(ctx);
+    patterns.add<RegBlockContraction>(ctx);
+
     GreedyRewriteConfig config;
     config.setStrictness(GreedyRewriteStrictness::ExistingOps);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
+    if (failed(
+            applyPatternsGreedily(getOperation(), std::move(patterns), config)))
+      return signalPassFailure();
   }
 };
 } // namespace tpp
