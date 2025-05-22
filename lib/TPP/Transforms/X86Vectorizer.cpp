@@ -60,7 +60,7 @@ mapIteratorToDim(PatternRewriter &rewriter, AffineMap map, unsigned iterPos) {
   return map.getResultPosition(rewriter.getAffineDimExpr(iterPos));
 }
 
-struct VectorizeMatmul : OpInterfaceRewritePattern<linalg::LinalgOp> {
+struct VectorizeContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
 
   LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
@@ -161,7 +161,7 @@ struct VectorizeMatmul : OpInterfaceRewritePattern<linalg::LinalgOp> {
     rewriter.replaceOp(matmulOp, tiledOp->tensorResults);
 
     // Tiling cleanup.
-    // It is easier to post process loops now without need for complex matching.
+    // It is easier to post-process loops now without need for complex matching.
     //
     // Apply loop peeling to split tail iterations and allow for
     // canonicalization to ensure all blocked ops operate on static values.
@@ -187,7 +187,7 @@ struct X86Vectorizer
   void runOnOperation() override {
     auto *ctx = &getContext();
     RewritePatternSet patterns(ctx);
-    patterns.add<VectorizeMatmul>(ctx);
+    patterns.add<VectorizeContraction>(ctx);
     GreedyRewriteConfig config;
     config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
