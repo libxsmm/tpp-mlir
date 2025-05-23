@@ -66,7 +66,6 @@ struct LinalgVectorize
     tensor::populateFoldTensorSubsetIntoVectorTransferPatterns(patterns);
     patterns.add<linalg::CopyVectorizationPattern>(ctx);
     vector::populateVectorStepLoweringPatterns(patterns);
-    vector::populateCastAwayVectorLeadingOneDimPatterns(patterns);
 
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       return signalPassFailure();
