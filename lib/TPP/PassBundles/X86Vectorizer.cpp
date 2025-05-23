@@ -63,5 +63,9 @@ private:
     pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
     pm.addNestedPass<func::FuncOp>(createLoopInvariantSubsetHoistingPass());
     pm.addPass(createCleanup());
+
+    // Unroll vectors into register shapes.
+    pm.addNestedPass<func::FuncOp>(createRegisterUnroll());
+    pm.addPass(createCleanup());
   }
 };
