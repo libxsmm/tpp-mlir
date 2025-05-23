@@ -659,4 +659,13 @@ def LinalgVectorize : Pass<"linalg-vectorize"> {
                            "arith::ArithDialect"];
 }
 
+def RegisterUnroll : Pass<"register-unroll"> {
+  let summary = "Unroll ops for register sizes.";
+  let description = [{
+    Unroll vector ops to bring them to hardware shapes.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "arith::ArithDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
