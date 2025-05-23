@@ -115,7 +115,7 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       }
     }
 
-    // The register blocking is applied to the remaining innermost dimensions.
+    // The register blocking is applied to the remaining innermost dimension.
     // NOTE: It is assumed that all batch-reduce dimensions are outer w.r.t.
     //       K-dim reduce dimensions.
     //
@@ -130,6 +130,7 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       tileSizes[*dimVnni] = 0;
     tileSizes[dims->m[0]] = regBlocks[0];
     tileSizes[dims->n[0]] = regBlocks[1];
+    tileSizes[dimK] = regBlocks[2];
 
     // Place parallel dimensions first as outer loops.
     // Move batch-reduce dimensions inside, then K-dim reductions.
