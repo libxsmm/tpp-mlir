@@ -39,7 +39,7 @@ static SmallVector<int64_t> getRegisterGemmUnroll(Operation *op) {
   auto res = dlti::query(op, {"CPU", "reg_gemm_unroll"});
   if (failed(res))
     return {};
-  auto vals = llvm::dyn_cast<ArrayAttr>(*res);
+  auto vals = dyn_cast<ArrayAttr>(*res);
   if (!vals)
     return {};
   return extractVector<int64_t>(vals);
@@ -112,25 +112,69 @@ static std::optional<SmallVector<int64_t>> getContractionShape(vector::Contracti
   return unrollShapes;
 }
 
-static std::optional<SmallVector<int64_t>> getVectorShape(Operation* op){
-  if(auto contractOp = dyn_cast<vector::ContractionOp>(op))
-    return getContractionShape(contractOp);
-  if (auto readOp = dyn_cast<vector::TransferReadOp>(op)) {
-    // Transfer read ops may need different shapes based on how they are being
-    // used. For simplicity just match the shape used by the extract strided op.
-    VectorType sliceType;
-    for (Operation *users : op->getUsers()) {
-      auto extract = dyn_cast<vector::ExtractStridedSliceOp>(users);
-      if (!extract)
-        return std::nullopt;
-      auto vecType = cast<VectorType>(extract.getResult().getType());
-      if (sliceType && sliceType != vecType)
-        return std::nullopt;
-      sliceType = vecType;
+void selectUnrollSizes(Operation *op) {
+  MLIRContext *ctx = op->getContext();
+
+  auto contractOp = dyn_cast<vector::ContractionOp>(op);
+  if (!contractOp)
+    return;
+
+  std::optional<SmallVector<int64_t>> unrollShape =
+      getContractionShape(contractOp);
+  if (!unrollShape)
+    return;
+
+  std::string unrollAttrName = "unroll_shape";
+  contractOp->setDiscardableAttr(unrollAttrName,
+                                 DenseI64ArrayAttr::get(ctx, *unrollShape));
+
+  // Map contraction unroll shape to its operands.
+  SmallVector<AffineMap> indexingMaps = contractOp.getIndexingMapsArray();
+  auto getOperandUnrollShape = [&](AffineMap map) -> SmallVector<int64_t> {
+    SmallVector<int64_t> operandShape;
+    for (AffineExpr dim : map.getResults()) {
+      unsigned dimPos = dyn_cast<AffineDimExpr>(dim).getPosition();
+      operandShape.push_back((*unrollShape)[dimPos]);
     }
-    return llvm::to_vector(sliceType.getShape());
+    return operandShape;
+  };
+
+  // Only propagate layout to reads and writes for now.
+  // All other ops will default to extract/insert vector slices.
+  if (auto read = dyn_cast_or_null<vector::TransferReadOp>(
+          contractOp.getLhs().getDefiningOp())) {
+    SmallVector<int64_t> shape = getOperandUnrollShape(indexingMaps[0]);
+    read->setDiscardableAttr(unrollAttrName,
+                             DenseI64ArrayAttr::get(ctx, shape));
   }
-  return std::nullopt;
+  if (auto read = dyn_cast_or_null<vector::TransferReadOp>(
+          contractOp.getRhs().getDefiningOp())) {
+    SmallVector<int64_t> shape = getOperandUnrollShape(indexingMaps[1]);
+    read->setDiscardableAttr(unrollAttrName,
+                             DenseI64ArrayAttr::get(ctx, shape));
+  }
+
+  // Set the same unroll for accumulator and writes.
+  SmallVector<int64_t> accUnroll = getOperandUnrollShape(indexingMaps[2]);
+  if (auto read = dyn_cast_or_null<vector::TransferReadOp>(
+          contractOp.getAcc().getDefiningOp())) {
+    read->setDiscardableAttr(unrollAttrName,
+                             DenseI64ArrayAttr::get(ctx, accUnroll));
+  }
+  for (Operation *user : contractOp->getUsers()) {
+    if (auto write = dyn_cast_or_null<vector::TransferWriteOp>(user)) {
+      write->setDiscardableAttr(unrollAttrName,
+                                DenseI64ArrayAttr::get(ctx, accUnroll));
+    }
+  }
+}
+
+static std::optional<SmallVector<int64_t>> getVectorShape(Operation *op) {
+  auto unrollAttr = dyn_cast_or_null<DenseI64ArrayAttr>(
+      op->getDiscardableAttr("unroll_shape"));
+  if (!unrollAttr)
+    return std::nullopt;
+  return SmallVector<int64_t>(unrollAttr.asArrayRef());
 }
 
 struct RegisterUnroll
@@ -139,6 +183,10 @@ struct RegisterUnroll
 
   void runOnOperation() override {
     auto *ctx = &getContext();
+
+    // TODO: Replace with proper layout and propagation analysis like
+    //       'SparseBackwardDataFlowAnalysis'.
+    getOperation()->walk([&](Operation *op) { selectUnrollSizes(op); });
 
     RewritePatternSet patterns(ctx);
     vector::populateVectorUnrollPatterns(
