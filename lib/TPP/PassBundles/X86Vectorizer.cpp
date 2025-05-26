@@ -59,13 +59,14 @@ private:
     pm.addNestedPass<func::FuncOp>(createLinalgVectorize());
     pm.addPass(createCleanup());
 
+    // Split vectors into register shapes.
+    // Unroll before hoisting for easier result propagation through loops.
+    pm.addNestedPass<func::FuncOp>(createRegisterUnroll());
+    pm.addPass(createCleanup());
+
     // Cleanup after vectorization.
     pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
     pm.addNestedPass<func::FuncOp>(createLoopInvariantSubsetHoistingPass());
-    pm.addPass(createCleanup());
-
-    // Unroll vectors into register shapes.
-    pm.addNestedPass<func::FuncOp>(createRegisterUnroll());
     pm.addPass(createCleanup());
   }
 };
