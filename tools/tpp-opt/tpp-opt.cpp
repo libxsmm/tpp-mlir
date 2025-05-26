@@ -27,6 +27,7 @@
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/BufferizableOpInterfaceImpl.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
+#include "TPP/Dialect/Tune/TuneTransformOps.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
@@ -52,6 +53,7 @@ int main(int argc, char **argv) {
   registerAllExtensions(registry);
   mlir::linalg::registerTransformDialectExtension(registry);
   mlir::tensor::registerTransformDialectExtension(registry);
+  mlir::tune::registerTransformDialectExtension(registry);
   registerAllToLLVMIRTranslations(registry);
 
   return mlir::asMainReturnCode(
