@@ -25,6 +25,7 @@ def LoadTppDialects : Pass<"load-tpp-dialects", "ModuleOp"> {
                            "check::CheckDialect",
                            "perf::PerfDialect",
                            "omp::OpenMPDialect",
+                           "amx::AMXDialect",
                            "async::AsyncDialect"];
 }
 

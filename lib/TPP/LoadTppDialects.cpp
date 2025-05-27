@@ -15,6 +15,7 @@
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
+#include "mlir/Dialect/AMX/AMXDialect.h"
 
 
 namespace mlir {
