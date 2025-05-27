@@ -668,4 +668,16 @@ def RegisterUnroll : Pass<"register-unroll"> {
                            "arith::ArithDialect"];
 }
 
+def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
+  let summary = "Convert vector ops to X86 sequences.";
+  let description = [{
+    Lowers generic vector ops into specialized X86
+    sequences of operations.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "x86vector::X86VectorDialect",
+                           "amx::AMXDialect",
+                           "arith::ArithDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
