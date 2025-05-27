@@ -5,6 +5,8 @@
 
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
+#include "TPP/Dialect/Tune/TuneDialect.h"
+#include "TPP/Dialect/Tune/TuneTransformOps.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
@@ -40,6 +42,17 @@ NB_MODULE(_tppDialects, m) {
       [](MlirDialectRegistry wrappedRegistry) {
         mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
         registry->insert<mlir::xsmm::XsmmDialect>();
+      },
+      "registry");
+
+  auto tuneModule = m.def_submodule("tune");
+
+  tuneModule.def(
+      "register_dialect",
+      [](MlirDialectRegistry wrappedRegistry) {
+        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
+        registry->insert<mlir::tune::TuneDialect>();
+        mlir::tune::registerTransformDialectExtension(registry);
       },
       "registry");
 

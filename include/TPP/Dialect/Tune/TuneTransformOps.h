@@ -1,5 +1,5 @@
-#ifndef MLIR_TUNE_TRANSFORM_OPS_H
-#define MLIR_TUNE_TRANSFORM_OPS_H
+#ifndef TPP_DIALECT_TUNE_TUNETRANSFORMOPS_H
+#define TPP_DIALECT_TUNE_TUNETRANSFORMOPS_H
 
 #include "mlir/Dialect/Transform/IR/TransformOps.h"
 #include "mlir/Dialect/Transform/Interfaces/TransformInterfaces.h"
@@ -10,7 +10,7 @@
 
 namespace mlir {
 namespace tune {
-void registerTransformDialectExtension(mlir::DialectRegistry &registry);
+void registerTransformDialectExtension(DialectRegistry *registry);
 } // namespace tune
 } // namespace mlir
 

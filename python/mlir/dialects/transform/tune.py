@@ -1,11 +1,11 @@
-from ...ir import *
-from .._tune_transform_ops_gen import *
+from ...ir import ArrayAttr, SymbolRefAttr, Attribute, Type
+from .._tune_transform_ops_gen import TuneSelectOp
 
 from collections.abc import Sequence
-from typing import List, Optional, Union
+from typing import Union
 
 def select(
-    selected: Type, # transform.param or transform.param<...>
+    selected: Type, # transform.any_param or transform.param<...>
     name: Union[str, Attribute],
     options: Union[ArrayAttr, Sequence[Attribute]],
     loc=None,
@@ -13,8 +13,6 @@ def select(
 ) -> TuneSelectOp:
     if isinstance(name, str):
         name = SymbolRefAttr.get([name])
-    if isinstance(options, Sequence):
-        options = ArrayAttr.get(options)
 
     return TuneSelectOp(
         selected=selected,

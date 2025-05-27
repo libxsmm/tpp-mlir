@@ -44,6 +44,6 @@ public:
 };
 } // namespace
 
-void mlir::tune::registerTransformDialectExtension(DialectRegistry &registry) {
-  registry.addExtensions<TuneTransformDialectExtension>();
+void mlir::tune::registerTransformDialectExtension(DialectRegistry *registry) {
+  registry->addExtensions<TuneTransformDialectExtension>();
 }

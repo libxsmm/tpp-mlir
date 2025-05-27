@@ -1,4 +1,4 @@
-//===- XsmmDialect.h - Xsmm dialect -----------------------------*- C++ -*-===//
+//===- TuneDialect.h - Tune dialect -----------------------------*- C++ -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,20 @@
 
 #include "mlir/IR/Dialect.h"
 
-#define GET_OP_CLASSES
-#include "TPP/Dialect/Tune/TuneOpsDialect.h.inc"
+namespace mlir {
+namespace tune {
+
+class TuneDialect : public Dialect {
+public:
+  explicit TuneDialect(MLIRContext *context);
+  static StringRef getDialectNamespace() { return "tune"; }
+};
+
+} // namespace tune
+} // namespace mlir
+
+// TODO: uncomment when dialect gets non-extension ops
+// #define GET_OP_CLASSES
+// #include "TPP/Dialect/Tune/TuneOpsDialect.h.inc"
 
 #endif // TPP_DIALECT_TUNE_TUNEDIALECT_H
