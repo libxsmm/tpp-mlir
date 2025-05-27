@@ -72,5 +72,11 @@ private:
     // Lower vector ops to x86 sequences.
     pm.addNestedPass<func::FuncOp>(createConvertVectorToX86());
     pm.addPass(createCleanup());
+
+    // Cleanup vector shapes.
+    // Helps to expose more canonical vector forms, cancel out casts, and later
+    // lower reads and writes directly to LLVM ops instead of SCF versions.
+    pm.addPass(createVectorDropUnitDims());
+    pm.addPass(createCleanup());
   }
 };
