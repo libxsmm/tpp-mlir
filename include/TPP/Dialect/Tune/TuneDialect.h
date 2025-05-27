@@ -23,8 +23,4 @@ public:
 } // namespace tune
 } // namespace mlir
 
-// TODO: uncomment when dialect gets non-extension ops
-// #define GET_OP_CLASSES
-// #include "TPP/Dialect/Tune/TuneOpsDialect.h.inc"
-
 #endif // TPP_DIALECT_TUNE_TUNEDIALECT_H

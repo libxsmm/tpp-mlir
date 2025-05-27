@@ -52,6 +52,16 @@ NB_MODULE(_tppDialects, m) {
       [](MlirDialectRegistry wrappedRegistry) {
         mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
         registry->insert<mlir::tune::TuneDialect>();
+      },
+      "registry");
+
+  auto transformModule = m.def_submodule("transform");
+  auto transformTuneModule = transformModule.def_submodule("tune");
+
+  transformTuneModule.def(
+      "register_dialect_extension",
+      [](MlirDialectRegistry wrappedRegistry) {
+        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
         mlir::tune::registerTransformDialectExtension(*registry);
       },
       "registry");
