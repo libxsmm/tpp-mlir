@@ -680,4 +680,13 @@ def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
                            "arith::ArithDialect"];
 }
 
+def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
+  let summary = "Drop lead unit dims.";
+  let description = [{
+    Insert casts and cleanup to remove leading unit dimensions
+    in vector operations.
+  }];
+  let dependentDialects = ["vector::VectorDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
