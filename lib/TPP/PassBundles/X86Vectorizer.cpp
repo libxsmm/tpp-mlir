@@ -68,5 +68,9 @@ private:
     pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
     pm.addNestedPass<func::FuncOp>(createLoopInvariantSubsetHoistingPass());
     pm.addPass(createCleanup());
+
+    // Lower vector ops to x86 sequences.
+    pm.addNestedPass<func::FuncOp>(createConvertVectorToX86());
+    pm.addPass(createCleanup());
   }
 };
