@@ -41,6 +41,8 @@ struct VectorizationPattern : public RewritePattern {
     if (!linalg::hasVectorizationImpl(op))
       return rewriter.notifyMatchFailure(op,
                                          "Unsupported Op, cannot vectorize");
+    if (isa<linalg::PackOp, linalg::UnPackOp>(op))
+      return rewriter.notifyMatchFailure(op, "Packing vectorization disabled");
     return linalg::vectorize(rewriter, op);
   }
 };
