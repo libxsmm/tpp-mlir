@@ -38,7 +38,7 @@ struct ContractionToFMA : OpRewritePattern<vector::ContractionOp> {
 
     VectorType lhsTy = contractOp.getLhsType();
     // TODO: Extend to support VNNI.
-    if (lhsTy.getElementType().isF32())
+    if (!lhsTy.getElementType().isF32())
       return rewriter.notifyMatchFailure(contractOp,
                                          "Only F32 lowering is supported now");
 
