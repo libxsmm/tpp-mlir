@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
   registerAllExtensions(registry);
   mlir::linalg::registerTransformDialectExtension(registry);
   mlir::tensor::registerTransformDialectExtension(registry);
-  mlir::tune::registerTransformDialectExtension(&registry);
+  mlir::tune::registerTransformDialectExtension(registry);
   registerAllToLLVMIRTranslations(registry);
 
   return mlir::asMainReturnCode(

@@ -19,7 +19,7 @@ def TuneSelectOp : Op<Transform_Dialect, "tune.select", [
                        ArrayAttr:$options);
   let results = (outs TransformParamTypeInterface:$selected);
   let assemblyFormat =
-      "$name `from` $options attr-dict `:` functional-type(operands, results)";
+      "$name `from` $options attr-dict `:` type(results)";
 }
 
 #endif // TUNE_TRANSFORM_OPS

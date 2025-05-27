@@ -10,7 +10,7 @@
 
 namespace mlir {
 namespace tune {
-void registerTransformDialectExtension(DialectRegistry *registry);
+void registerTransformDialectExtension(DialectRegistry &registry);
 } // namespace tune
 } // namespace mlir
 

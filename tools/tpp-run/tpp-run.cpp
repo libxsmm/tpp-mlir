@@ -311,7 +311,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::xsmm::XsmmDialect>();
   registry.insert<mlir::check::CheckDialect>();
   registry.insert<mlir::perf::PerfDialect>();
-  mlir::tune::registerTransformDialectExtension(&registry);
+  mlir::tune::registerTransformDialectExtension(registry);
   registerAllDialects(registry);
   registerAllExtensions(registry);
   registerAllToLLVMIRTranslations(registry);
