@@ -134,6 +134,7 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
 
     // Place parallel dimensions first as outer loops.
     // Move batch-reduce dimensions inside, then K-dim reductions.
+    // For completeness, keep VNNI innermost if present.
     SmallVector<unsigned> interchange;
     interchange.append(dims->batch);
     interchange.append(dims->m);
@@ -165,7 +166,7 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // Apply loop peeling to split tail iterations and allow for
     // canonicalization to ensure all blocked ops operate on static values.
     // Peeling is applied in reverse order from the innermost loop to ensure
-    // that only and all tiling loops are affected.
+    // that all tiling loops are affected.
     //
     // Result is ignored as peeling can fail when tiling cleanly divides
     // a dimension which means there is no need for peeling anyway.

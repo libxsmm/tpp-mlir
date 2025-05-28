@@ -669,9 +669,9 @@ def RegisterUnroll : Pass<"register-unroll"> {
 }
 
 def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
-  let summary = "Convert vector ops to X86 sequences.";
+  let summary = "Convert vector ops to x86 sequences.";
   let description = [{
-    Lowers generic vector ops into specialized X86
+    Lowers generic vector ops into specialized x86
     sequences of operations.
   }];
   let dependentDialects = ["vector::VectorDialect",
@@ -684,7 +684,7 @@ def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
   let summary = "Drop lead unit dims.";
   let description = [{
     Insert casts and cleanup to remove leading unit dimensions
-    in vector operations.
+    from vector operations.
   }];
   let dependentDialects = ["vector::VectorDialect"];
 }

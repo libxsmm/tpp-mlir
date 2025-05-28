@@ -94,14 +94,14 @@ static std::optional<SmallVector<int64_t>> getContractionShape(vector::Contracti
     }
   }
 
-  // The register unroling is applied to the remaining innermost dimensions.
+  // The register unrolling is applied to the remaining innermost dimensions.
   // NOTE: It is assumed that all batch-reduce dimensions are outer w.r.t.
-  //       K-dim reduce dimensions.
+  //       K-dim reduce dimension.
   //
   // Scalarize batch dimensions - it is a fallback option, ideally
-  // user should've preprocessed batch dimension earlier but it might have
-  // remained there as a unit dimension. Same for batch-reduce dims.
-  // Do not tile the VNNI dimension if present.
+  // user should've preprocessed batch dimension earlier or it might have
+  // remained present as a unit dimension. Same for batch-reduce dims.
+  // Do not unroll the VNNI dimension if present.
   SmallVector<int64_t> unrollShapes(contractOp.getIteratorTypes().size(), 1);
   if (isVnni)
     unrollShapes[*dimVnni] = lhsTy.getShape().back();
