@@ -9,13 +9,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "TPP/Passes.h"
 #include "TPP/Transforms/Transforms.h"
+#include "TPP/Transforms/Utils/VNNIUtils.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "vector-contract-to-fma"
 
@@ -30,6 +34,23 @@ using namespace mlir;
 using namespace mlir::tpp;
 
 namespace {
+
+/// Returns the target vector length based on target features avx2/avx512 for
+/// FP32 data type.
+static unsigned getTargetVectorLengthForFP32(llvm::StringRef targetFeatureStr) {
+  unsigned vecElemTypeSizeInBits = 32;
+  unsigned vecRegSizeInBits = StringSwitch<unsigned>(targetFeatureStr)
+                                  .Case("avx2", 256)
+                                  .Case("avx512", 512)
+                                  .Default(0);
+  if (vecRegSizeInBits > 0)
+    return vecRegSizeInBits / vecElemTypeSizeInBits;
+
+  vecRegSizeInBits = vnni::utils::hasAVX512() ? 512
+                     : vnni::utils::hasAVX2() ? 256
+                                              : 0;
+  return vecRegSizeInBits / vecElemTypeSizeInBits;
+}
 /// Returns true if the \p map is transposed.
 static bool isTransposed(AffineMap map) {
   auto results = map.getResults();
@@ -92,8 +113,12 @@ private:
 struct VectorContractToFMAPattern
     : public OpRewritePattern<vector::ContractionOp> {
   using OpRewritePattern<vector::ContractionOp>::OpRewritePattern;
-  VectorContractToFMAPattern(MLIRContext *context, TransformationContext &ctx)
-      : OpRewritePattern<vector::ContractionOp>(context), ctx(ctx) {}
+
+  VectorContractToFMAPattern(MLIRContext *context,
+                             VectorContractToFMAOptions options,
+                             TransformationContext &ctx)
+      : OpRewritePattern<vector::ContractionOp>(context), options(options),
+        ctx(ctx) {}
 
   LogicalResult matchAndRewrite(vector::ContractionOp op,
                                 PatternRewriter &rewriter) const override {
@@ -133,8 +158,6 @@ struct VectorContractToFMAPattern
         iteratorTypes[outerDimIndex + 1] != vector::IteratorType::parallel ||
         iteratorTypes[outerDimIndex + 2] != vector::IteratorType::reduction)
       return rewriter.notifyMatchFailure(op, "Not a gemm");
-
-    SmallVector<Value, 4> results;
 
     auto lhs = op.getLhs();
     auto rhs = op.getRhs();
@@ -245,7 +268,13 @@ struct VectorContractToFMAPattern
     if (K != 1)
       return failure();
 
-    auto accSubview = accDefiningOp.getSource();
+    unsigned vecLen = getTargetVectorLengthForFP32(options.targetFeature);
+    if (vecLen == 0)
+      return failure();
+
+    SmallVector<Value, 12> results;
+    SmallVector<Value, 12> argResults;
+    auto accSubview = accDefiningOp.getBase();
     Location loc = op.getLoc();
 
     // Create M different <1xN> subviews.
@@ -272,12 +301,15 @@ struct VectorContractToFMAPattern
       subview_2_splits.push_back(split);
     }
 
-    // Intialize each accumulator with a vector of size N
+    // Intialize each accumulator with a vector of size vecLen
     SmallVector<Value, 4> initAccs;
     for (auto subview : subview_2_splits) {
-      auto acc = rewriter.create<vector::LoadOp>(
-          loc, VectorType::get({N}, elementType), subview, ValueRange{c0, c0});
-      initAccs.push_back(acc);
+      for (unsigned j = 0; j < N; j += vecLen) {
+        auto acc = rewriter.create<vector::LoadOp>(
+            loc, VectorType::get({vecLen}, elementType), subview,
+            ValueRange{c0, rewriter.create<arith::ConstantIndexOp>(loc, j)});
+        initAccs.push_back(acc);
+      }
     }
 
     // Create new outer loop with M different accumulators.
@@ -295,13 +327,13 @@ struct VectorContractToFMAPattern
                   ValueRange innerIterArgs) {
                 IRMapping mapping;
                 mapping.map(
-                    lhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+                    lhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                     iv);
                 mapping.map(
-                    lhsDefiningOp.getSource().getDefiningOp()->getOperand(3),
+                    lhsDefiningOp.getBase().getDefiningOp()->getOperand(3),
                     innerIv);
                 auto lhsClone = innerBuilder.clone(
-                    *lhsDefiningOp.getSource().getDefiningOp(), mapping);
+                    *lhsDefiningOp.getBase().getDefiningOp(), mapping);
 
                 // Load and broadcast individual elements
                 SmallVector<Value, 4> broadcasts;
@@ -313,29 +345,69 @@ struct VectorContractToFMAPattern
                           innerBuilder.create<arith::ConstantIndexOp>(loc, i),
                           c0});
                   auto bcast = innerBuilder.create<vector::BroadcastOp>(
-                      loc, VectorType::get({N}, elem.getType()), elem);
+                      loc, VectorType::get({vecLen}, elem.getType()), elem);
                   broadcasts.push_back(bcast);
                 }
 
                 IRMapping rhsMapping;
                 rhsMapping.map(
-                    rhsDefiningOp.getSource().getDefiningOp()->getOperand(1),
+                    rhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
                     iv);
                 rhsMapping.map(
-                    rhsDefiningOp.getSource().getDefiningOp()->getOperand(2),
+                    rhsDefiningOp.getBase().getDefiningOp()->getOperand(2),
                     innerIv);
-                auto rhsClone = innerBuilder.clone(
-                    *rhsDefiningOp.getSource().getDefiningOp(), rhsMapping);
-                auto rowVec = innerBuilder.create<vector::LoadOp>(
-                    loc, VectorType::get({N}, elementType),
-                    rhsClone->getResult(0), ValueRange{c0, c0, c0});
 
-                // Create M different FMAs using broadcasts and current
-                // accumulator values.
-                for (int i = 0; i < M; i++) {
-                  auto fma = innerBuilder.create<vector::FMAOp>(
-                      loc, broadcasts[i], rowVec, innerIterArgs[i]);
-                  results.push_back(fma);
+                // Create Mx(N/vecLen) different FMAs using broadcasts and
+                // current accumulator values.
+                auto rhsClone = innerBuilder.clone(
+                    *rhsDefiningOp.getBase().getDefiningOp(), rhsMapping);
+                if (vecLen == 8) {
+                  for (unsigned j = 0; j < N; j += vecLen) {
+                    auto rowVec = innerBuilder.create<vector::LoadOp>(
+                        loc, VectorType::get({vecLen}, elementType),
+                        rhsClone->getResult(0),
+                        ValueRange{c0, c0,
+                                   innerBuilder.create<arith::ConstantIndexOp>(
+                                       loc, j)});
+                    unsigned iterArgAccessStride = N / vecLen;
+                    unsigned offset = j / vecLen;
+                    for (int i = 0; i < M; i++) {
+                      auto fma = innerBuilder.create<vector::FMAOp>(
+                          loc, broadcasts[i], rowVec,
+                          innerIterArgs[offset + iterArgAccessStride * i]);
+                      argResults.push_back(fma);
+                    }
+                  }
+
+                  // Perform strided circular copy of elements from argResults
+                  // to results.
+                  unsigned stride = (N / vecLen);
+                  unsigned totalElements = argResults.size();
+                  results.resize(totalElements);
+                  for (unsigned i = 0; i < totalElements; ++i) {
+                    unsigned circularIndex =
+                        (i % stride) * (stride - 1) + (i / stride);
+                    results[i] = argResults[circularIndex];
+                  }
+
+                } else {
+                  for (int i = 0; i < M; i++) {
+                    unsigned iterArgAccessStride = (i) * ((N / vecLen));
+                    for (unsigned j = 0; j < N; j += vecLen) {
+                      auto rowVec = innerBuilder.create<vector::LoadOp>(
+                          loc, VectorType::get({vecLen}, elementType),
+                          rhsClone->getResult(0),
+                          ValueRange{
+                              c0, c0,
+                              innerBuilder.create<arith::ConstantIndexOp>(loc,
+                                                                          j)});
+                      unsigned offset = (j / vecLen);
+                      auto fma = innerBuilder.create<vector::FMAOp>(
+                          loc, broadcasts[i], rowVec,
+                          innerIterArgs[offset + iterArgAccessStride]);
+                      results.push_back(fma);
+                    }
+                  }
                 }
 
                 // Yield all M results
@@ -357,9 +429,14 @@ struct VectorContractToFMAPattern
     // Store final results back to original locations.
     if (writeOp) {
       for (int i = 0; i < M; i++) {
-        rewriter.create<vector::StoreOp>(loc, newOuterForOp.getResult(i),
-                                         subview_2_splits[i],
-                                         ValueRange{c0, c0});
+        unsigned iterArgAccessStride = i * (N / vecLen);
+        for (unsigned j = 0; j < N; j += vecLen) {
+          unsigned offset = j / vecLen;
+          rewriter.create<vector::StoreOp>(
+              loc, newOuterForOp.getResult(offset + iterArgAccessStride),
+              subview_2_splits[i],
+              ValueRange{c0, rewriter.create<arith::ConstantIndexOp>(loc, j)});
+        }
       }
     }
 
@@ -371,15 +448,17 @@ struct VectorContractToFMAPattern
   }
 
 private:
+  VectorContractToFMAOptions options;
   TransformationContext &ctx;
 };
 
 void VectorContractToFMA::runOnOperation() {
+  VectorContractToFMAOptions options;
   auto funcOp = getOperation();
   MLIRContext *context = &getContext();
-
+  options.targetFeature = targetFeature;
   RewritePatternSet patterns(context);
-  patterns.add<VectorContractToFMAPattern>(context, ctx);
+  patterns.add<VectorContractToFMAPattern>(context, options, ctx);
 
   if (failed(applyPatternsGreedily(funcOp, std::move(patterns)))) {
     signalPassFailure();
@@ -388,7 +467,3 @@ void VectorContractToFMA::runOnOperation() {
 
 } // namespace tpp
 } // namespace mlir
-
-std::unique_ptr<Pass> createVectorContractToFMA() {
-  return std::make_unique<VectorContractToFMA>();
-}

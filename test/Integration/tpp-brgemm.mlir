@@ -7,6 +7,7 @@
 // RUN: FileCheck %s
 
 // RUN: tpp-opt %s -default-tpp-passes | FileCheck %s -check-prefix=IR
+// RUN: tpp-sched --bundle=default-tpp-passes %s | FileCheck %s -check-prefix=IR
 
 // IR-LABEL: brgemm_tpp
 func.func @brgemm_tpp(%A: tensor<1x4x8xf32>,

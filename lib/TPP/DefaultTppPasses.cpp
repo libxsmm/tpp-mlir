@@ -151,7 +151,9 @@ private:
           pm.addPass(createVectorToXSMM());
         }
         if (vectorToKernel) {
-          pm.addPass(createVectorToKernel());
+          VectorToKernelOptions options;
+          options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
+          pm.addPass(createVectorToKernel(options));
         }
       }
 

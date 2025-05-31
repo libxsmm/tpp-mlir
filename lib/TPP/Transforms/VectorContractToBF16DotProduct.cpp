@@ -402,13 +402,13 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                   Value ivNewKForOp, ValueRange iterArgsNewKForOp) {
                 IRMapping mapping;
                 mapping.map(
-                    vectorReadOpLhs.getSource().getDefiningOp()->getOperand(1),
+                    vectorReadOpLhs.getBase().getDefiningOp()->getOperand(1),
                     ivNewReductionForOp);
                 mapping.map(
-                    vectorReadOpLhs.getSource().getDefiningOp()->getOperand(3),
+                    vectorReadOpLhs.getBase().getDefiningOp()->getOperand(3),
                     ivNewKForOp);
                 auto lhsClone = rewriterNewKForOp.clone(
-                    *vectorReadOpLhs.getSource().getDefiningOp(), mapping);
+                    *vectorReadOpLhs.getBase().getDefiningOp(), mapping);
 
                 // Memory access for A Matrix into <32xbf16>
                 llvm::SmallVector<Value, 8> vectorA;
@@ -440,13 +440,13 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
 
                 IRMapping rhsMapping;
                 rhsMapping.map(
-                    vectorReadOpRhs.getSource().getDefiningOp()->getOperand(1),
-                    ivNewReductionForOp);
+                  vectorReadOpRhs.getBase().getDefiningOp()->getOperand(1),
+                  ivNewReductionForOp);
                 rhsMapping.map(
-                    vectorReadOpRhs.getSource().getDefiningOp()->getOperand(2),
+                    vectorReadOpRhs.getBase().getDefiningOp()->getOperand(2),
                     ivNewKForOp);
                 auto rhsClone = rewriterNewKForOp.clone(
-                    *vectorReadOpRhs.getSource().getDefiningOp(), rhsMapping);
+                    *vectorReadOpRhs.getBase().getDefiningOp(), rhsMapping);
 
                 // Memory access for B Matrix into <32xbf16>
                 llvm::SmallVector<Value, 8> vectorB;
@@ -516,7 +516,7 @@ struct BF16DotProduct : public impl::BF16DotProductBase<BF16DotProduct> {
     RewritePatternSet patterns(&getContext());
     populateBF16DotProductPatterns(patterns);
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };

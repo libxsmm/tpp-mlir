@@ -101,6 +101,9 @@ if [ "${GPU}" ]; then
   source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
 fi
 
+# Necessary for building Python-bindings.
+pip install --upgrade --user nanobind pybind11
+
 echo "Environment configured successfully"
 
  # Configure LLVM
@@ -134,6 +137,7 @@ echo_run cmake -Wno-dev -G Ninja \
     -DCMAKE_CXX_COMPILER=${CXX} \
     -DLLVM_USE_LINKER=${LINKER} \
     -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR} \
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     ${LLVM_BUILD_EXTENSIONS}
 
 if [ $? != 0 ]; then

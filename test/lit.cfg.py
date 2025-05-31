@@ -47,6 +47,6 @@ config.tpp_tools_dir = os.path.join(config.tpp_obj_root, "bin")
 llvm_config.with_environment("PATH", config.llvm_tools_dir, append_path=True)
 
 tool_dirs = [config.tpp_tools_dir, config.llvm_tools_dir]
-tools = ["mlir-gen", "tpp-opt", "tpp-run", "fpcmp"]
+tools = ["mlir-gen", "tpp-opt", "tpp-run", "fpcmp", "tpp-sched"]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

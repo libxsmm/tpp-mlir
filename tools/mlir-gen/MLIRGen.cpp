@@ -122,8 +122,8 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   assert(elementType && "Unsupported data type");
   dataType = *elementType;
 
-  // Disable VNNI packing if it is not BF16 data type
-  if (!dataType.isBF16())
+  // Disable VNNI packing if it is not a F16/BF16 data type
+   if (!dataType.isBF16() && !dataType.isF16())
     vnniFactor = 0;
   assert(((vnniFactor >= 0) && (vnniFactor % 2 == 0)) &&
          "Invalid VNNI packing factor");

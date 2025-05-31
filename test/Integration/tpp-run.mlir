@@ -11,6 +11,10 @@
 // RUN: tpp-run %s -e entry -entry-point-result=void -n 2 -print-mlir=late 2>&1 | FileCheck %s --check-prefix=BENCH_STATS_2
 // RUN: tpp-run %s -e entry -entry-point-result=void -n 10 -print-mlir=late 2>&1 | FileCheck %s --check-prefix=BENCH_STATS_10
 
+// CPU target-feature propagation test
+// FIXME: This test fails on Arm, as the message is not printed
+// FIXME: tpp-run %s -e entry -entry-point-result=void -print-mlir=llvm --target-feature=testfeature 2>&1 | FileCheck %s --check-prefix=CPU_FEATURE
+
 // CPU options can't be tested as even the LLVM IR is identical
 // Splat and init options in tpp-run-splat-* tests
 
@@ -159,3 +163,7 @@ func.func @entry(%A: tensor<4x8xf32>,
 // BENCH_STATS_10: call @_entry
 // BENCH_STATS_10-NOT: call @_entry
 // BENCH_STATS_10: {{[0-9]+}}{{.?}}{{[0-9e-]+}}
+
+// FIXME: This test fails on Arm, as the message is not printed
+// CPU_FEATURE-LABLE: @entry
+// CPU_FEATURE: '+testfeadture' is not a recognized feature for this target (ignoring feature)

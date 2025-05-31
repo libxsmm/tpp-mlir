@@ -1,8 +1,11 @@
 // RUN: tpp-opt %s -default-tpp-passes | \
-// RUN: FileCheck %s -check-prefix=IR
+// RUN:   FileCheck %s -check-prefix=IR
+
+// RUN: tpp-sched --bundle=default-tpp-passes %s | \
+// RUN:   FileCheck %s -check-prefix=IR
 
 // RUN: tpp-run %s \
-// RUN:  -e entry -entry-point-result=void
+// RUN:   -e entry -entry-point-result=void
 
 func.func @vnni_packing(%arg0: tensor<32x32xbf16>, %arg1: tensor<2x2x8x16x2xbf16>) -> tensor<2x2x8x16x2xbf16> {
   %0 = tensor.empty() : tensor<2x2x16x16xbf16>

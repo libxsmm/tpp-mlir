@@ -1,11 +1,12 @@
-// RUN: tpp-opt %s  | tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.1
+
+// RUN: tpp-run -e entry --entry-point-result=void -seed 123 -print %s > %t.1
 // RUN: tpp-opt %s  --vector-contract-to-fma  | tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 #map = affine_map<(d0, d1, d2, d3) -> (d0, d1, d3)>
 #map1 = affine_map<(d0, d1, d2, d3) -> (d0, d3, d2)>
 #map2 = affine_map<(d0, d1, d2, d3) -> (d1, d2)>
-module {
+
   func.func @entry(%arg0: memref<8x16x32x64xf32>, %arg1: memref<16x16x64x64xf32>, %arg2: memref<8x16x32x64xf32>) -> memref<8x16x32x64xf32> {
     %cst = arith.constant 0.000000e+00 : f32
     %c1 = arith.constant 1 : index
@@ -43,6 +44,3 @@ module {
     }
     return %arg2 : memref<8x16x32x64xf32>
   }
-}
-
-// -----

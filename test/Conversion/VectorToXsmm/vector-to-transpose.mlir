@@ -1,4 +1,5 @@
 // RUN: tpp-opt --vector-to-xsmm  %s --split-input-file | FileCheck %s
+// RUN: tpp-sched --bundle=vector-to-xsmm %s --split-input-file | tpp-opt | FileCheck %s
 
 func.func @transpose_op_2d_f32(%arg0: memref<3x5xf32>, %arg1: memref<5x3xf32>) {
     %c0 = arith.constant 0 : index
@@ -17,7 +18,7 @@ func.func @transpose_op_2d_f32(%arg0: memref<3x5xf32>, %arg1: memref<5x3xf32>) {
 // CHECK-DAG: %[[c3_i64:.*]] = arith.constant 3 : i64
 // CHECK-DAG: %[[c5_i64:.*]] = arith.constant 5 : i64
 // CHECK-DAG: %[[c0_i64:.*]] = arith.constant 0 : i64
-// CHECK: %[[dispatch:.*]] = call @xsmm_unary_dispatch(%[[c29_i64]], %[[c1_i64]], %[[c3_i64]], %[[c5_i64]], %[[c5_i64]], %[[c3_i64]], %[[c0_i64]]) 
+// CHECK: %[[dispatch:.*]] = call @xsmm_unary_dispatch(%[[c29_i64]], %[[c1_i64]], %[[c3_i64]], %[[c5_i64]], %[[c5_i64]], %[[c3_i64]], %[[c0_i64]])
 // CHECK-DAG:  %[[intptr:.*]] = memref.extract_aligned_pointer_as_index %[[arg0]]
 // CHECK-NEXT: %[[indexCast1:.*]] = arith.index_cast %[[intptr]]
 // CHECK-NEXT: %[[inttoptr:.*]] = llvm.inttoptr %[[indexCast1]]

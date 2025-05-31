@@ -103,7 +103,7 @@ struct SplitReductionDim
     RewritePatternSet patterns(ctx);
     patterns.add<SplitContractionReduction>(ctx, options);
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };

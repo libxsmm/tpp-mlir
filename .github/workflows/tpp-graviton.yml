@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - 'main'
+  schedule:
+    # Runs every week to keep the AWS node working
+    - cron: '0 0 * * 5'
   # Disabling pull request for now, problems with repo secrets
   # pull_request:
 
@@ -34,7 +37,7 @@ jobs:
           aws ec2 start-instances --instance-ids i-06347807c1743f85d
 
   TPP-MLIR-ARM:
-    runs-on: [ self-hosted, graviton ]
+    runs-on: [ self-hosted, aws, graviton3, hpc ]
     timeout-minutes: 60
     # if: |
     #   (github.event_name == 'push') || (github.event_name == 'workflow_dispatch') ||

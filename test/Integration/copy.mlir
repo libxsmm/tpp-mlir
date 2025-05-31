@@ -7,6 +7,7 @@
 // RUN: FileCheck %s
 
 // RUN: tpp-opt %s -default-tpp-passes | FileCheck %s -check-prefix=IR
+// RUN: tpp-sched --bundle=default-tpp-passes %s | FileCheck %s -check-prefix=IR
 
 #map0 = affine_map<(d0, d1) -> (d0, d1)>
 #map1 = affine_map<(d0, d1) -> (0, d1)>

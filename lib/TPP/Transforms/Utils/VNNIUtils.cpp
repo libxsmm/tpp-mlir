@@ -9,6 +9,7 @@
 #include "TPP/Transforms/Utils/VNNIUtils.h"
 #include "TPP/Transforms/Utils/DLTIUtils.h"
 
+#include "libxsmm_cpuid.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/IR/LinalgInterfaces.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -25,6 +26,18 @@ namespace utils {
 // Returns True if the current architecture supports AMX instructions.
 bool hasAMX() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SPR) &&
+         (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
+// Returns True if the current architecture supports AMX instructions.
+bool hasAVX2() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX2) &&
+         (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
+// Returns True if the current architecture supports AMX instructions.
+bool hasAVX512() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SKX) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 

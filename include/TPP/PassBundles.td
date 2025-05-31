@@ -20,6 +20,9 @@ def DefaultPipeline : Pass<"default-pipeline", "ModuleOp"> {
     Option<"gpuBackend", "gpu", "std::string",
             /*default=*/"\"\"",
            "Optional target GPU backend.">,
+    Option<"pipelineCpuTargetFeature", "target-feature", "std::string",
+            /*default=*/"",
+           "Optional CPU target feature.">,
   ];
 }
 
@@ -44,6 +47,8 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"vectorToKernel", "vector-to-kernel",
            "bool", /*default=*/"false",
            "Lower vector patterns to micro-kernels.">,
+    Option<"defBundleCpuTargetFeature", "target-feature", "std::string", "",
+                "Target feature for a given architecture">,
     Option<"lowerPackUnpackWithoutTranspose", "lower-pack-unpack-without-transpose",
            "bool", /*default=*/"false",
            "Lower non-constant packs and unpacks reverting any dim permutations.">,
@@ -97,6 +102,10 @@ def VectorToKernel : Pass<"vector-to-kernel", "ModuleOp"> {
   let summary = "Lower Vector operations to micro-kernel special lowering.";
   let dependentDialects = ["vector::VectorDialect",
                            "scf::SCFDialect"];
+  let options= [
+    Option<"vecBundleCpuTargetFeature", "target-feature", "std::string", "",
+                "Target feature for a given architecture">
+  ];
 }
 
 def LowLevelParallelization : Pass<"low-level-parallel", "ModuleOp"> {

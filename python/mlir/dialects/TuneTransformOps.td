@@ -1,0 +1,6 @@
+#ifndef TUNE_DIALECTS_EXTENSION_BINDING
+#define TUNE_DIALECTS_EXTENSION_BINDING
+
+include "TPP/Dialect/Tune/TuneTransformOps.td"
+
+#endif // TUNE_DIALECTS_EXTENSION_BINDING

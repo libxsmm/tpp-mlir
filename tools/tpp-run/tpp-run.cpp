@@ -55,6 +55,7 @@
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
+#include "TPP/Dialect/Tune/TuneTransformOps.h"
 #include "TPP/GPU/Utils.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
@@ -89,48 +90,6 @@ llvm::cl::opt<unsigned>
     optLevel("O", llvm::cl::desc("Speed optimization level (O0, O1, O2, O3)"),
              llvm::cl::value_desc("0-3"), llvm::cl::init(2));
 
-// Target Triple
-// Default x86_64, can be changed to aarch64 on other arches
-llvm::cl::opt<std::string> triple("triple", llvm::cl::desc("Target triple"),
-#if defined(__x86_64__)
-                                  llvm::cl::init("x86_64-linux-gnu"));
-#elif defined(__aarch64__)
-                                  llvm::cl::init("aarch64-linux-gnu"));
-#elif defined(__riscv) && 64 == (__riscv_xlen)
-                                  llvm::cl::init("riscv64-linux-gnu"));
-#else
-#error Unsupported architecture
-#endif
-
-// Target CPU name
-// Default skylake is old enough to be relevant for most cases
-llvm::cl::opt<std::string>
-    cpuName("cpu", llvm::cl::desc("CPU name (sapphirerapids, alderlake, etc)"),
-#if defined(__x86_64__)
-            llvm::cl::init("nehalem"));
-#elif defined(__aarch64__)
-            llvm::cl::init("cortex-a53"));
-#elif defined(__riscv) && 64 == (__riscv_xlen)
-            llvm::cl::init(""));
-#else
-#error Unsupported architecture
-#endif
-
-// Target FPU name
-// Default avx2 is old enough to be relevant for most cases
-llvm::cl::opt<std::string>
-    fpuName("fpu", llvm::cl::desc("FPU name (avx, avx2, avx512bf16)"),
-#if defined(__x86_64__)
-            llvm::cl::init("sse4.2"));
-#elif defined(__aarch64__)
-            llvm::cl::init("neon"));
-#elif defined(__riscv) && 64 == (__riscv_xlen)
-            // https://discourse.llvm.org/t/generating-riscv-code-from-mlir/85863/9
-            llvm::cl::init("64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b"));
-#else
-#error Unsupported architecture
-#endif
-
 // Initializer type
 // Default const if seed == 0, and normal otherwise
 llvm::cl::opt<std::string> initType(
@@ -148,12 +107,63 @@ llvm::cl::opt<std::string>
     defGpuBackend("gpu", llvm::cl::desc("Target GPU backend for lowering"),
                   llvm::cl::value_desc("cuda,intel"), llvm::cl::init(""));
 
+// Select target CPU feature for the pipeline.
+llvm::cl::opt<std::string> runnerCpuTargetFeature(
+    "target-feature", llvm::cl::desc("Specify CPU target feature for lowering"),
+    llvm::cl::value_desc("avx, avx2, avx512f, avx512vnni, avx512bf16, amx, "
+                         "amx_bf16, amx_tile, neon, sve, rvv"),
+    llvm::cl::init(""));
+
 // Kernel buffers - arguments and return values - are expected to be allocated
 // on GPU.
 llvm::cl::opt<bool>
     defGpuArgs("gpu-args",
                llvm::cl::desc("Kernel buffers are allocated on GPU"),
                llvm::cl::init(true));
+
+struct TargetMachineOptions {
+  std::string triple;
+  std::string cpu;
+  std::string features;
+};
+
+/// Returns the target machine options for the given CPU feature string.
+/// Does not include full support for all CPU features, only the ones that are
+/// relevant for now.
+TargetMachineOptions getTargetMachineOptions(StringRef option) {
+  std::string defaultCpu = "";
+  std::string defaultFeature = "";
+  std::string defaultTriple = "";
+#if defined(__x86_64__)
+  defaultTriple = "x86_64-linux-gnu";
+  defaultCpu = "nehalem";
+  defaultFeature = "+sse4.2";
+#elif defined(__aarch64__)
+  defaultTriple = "aarch64-linux-gnu";
+  defaultCpu = "cortex-a53";
+  defaultFeature = "+neon";
+#elif defined(__riscv) && 64 == (__riscv_xlen)
+  defaultTriple = "riscv64-linux-gnu";
+  defaultCpu = "";
+  defaultFeature = "64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b";
+#else
+#error Unsupported architecture
+#endif
+  return StringSwitch<TargetMachineOptions>(option)
+      .Case("avx", {"x86_64-linux-gnu", "sandybridge", "+avx"})
+      .Case("avx2", {"x86_64-linux-gnu", "haswell", "+avx2"})
+      .Case("avx512f", {"x86_64-linux-gnu", "skylake-avx512", "+avx512f"})
+      .Case("avx512vnni", {"x86_64-linux-gnu", "znver4", "+avx512vnni"})
+      .Case("avx512bf16", {"x86_64-linux-gnu", "cooperlake", "+avx512bf16"})
+      .Case("amx", {"x86_64-linux-gnu", "sapphirerapids", "+amx"})
+      .Case("amx_bf16", {"x86_64-linux-gnu", "sapphirerapids", "+amx_bf16"})
+      .Case("amx_tile", {"x86_64-linux-gnu", "sapphirerapids", "+amx_tile"})
+      .Case("neon", {"armv8a-linux-gnu", "cortex-a53", "+neon"})
+      .Case("sve", {"armv8a-linux-gnu", "a64fx", "+sve"})
+      .Case("rvv", {"riscv64-linux-gnu", "", "64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b"})
+      .Case("testfeature", {"x86_64-linux-gnu", "sandybridge", "+testfeature"})
+      .Default({defaultTriple, defaultCpu, defaultFeature});
+}
 
 // This function will be called by the pass manager after parsing,
 // so we can modify the IR with the needed wrappers
@@ -174,6 +184,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   wrapperOpts.kernelName = options.mainFuncName;
   wrapperOpts.kernelType = options.mainFuncType;
   wrapperOpts.backend = defGpuBackend;
+  wrapperOpts.wrapperCpuTargetFeature = runnerCpuTargetFeature;
   wrapperOpts.offloadToDevice = defGpuArgs;
   wrapperOpts.numBenchLoops = benchNumLoops;
   // Warmup on GPUs are currently breaking buffer allocation on GPUs
@@ -184,7 +195,8 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   wrapperOpts.initType = initType;
   passManager.addPass(tpp::createTppRunnerWrapper(wrapperOpts));
 
-  tpp::DefaultPipelineOptions defPipelineOpts{defGpuBackend};
+  tpp::DefaultPipelineOptions defPipelineOpts{defGpuBackend,
+                                              runnerCpuTargetFeature};
   passManager.addPass(tpp::createDefaultPipeline(defPipelineOpts));
 
   auto result = passManager.run(module);
@@ -205,34 +217,36 @@ std::unique_ptr<llvm::Module> lowerToLLVMIR(Operation *module,
 
   // Target machine, null if not specified
   std::unique_ptr<llvm::TargetMachine> targetMachine;
+  TargetMachineOptions targetMachineOptStr =
+      getTargetMachineOptions(runnerCpuTargetFeature);
 
   // Specify target machine
-  if (!triple.empty() && !cpuName.empty()) {
-    std::string error;
-    const llvm::Target *target =
-        llvm::TargetRegistry::lookupTarget(triple, error);
-    if (!target) {
-      llvm::errs() << "Error while looking up target triple: ";
-      llvm::errs() << error << "\n";
-      return nullptr;
-    }
+  std::string error;
+  const llvm::Target *target =
+      llvm::TargetRegistry::lookupTarget(targetMachineOptStr.triple, error);
+  if (!target) {
+    llvm::errs() << "Error while looking up target triple: ";
+    llvm::errs() << error << "\n";
+    return nullptr;
+  }
 
-    auto codeGenOpt = (llvm::CodeGenOptLevel)optLevel.getValue();
+  auto codeGenOpt = (llvm::CodeGenOptLevel)optLevel.getValue();
 
-    // These options should force fused MLA, but they don't. :/
-    // Adding unsafe math attribute to functions below do the trick.
-    llvm::TargetOptions targetOptions;
-    targetOptions.UnsafeFPMath = true;
-    targetOptions.AllowFPOpFusion = llvm::FPOpFusion::FPOpFusionMode::Fast;
-    targetMachine.reset(target->createTargetMachine(
-        llvm::Triple(triple), cpuName, "+" + fpuName, targetOptions,
-        /* reloc model */ std::nullopt,
-        /* code model */ std::nullopt, codeGenOpt));
-    if (!targetMachine) {
-      llvm::errs() << "Error while looking up target CPU: ";
-      llvm::errs() << cpuName << "\n";
-      return nullptr;
-    }
+  // These options should force fused MLA, but they don't. :/
+  // Adding unsafe math attribute to functions below do the trick.
+  llvm::TargetOptions targetOptions;
+  targetOptions.UnsafeFPMath = true;
+  targetOptions.AllowFPOpFusion = llvm::FPOpFusion::FPOpFusionMode::Fast;
+  targetMachine.reset(target->createTargetMachine(
+      llvm::Triple(targetMachineOptStr.triple), targetMachineOptStr.cpu,
+      targetMachineOptStr.features, targetOptions,
+      /* reloc model */ std::nullopt,
+      /* code model */ std::nullopt, codeGenOpt));
+
+  if (!targetMachine) {
+    llvm::errs() << "Error while looking up target CPU: ";
+    llvm::errs() << targetMachineOptStr.cpu << "\n";
+    return nullptr;
   }
 
   // Run the optimized pipeline
@@ -302,6 +316,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::xsmm::XsmmDialect>();
   registry.insert<mlir::check::CheckDialect>();
   registry.insert<mlir::perf::PerfDialect>();
+  mlir::tune::registerTransformDialectExtension(registry);
   registerAllDialects(registry);
   registerAllExtensions(registry);
   registerAllToLLVMIRTranslations(registry);

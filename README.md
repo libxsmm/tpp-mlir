@@ -57,10 +57,11 @@ cmake -G Ninja ../llvm \
    -DLLVM_ENABLE_ASSERTIONS=ON \
    -DCMAKE_C_COMPILER=clang \
    -DCMAKE_CXX_COMPILER=clang++ \
+   -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
    -DLLVM_USE_LINKER=lld
 
 # Build
-ninja 
+ninja
 
 popd
 ```
@@ -97,7 +98,7 @@ popd
 
 To enable experimental GPU support see: [GPU/README.md](lib/TPP/GPU/README.md)
 
-In the example above, we are building both LLVM/MLIR and tpp-mlir in relese mode. You can easily change the build type by adopting the `-DCMAKE_BUILD_TYPE` option, e.g. `=DCMAKE_BUILD_TYPE=RelWithDebInfo`. 
+In the example above, we are building both LLVM/MLIR and tpp-mlir in relese mode. You can easily change the build type by adopting the `-DCMAKE_BUILD_TYPE` option, e.g. `=DCMAKE_BUILD_TYPE=RelWithDebInfo`.
 
 ### Conda Environment
 
@@ -121,7 +122,7 @@ if [ "${ARCH_NAME}" == "aarch64" ]; then
 elif [ "${ARCH_NAME}" == "x86_64" ]; then
    conda install -y gcc_linux-64 gxx_linux-64
 fi
-python -m pip install coloredlogs
+python -m pip install coloredlogs pybind11 nanobind
 ```
 
 Reloading the environment  after conda deactivate/logout/reboot:

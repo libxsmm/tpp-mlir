@@ -159,6 +159,7 @@ private:
       tppDefaultOptions.registerBlocking =
           SmallVector<unsigned>{registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;
+      tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
 
       pm.addPass(createDefaultTppPasses(tppDefaultOptions));
     }
@@ -196,8 +197,6 @@ private:
     pm.addPass(createConvertVectorToLLVMPass(options));
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
     pm.addPass(createSCFToControlFlowPass());
-    if (defParallel)
-      pm.addPass(createConvertOpenMPToLLVMPass());
 
     pm.addNestedPass<func::FuncOp>(createGpuAsyncRegionPass());
     pm.addPass(createGpuToLLVMConversionPass());
@@ -214,6 +213,8 @@ private:
 
     pm.addPass(createArithToLLVMConversionPass());
     pm.addPass(createConvertControlFlowToLLVMPass());
+    if (defParallel)
+      pm.addPass(createConvertOpenMPToLLVMPass());
     pm.addPass(createUBToLLVMConversionPass());
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());

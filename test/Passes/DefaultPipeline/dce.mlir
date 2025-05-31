@@ -1,4 +1,5 @@
 // RUN: tpp-opt %s -default-pipeline | FileCheck %s
+// RUN: tpp-sched --bundle=default-pipeline %s | FileCheck %s
 
 module {
   ml_program.global private mutable @unused_global(dense<0> : tensor<i64>) : tensor<i64>

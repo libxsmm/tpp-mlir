@@ -11,6 +11,24 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LoadTppDialects : Pass<"load-tpp-dialects", "ModuleOp"> {
+  let summary = "Pre-load all TPP-specific dialects";
+  let description = [{
+    Pre-load dialects that -transform-interpreter would try to load at runtime.
+
+    The issue is that -transform-interpreter runs inside the multi-threaded
+    passmanager. Hence when the interpreter dynamically tries to load dependent
+    dialects this triggers an assert as loading during multi-threaded execution
+    could lead to concurrency issues.
+  }];
+  let dependentDialects = ["xsmm::XsmmDialect",
+                           "check::CheckDialect",
+                           "perf::PerfDialect",
+                           "omp::OpenMPDialect",
+                           "amx::AMXDialect",
+                           "async::AsyncDialect"];
+}
+
 def ConvertLinalgToXsmm : Pass<"convert-linalg-to-xsmm", "func::FuncOp"> {
   let summary = "Convert linalg to xsmm";
   let description = [{
@@ -86,6 +104,22 @@ def VectorContractToFMA : Pass<
                            "tensor::TensorDialect",
                            "vector::VectorDialect",
                            "arith::ArithDialect"];
+  let options = [
+         Option<"targetFeature", "target-feature", "std::string", "",
+                "Target feature for a given architecture">,
+  ];
+}
+
+def VectorContractToAMX : Pass<
+    "vector-contract-to-amx"> {
+  let summary = "Perform vector amx lowering of vector contraction ops";
+  let dependentDialects = ["memref::MemRefDialect",
+                           "scf::SCFDialect",
+                           "tensor::TensorDialect",
+                           "vector::VectorDialect",
+                           "arith::ArithDialect",
+                           "amx::AMXDialect",
+                           "x86vector::X86VectorDialect"];
 }
 
 
@@ -503,6 +537,9 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
     Option<"backend", "backend", "std::string",
             /*default=*/"\"cpu\"",
            "Kernel target device backend (cpu, cuda, intel).">,
+    Option<"wrapperCpuTargetFeature", "target-feature", "std::string",
+            /*default=*/"",
+           "CPU target feature (avx, avx2, avx512f, avx512vnni, avx512bf16, amx, amx_bf16, amx_tile, neon, sve).">,
     Option<"offloadToDevice", "offload-on-device", "bool",
             /*default=*/"true",
            "Offload kernel arguments to the target device.">,

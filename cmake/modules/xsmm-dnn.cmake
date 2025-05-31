@@ -3,12 +3,8 @@ if (NOT LIBXSMMROOT)
   message(FATAL_ERROR "LIBXSMM is a hard dependency for LIBXSMM-DNN")
 endif()
 
-# Use LIBXSMM_DNN (make PREFIX=/path/to/libxsmm-dnn) given by LIBXSMM_DNNROOT
-set(LIBXSMM_DNNROOT $ENV{LIBXSMM_DNNROOT})
-# Fetch LIBXSMM_DNN (even if LIBXSMM_DNNROOT is present)
-set(LIBXSMM_DNNFETCH $ENV{LIBXSMM_DNNFETCH})
-
-if(LIBXSMM_DNNROOT AND NOT LIBXSMM_DNNFETCH)
+# Make to pass full path to LIBXSMM_DNNROOT
+if(EXISTS ${LIBXSMM_DNNROOT})
   message(STATUS "Found LIBXSMM_DNN (${LIBXSMM_DNNROOT})")
 else()
   message(STATUS "Fetching LIBXSMM_DNN")
@@ -46,6 +42,6 @@ target_include_directories(xsmm_dnn_mlp PRIVATE ${XSMM_DNN_INCLUDE_DIRS})
 target_link_libraries(xsmm_dnn_mlp PRIVATE xsmm)
 if (OPENMP_FOUND)
   target_compile_options(xsmm_dnn_mlp PRIVATE ${OpenMP_C_FLAGS})
-  target_link_libraries(xsmm_dnn_mlp PRIVATE ${OpenMP_C_LIB_NAMES})
+  target_link_libraries(xsmm_dnn_mlp PRIVATE ${OpenMP_C_LIBRARIES})
 endif()
 install(TARGETS xsmm_dnn_mlp RUNTIME DESTINATION bin)

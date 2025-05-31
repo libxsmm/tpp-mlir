@@ -76,6 +76,12 @@ void *get_base_ptr(const libxsmm_datatype dType, void *alignedPtr,
 
 } // namespace
 
+// Returns True if the current architecture supports AMX instructions.
+extern "C" bool xsmm_has_amx() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SPR) &&
+         (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
 extern "C" void xsmm_gemm_invoke(const libxsmm_datatype dType, int64_t addr,
                                  void *alignedPtrA, int64_t offsetA,
                                  void *alignedPtrB, int64_t offsetB,

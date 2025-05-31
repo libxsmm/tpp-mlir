@@ -1,4 +1,5 @@
 // RUN: tpp-opt %s -default-tpp-passes="linalg-to-loops" -split-input-file | FileCheck %s
+// RUN: tpp-sched --bundle=default-tpp-passes --linalg-to-loops %s --split-input-file | FileCheck %s
 
 // CHECK-NOT: func.func private @xsmm_
 // CHECK: func.func @matmul(
