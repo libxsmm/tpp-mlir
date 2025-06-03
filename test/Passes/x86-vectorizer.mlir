@@ -46,7 +46,7 @@ func.func @gemm_fma(
 // CHECK:        %[[vecA1:.+]] = vector.broadcast %[[eleA1]]
 // CHECK-SAME:    : vector<1xf32> to vector<32xf32>
 // CHECK:        %[[fma1:.+]] = vector.fma %[[vecA1]], %[[vecB]]{{.*}}: vector<32xf32>
-// CHECK:        scf.yield %[[fma1]], %[[fma0]]
+// CHECK:        scf.yield{{.*}}: vector<32xf32>, vector<32xf32>
 // Store results
 // CHECK-COUNT-2: vector.transfer_write
 
