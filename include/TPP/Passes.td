@@ -633,10 +633,10 @@ def GpuVectorize : Pass<"gpu-vectorize", "ModuleOp"> {
                            "vector::VectorDialect"];
 }
 
-def RegisterBlocking : Pass<"register-blocking"> {
+def RegisterBlocking : Pass<"register-blocking", "func::FuncOp"> {
   let summary = "Block ops for register sizes.";
   let description = [{
-    Tile and post-process ops to bring them to hardware-friendly
+    Tile, fuse, and post-process ops to bring them to hardware-friendly
     shapes in preparation for vectorization.
   }];
   let dependentDialects = ["scf::SCFDialect",

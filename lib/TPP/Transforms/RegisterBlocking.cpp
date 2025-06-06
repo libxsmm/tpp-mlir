@@ -25,6 +25,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+using namespace mlir;
+
 namespace mlir {
 namespace tpp {
 #define GEN_PASS_DEF_REGISTERBLOCKING
@@ -32,8 +34,9 @@ namespace tpp {
 } // namespace tpp
 } // namespace mlir
 
-namespace mlir {
-namespace tpp {
+namespace {
+
+constexpr const static llvm::StringLiteral tiledFusedAttrName = "tiled_fused";
 
 template <typename IntType>
 static SmallVector<IntType> extractVector(ArrayAttr arrayAttr) {
@@ -58,7 +61,53 @@ mapIteratorToDim(PatternRewriter &rewriter, AffineMap map, unsigned iterPos) {
   return map.getResultPosition(rewriter.getAffineDimExpr(iterPos));
 }
 
-struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
+// Propagate the tile specification from producer to consumer. Example,
+// Tile spec producer:  (1,  0, 0,  0, 1,  0)
+// Output map producer: (i, ii, k, kk, j, jj) -> (i, ii, j, jj)
+// Assuming an eltwise consumer, with map:
+// (i, ii, j, jj) -> (i, ii, j, jj) the tiling specification will be:
+// (1, 0, 1, 0).
+static SmallVector<OpFoldResult>
+remapTilesToConsumer(linalg::LinalgOp consumer, linalg::LinalgOp producer,
+                     SmallVector<OpFoldResult> tilesProducer) {
+  if (consumer == producer)
+    return tilesProducer;
+
+  assert(linalg::isElementwise(cast<linalg::LinalgOp>(consumer)) &&
+         "Require eltwise consumer");
+
+  assert(producer.getNumDpsInits() == 1);
+  AffineMap outputMap =
+      producer.getMatchingIndexingMap(&producer.getDpsInitsMutable()[0]);
+  assert(outputMap.isProjectedPermutation());
+  assert(outputMap.getNumDims() == tilesProducer.size());
+  SmallVector<OpFoldResult> eltWiseTiles;
+  for (auto expr : outputMap.getResults()) {
+    eltWiseTiles.push_back(
+        tilesProducer[cast<AffineDimExpr>(expr).getPosition()]);
+  }
+  return eltWiseTiles;
+}
+
+// Apply loop peeling to split tail iterations and allow for
+// canonicalization to ensure all blocked ops operate on static values.
+// Peeling is applied in reverse order from the innermost loop to ensure
+// that all tiling loops are affected.
+//
+// Result is ignored as peeling can fail when tiling cleanly divides
+// a dimension which means there is no need for peeling anyway.
+static void peelTiledLoops(ArrayRef<Operation *> loops,
+                           PatternRewriter &rewriter) {
+  for (Operation *loop : llvm::reverse(loops)) {
+    auto forOp = dyn_cast<scf::ForOp>(loop);
+    assert(forOp && "requires scf.for operation");
+    scf::ForOp partialIteration;
+    (void)scf::peelForLoopAndSimplifyBounds(
+        rewriter, dyn_cast<scf::ForOp>(loop), partialIteration);
+  }
+}
+
+struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
 
   LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
@@ -91,12 +140,142 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     if (regBlocks.size() != 3)
       return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
 
+    // Tile only along parallel dimensions to allow for fusion.
+    //
+    // The register blocking is applied to the remaining innermost dimension.
+    // Scalarize batch and other parallel dimensions - it is a fallback option,
+    // ideally user should've preprocessed them earlier.
+    SmallVector<int64_t> parallelTileSizes(matmulOp.getNumLoops(), 1);
+    for (auto dim : dims->k)
+      parallelTileSizes[dim] = 0;
+    parallelTileSizes[dims->m[0]] = regBlocks[0];
+    parallelTileSizes[dims->n[0]] = regBlocks[1];
+
+    // Greedily fuse elementwise consumers.
+    auto isFusable = [](linalg::LinalgOp producer) -> linalg::LinalgOp {
+      // Producer constraints.
+      if (producer->getNumResults() != 1)
+        return nullptr;
+      auto producerRes = producer->getResult(0);
+      // Multiple uses even within the same user introduce recomputation.
+      // To avoid worst-case GEMM duplication, fusion is more conservative here.
+      if (!producerRes.hasOneUse())
+        return nullptr;
+      // Consumer constraints.
+      auto consumer = dyn_cast<linalg::LinalgOp>(*producerRes.user_begin());
+      if (!consumer || consumer->getNumResults() != 1 ||
+          !linalg::isElementwise(consumer))
+        return nullptr;
+      // Require same iteration space.
+      if (producer.getNumParallelLoops() != consumer.getNumParallelLoops())
+        return nullptr;
+      // Require same shapes to avoid any dimension permutations.
+      if (producer.getShape(&producer.getDpsInitsMutable()[0]) !=
+          consumer.getShape(&consumer.getDpsInitsMutable()[0]))
+        return nullptr;
+      return consumer;
+    };
+    // Get the last fusable consumer to use for tiling and fusion root.
+    linalg::LinalgOp consumer = matmulOp;
+    while (auto nextConsumer = isFusable(consumer)) {
+      consumer = nextConsumer;
+    }
+    // Map original contraction tile sizes to consumer which has only
+    // parallel iterators.
+    SmallVector<OpFoldResult> consumerTiles = remapTilesToConsumer(
+        consumer, matmulOp,
+        getAsOpFoldResult(rewriter.getI64ArrayAttr(parallelTileSizes)));
+
+    scf::SCFTilingOptions options;
+    options.setTileSizes(consumerTiles);
+    scf::SCFTileAndFuseOptions tileAndFuseOptions;
+    tileAndFuseOptions.setTilingOptions(options);
+    // Fuse only linalg eltwise ops and the original contraction.
+    // Note that other contraction could also be fused when possible.
+    // However, its profitability is unclear at register (microkernel) level and
+    // it would complicate post-processing logic, thus, disable for now.
+    scf::SCFTileAndFuseOptions::ControlFnTy controlFn =
+        [&](tensor::ExtractSliceOp candidateSliceOp, OpResult originalProducer,
+            bool isDestinationOperand)
+        -> std::optional<scf::SCFTileAndFuseOptions::ControlFnResult> {
+      auto candidateOp =
+          dyn_cast_or_null<linalg::LinalgOp>(originalProducer.getOwner());
+      if (!candidateOp)
+        return std::nullopt;
+      if (candidateOp != matmulOp && !linalg::isElementwise(candidateOp))
+        return std::nullopt;
+      scf::SCFTileAndFuseOptions::ControlFnResult res;
+      res.yieldProducerReplacement = false;
+      return res;
+    };
+    tileAndFuseOptions.setFusionControlFn(controlFn);
+
+    FailureOr<scf::SCFTileAndFuseResult> tileAndFuseResult =
+        scf::tileConsumerAndFuseProducersUsingSCF(
+            rewriter, cast<TilingInterface>(consumer.getOperation()),
+            tileAndFuseOptions);
+    if (failed(tileAndFuseResult))
+      return rewriter.notifyMatchFailure(
+          consumer, "failed to tile and fuse with op as root");
+
+    rewriter.replaceOp(consumer,
+                       tileAndFuseResult->replacements[consumer->getResult(0)]);
+
+    // Mark all preprocessed ops to allow easier matching for further passes.
+    for (auto *op : tileAndFuseResult->tiledAndFusedOps)
+      op->setDiscardableAttr(tiledFusedAttrName, rewriter.getUnitAttr());
+
+    // Tiling cleanup.
+    // It is easier to post-process loops now without need for complex matching.
+    peelTiledLoops(SmallVector<Operation *>(tileAndFuseResult->loops.begin(),
+                                            tileAndFuseResult->loops.end()),
+                   rewriter);
+
+    return success();
+  }
+};
+
+struct TileContractionReductionDims
+    : OpInterfaceRewritePattern<linalg::LinalgOp> {
+  using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
+
+  LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
+                                PatternRewriter &rewriter) const override {
+    if (!matmulOp.hasPureTensorSemantics())
+      return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
+
+    // Only target previously parallel dim tiled and fused operations.
+    // At this point, they may contain dynamic shapes in their parallel
+    // dimensions which is fine as originally they had to be fully statically
+    // shaped.
+    auto tiledFusedAttr = matmulOp->getDiscardableAttr(tiledFusedAttrName);
+    if (!tiledFusedAttr)
+      return rewriter.notifyMatchFailure(matmulOp,
+                                         "only targets tiled and fused ops");
+
+    FailureOr<linalg::ContractionDimensions> dims =
+        linalg::inferContractionDims(matmulOp);
+    if (failed(dims))
+      return rewriter.notifyMatchFailure(matmulOp, "not a contraction");
+
+    // Matching stil requires parallel dimensions to allow for VNNI detection.
+    // TODO: Relax constraints.
+    if (dims->m.size() != 1 || dims->n.size() != 1)
+      return rewriter.notifyMatchFailure(
+          matmulOp, "expects at only 2 parallel non-batch dimensions");
+
+    SmallVector<int64_t> regBlocks = getRegisterBlocks(matmulOp);
+    if (regBlocks.size() != 3)
+      return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
+
     auto matA = matmulOp->getOperand(0);
     unsigned rankA = dyn_cast<ShapedType>(matA.getType()).getRank();
     AffineMap mapA =
         matmulOp.getMatchingIndexingMap(&matmulOp->getOpOperand(0));
 
     // Find the innermost reduction dimension for tiling.
+    // NOTE: It is assumed that all batch-reduce dimensions are outer w.r.t.
+    //       K-dim reduce dimensions.
     // In case of VNNI, take the second inner dimension as the VNNI
     // dimension is guaranteed to be the innermost.
     bool isVnni = vnni::utils::isInVnniLayout(matmulOp);
@@ -115,26 +294,22 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       }
     }
 
-    // The register blocking is applied to the remaining innermost dimension.
-    // NOTE: It is assumed that all batch-reduce dimensions are outer w.r.t.
-    //       K-dim reduce dimensions.
-    //
-    // Scalarize batch dimensions - it is a fallback option, ideally
-    // user should've preprocessed batch dimension earlier.
+    // Tile only the innermost K-dim reduction dimension.
     // Do not tile the VNNI dimension if present.
+    // Disable tiling along parallel dimensions to avoid unnecessary work.
     //
-    // TODO: Move all the dimension analysis and interchanges into separate
-    // contraction canonicalization before vectorization.
-    SmallVector<int64_t> tileSizes(matmulOp.getNumLoops(), 1);
+    // Scalarize other reduction dimensions - it is a fallback option,
+    // ideally user should've preprocessed them earlier.
+    SmallVector<int64_t> reductionTileSizes(matmulOp.getNumLoops(), 0);
+    for (auto dim : dims->k)
+      reductionTileSizes[dim] = 1;
     if (isVnni)
-      tileSizes[*dimVnni] = 0;
-    tileSizes[dims->m[0]] = regBlocks[0];
-    tileSizes[dims->n[0]] = regBlocks[1];
-    tileSizes[dimK] = regBlocks[2];
+      reductionTileSizes[*dimVnni] = 0;
+    reductionTileSizes[dimK] = regBlocks[2];
 
     // Place parallel dimensions first as outer loops.
     // Move batch-reduce dimensions inside, then K-dim reductions.
-    // For completeness, keep VNNI innermost if present.
+    // Keep VNNI innermost if present.
     SmallVector<unsigned> interchange;
     interchange.append(dims->batch);
     interchange.append(dims->m);
@@ -150,51 +325,53 @@ struct RegBlockContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // Apply tiling and replace the original op.
     linalg::LinalgTilingOptions tilingOptions;
     tilingOptions.setLoopType(linalg::LinalgTilingLoopType::Loops);
-    tilingOptions.setTileSizes(tileSizes);
+    tilingOptions.setTileSizes(reductionTileSizes);
     tilingOptions.setInterchange(interchange);
 
     FailureOr<linalg::TiledLinalgOp> tiledOp =
         linalg::tileLinalgOp(rewriter, matmulOp, tilingOptions);
     if (failed(tiledOp))
-      return rewriter.notifyMatchFailure(matmulOp, "failed to block");
-
+      return rewriter.notifyMatchFailure(matmulOp,
+                                         "failed to tile reduction dims");
     rewriter.replaceOp(matmulOp, tiledOp->tensorResults);
 
     // Tiling cleanup.
     // It is easier to post-process loops now without need for complex matching.
-    //
-    // Apply loop peeling to split tail iterations and allow for
-    // canonicalization to ensure all blocked ops operate on static values.
-    // Peeling is applied in reverse order from the innermost loop to ensure
-    // that all tiling loops are affected.
-    //
-    // Result is ignored as peeling can fail when tiling cleanly divides
-    // a dimension which means there is no need for peeling anyway.
-    for (Operation *loop : llvm::reverse(tiledOp->loops)) {
-      scf::ForOp partialIteration;
-      (void)scf::peelForLoopAndSimplifyBounds(
-          rewriter, dyn_cast<scf::ForOp>(loop), partialIteration);
-    }
+    peelTiledLoops(tiledOp->loops, rewriter);
 
     return success();
   }
 };
 
-struct RegisterBlocking : public impl::RegisterBlockingBase<RegisterBlocking> {
+struct RegisterBlocking
+    : public tpp::impl::RegisterBlockingBase<RegisterBlocking> {
   using RegisterBlockingBase::RegisterBlockingBase;
 
   void runOnOperation() override {
     auto *ctx = &getContext();
-
-    RewritePatternSet patterns(ctx);
-    patterns.add<RegBlockContraction>(ctx);
+    auto op = getOperation();
 
     GreedyRewriteConfig config;
     config.setStrictness(GreedyRewriteStrictness::ExistingOps);
-    if (failed(
-            applyPatternsGreedily(getOperation(), std::move(patterns), config)))
-      return signalPassFailure();
+
+    // First, tile and fuse contraction along parallel dimensions.
+    {
+      RewritePatternSet patterns(ctx);
+      patterns.add<TileAndFuseContraction>(ctx);
+      if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
+        return signalPassFailure();
+    }
+
+    // Then tile reduction dimensions.
+    {
+      RewritePatternSet patterns(ctx);
+      patterns.add<TileContractionReductionDims>(ctx);
+      if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
+        return signalPassFailure();
+    }
+
+    // TODO: Add tiling and fusion for remaining ops like unfused eltwise
+    //       operations.
   }
 };
-} // namespace tpp
-} // namespace mlir
+} // namespace
