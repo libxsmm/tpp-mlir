@@ -59,8 +59,14 @@ private:
     pm.addNestedPass<func::FuncOp>(createLinalgVectorize());
     pm.addPass(createCleanup());
 
+    // Hoist after vectorization.
+    // Hoisting allows for more opportunities to fold write-read pairs which
+    // results in fewer transfers after unrolling.
+    pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+    pm.addNestedPass<func::FuncOp>(createLoopInvariantSubsetHoistingPass());
+    pm.addPass(createCleanup());
+
     // Split vectors into register shapes.
-    // Unroll before hoisting for easier result propagation through loops.
     pm.addNestedPass<func::FuncOp>(createRegisterUnroll());
     pm.addPass(createCleanup());
 
@@ -72,11 +78,6 @@ private:
     // Helps to expose more canonical vector forms, cancel out casts, and later
     // lower reads and writes directly to LLVM ops instead of SCF versions.
     pm.addPass(createVectorDropUnitDims());
-    pm.addPass(createCleanup());
-
-    // Cleanup after vectorization.
-    pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-    pm.addNestedPass<func::FuncOp>(createLoopInvariantSubsetHoistingPass());
     pm.addPass(createCleanup());
   }
 };

@@ -188,6 +188,7 @@ struct RegisterUnroll
     //       'SparseBackwardDataFlowAnalysis'.
     getOperation()->walk([&](Operation *op) { selectUnrollSizes(op); });
 
+    // TODO: Propagate and unroll through loop iter_args.
     RewritePatternSet patterns(ctx);
     vector::populateVectorUnrollPatterns(
         patterns,

@@ -31,7 +31,7 @@ func.func @gemm_fma(
 // Matrix C block loops for M and N dims
 // CHECK:         scf.for %{{.+}} = %[[C0]] to %[[C256]] step %[[C2]]
 // CHECK:           scf.for %{{.+}} = %[[C0]] to %[[C128]] step %[[C32]]
-// CHECK-COUNT-2:     vector.transfer_read
+// CHECK-COUNT-1:     vector.transfer_read
 // Reduction loop for K dim
 // CHECK:      scf.for %{{.+}} = %[[C0]] to %[[C512]] step %[[C1]]
 // CHECK:        %[[eleA0:.+]] = vector.transfer_read %[[A]]
@@ -46,9 +46,11 @@ func.func @gemm_fma(
 // CHECK:        %[[vecA1:.+]] = vector.broadcast %[[eleA1]]
 // CHECK-SAME:    : vector<1xf32> to vector<32xf32>
 // CHECK:        %[[fma1:.+]] = vector.fma %[[vecA1]], %[[vecB]]{{.*}}: vector<32xf32>
-// CHECK:        scf.yield{{.*}}: vector<32xf32>, vector<32xf32>
+// CHECK:        %[[insert0:.+]] = vector.insert_strided_slice %[[fma0]]
+// CHECK:        %[[insert1:.+]] = vector.insert_strided_slice %[[fma1]], %[[insert0]]
+// CHECK:        scf.yield %[[insert1]] : vector<2x32xf32>
 // Store results
-// CHECK-COUNT-2: vector.transfer_write
+// CHECK-COUNT-1: vector.transfer_write
 // CHECK-NOT: vector.transfer_read
 // CHECK-NOT: vector.transfer_write
 
@@ -85,25 +87,27 @@ func.func @gemm_fma_remainder_block(
 // Matrix C block loops for M and N dims
 // CHECK:         scf.for %{{.+}} = %[[C0]] to %[[C60]] step %[[C3]]
 // CHECK:           scf.for %{{.+}} = %[[C0]] to %[[C128]] step %[[C32]]
-// CHECK-COUNT-3:     vector.transfer_read
+// CHECK-COUNT-1:     vector.transfer_read
 // Reduction loop for K dim
 // CHECK:         scf.for
 // CHECK-COUNT-4:   vector.transfer_read
 // CHECK-COUNT-3:   vector.fma
+// CHECK-COUNT-3:   vector.insert_strided_slice
 // CHECK:           scf.yield
 // CHEC
-// CHECK-COUNT-3: vector.transfer_write
+// CHECK-COUNT-1: vector.transfer_write
 // CHECK-COUNT-2: scf.yield
 // Tail block loops
 // Peeled M dim block offsets are statically know and don't require a loop.
 // Thus, one on for loop for the N dim is present here.
 // CHECK: scf.for
-// CHECK-COUNT-2: vector.transfer_read
+// CHECK-COUNT-1: vector.transfer_read
 // CHECK:         scf.for
 // CHECK-COUNT-3:   vector.transfer_read
 // CHECK-COUNT-2:   vector.fma
+// CHECK-COUNT-2:   vector.insert_strided_slice
 // CHECK:           scf.yield
-// CHECK-COUNT-2: vector.transfer_write
+// CHECK-COUNT-1: vector.transfer_write
 // CHECK-COUNT-1: scf.yield
 
 // -----
@@ -136,15 +140,16 @@ func.func @batch_gemm_fma(
 // CHECK: scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
 // Remaining blocking loops
 // CHECK-COUNT-2: scf.for
-// CHECK-COUNT-2: vector.transfer_read
+// CHECK-COUNT-1: vector.transfer_read
 // CHECK: scf.for
 // CHECK-COUNT-3: vector.transfer_read
 // CHECK: vector.broadcast
 // CHECK: vector.fma
 // CHECK: vector.broadcast
 // CHECK: vector.fma
+// CHECK-COUNT-2: vector.insert_strided_slice
 // CHECK scf.yield
-// CHECK-COUNT-2: vector.transfer_write
+// CHECK-COUNT-1: vector.transfer_write
 
 // -----
 
@@ -174,7 +179,7 @@ func.func @brgemm_fma(
 // CHECK-DAG: %[[C3:.+]] = arith.constant 3 : index
 // Matrix C blocking loops
 // CHECK-COUNT-2: scf.for
-// CHECK-COUNT-2: vector.transfer_read
+// CHECK-COUNT-1: vector.transfer_read
 // Reduction loop for batch reduce dim
 // CHECK: scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
 // Reduction loop for K dim
@@ -184,5 +189,6 @@ func.func @brgemm_fma(
 // CHECK: vector.fma
 // CHECK: vector.broadcast
 // CHECK: vector.fma
+// CHECK-COUNT-2: vector.insert_strided_slice
 // CHECK-COUNT-2: scf.yield
-// CHECK-COUNT-2: vector.transfer_write
+// CHECK-COUNT-1: vector.transfer_write
