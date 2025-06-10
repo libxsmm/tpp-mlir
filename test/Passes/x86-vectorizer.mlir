@@ -49,6 +49,8 @@ func.func @gemm_fma(
 // CHECK:        scf.yield{{.*}}: vector<32xf32>, vector<32xf32>
 // Store results
 // CHECK-COUNT-2: vector.transfer_write
+// CHECK-NOT: vector.transfer_read
+// CHECK-NOT: vector.transfer_write
 
 // -----
 

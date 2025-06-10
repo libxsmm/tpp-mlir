@@ -45,6 +45,13 @@ struct VectorizationPattern : public RewritePattern {
     // Disable these for now and rely on other lowering patterns.
     if (isa<linalg::PackOp, linalg::UnPackOp>(op))
       return rewriter.notifyMatchFailure(op, "Packing vectorization disabled");
+    // Insert slice is vectorized into a vector read-write pair which by default
+    // introduces unnecessary extra operations.
+    // Disable insert vectorization for now and allow bufferization to fold it
+    // into subview in many cases.
+    if (isa<tensor::InsertSliceOp>(op))
+      return rewriter.notifyMatchFailure(op,
+                                         "Insert slice vectorization disabled");
     return linalg::vectorize(rewriter, op);
   }
 };
