@@ -81,7 +81,7 @@ struct SplitContractionReduction
       return rewriter.notifyMatchFailure(linalgOp,
                                          "failed to tile contraction");
 
-    rewriter.replaceOp(linalgOp, tilingResult->mergeResult.replacements);
+    rewriter.replaceOp(linalgOp, tilingResult->replacements);
 
     return success();
   }
