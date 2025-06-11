@@ -643,6 +643,7 @@ def RegisterBlocking : Pass<"register-blocking", "func::FuncOp"> {
                            "tensor::TensorDialect",
                            "linalg::LinalgDialect",
                            "math::MathDialect",
+                           "affine::AffineDialect",
                            "arith::ArithDialect"];
 }
 

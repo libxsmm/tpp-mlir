@@ -8,6 +8,7 @@
 
 #include "TPP/Transforms/Utils/VNNIUtils.h"
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -115,7 +116,6 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
                                 PatternRewriter &rewriter) const override {
     if (!matmulOp.hasPureTensorSemantics())
       return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
-
     if (matmulOp.hasDynamicShape())
       return rewriter.notifyMatchFailure(matmulOp, "expects static shape");
 
@@ -244,15 +244,14 @@ struct TileContractionReductionDims
                                 PatternRewriter &rewriter) const override {
     if (!matmulOp.hasPureTensorSemantics())
       return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
+    if (matmulOp.hasDynamicShape())
+      return rewriter.notifyMatchFailure(matmulOp, "expects static shape");
 
     // Only target previously parallel dim tiled and fused operations.
-    // At this point, they may contain dynamic shapes in their parallel
-    // dimensions which is fine as originally they had to be fully statically
-    // shaped.
     auto tiledFusedAttr = matmulOp->getDiscardableAttr(tiledFusedAttrName);
     if (!tiledFusedAttr)
-      return rewriter.notifyMatchFailure(matmulOp,
-                                         "only targets tiled and fused ops");
+      return rewriter.notifyMatchFailure(
+          matmulOp, "only targets register tiled and fused ops");
 
     FailureOr<linalg::ContractionDimensions> dims =
         linalg::inferContractionDims(matmulOp);
@@ -362,6 +361,24 @@ struct RegisterBlocking
       if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
         return signalPassFailure();
     }
+    // Canonicalization patterns to remove dynamic dimensions after loop
+    // peeling.
+    FrozenRewritePatternSet cleanupPatterns;
+    {
+      RewritePatternSet patterns(ctx);
+      ctx->getLoadedDialect<linalg::LinalgDialect>()
+          ->getCanonicalizationPatterns(patterns);
+      ctx->getLoadedDialect<tensor::TensorDialect>()
+          ->getCanonicalizationPatterns(patterns);
+      tensor::ExtractSliceOp::getCanonicalizationPatterns(patterns, ctx);
+      tensor::InsertSliceOp::getCanonicalizationPatterns(patterns, ctx);
+      tensor::CastOp::getCanonicalizationPatterns(patterns, ctx);
+      scf::ForOp::getCanonicalizationPatterns(patterns, ctx);
+      cleanupPatterns = std::move(patterns);
+    }
+    GreedyRewriteConfig cleanupConfig;
+    if (failed(applyPatternsGreedily(op, cleanupPatterns, cleanupConfig)))
+      return signalPassFailure();
 
     // Then tile reduction dimensions.
     {
@@ -370,6 +387,8 @@ struct RegisterBlocking
       if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
         return signalPassFailure();
     }
+    if (failed(applyPatternsGreedily(op, cleanupPatterns, cleanupConfig)))
+      return signalPassFailure();
 
     // TODO: Add tiling and fusion for remaining ops like unfused eltwise
     //       operations.
