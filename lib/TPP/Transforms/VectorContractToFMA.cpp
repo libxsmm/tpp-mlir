@@ -174,8 +174,8 @@ struct VectorContractToFMAPattern
       return failure();
 
     // Make sure the inputs being read are whole tensor or subview.
-    if (!llvm::all_of(lhsDefiningOp.getIndices(), isZeroIndex) ||
-        !llvm::all_of(rhsDefiningOp.getIndices(), isZeroIndex)) {
+    if (!llvm::all_of(lhsDefiningOp.getIndices(), isZeroInteger) ||
+        !llvm::all_of(rhsDefiningOp.getIndices(), isZeroInteger)) {
       return failure();
     }
 
