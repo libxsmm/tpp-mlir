@@ -5,9 +5,10 @@
 
 
 // CHECK-AMX-BF16-LABEL:   llvm.func @entry
-// CHECK-AMX-BF16:         amx.tileloadd64
-// CHECK-AMX-BF16:         amx.tdpbf16ps
-// CHECK-AMX-BF16:         amx.tilestored64
+// CHECK-AMX-BF16:         llvm.call_intrinsic "llvm.x86.tileloadd64.internal"{{.*}} -> !llvm.x86_amx
+// CHECK-AMX-BF16:         llvm.call_intrinsic "llvm.x86.tileloadd64.internal"{{.*}} -> !llvm.x86_amx
+// CHECK-AMX-BF16:         llvm.call_intrinsic "llvm.x86.tilezero.internal"{{.*}} -> !llvm.x86_amx
+// CHECK-AMX-BF16:         llvm.call_intrinsic "llvm.x86.tdpbf16ps.internal"{{.*}} -> !llvm.x86_amx
 func.func @entry(%arg0: memref<16x32xbf16>,
              %arg1: memref<16x32xbf16>,
              %arg2: memref<16x16xf32>) {

@@ -53,7 +53,7 @@ func.func @entry(%arg0: tensor<8x8xf32>, %output: tensor<8x8xf32>) -> tensor<8x8
 // CHECK-DAG: memref.global "private" constant @__constant_1x1x8x8xf32 : memref<1x1x8x8xf32>
 // CHECK-DAG: memref.global "private" constant @__constant_1x1x8x8xf32_0 : memref<1x1x8x8xf32>
 // CHECK-DAG: memref.global "private" constant @__constant_8xf32 : memref<8xf32>
-// CHECK-DAG: memref.global "private" constant @__constant_8xf32_0 : memref<8xf32>
+// CHECK-DAG: memref.global "private" constant @__constant_8xf32_1 : memref<8xf32>
 
 // Randomized input.
 // CHECK-DAG: memref.global "private" @__wrapper_0 : memref<8x8xf32>
