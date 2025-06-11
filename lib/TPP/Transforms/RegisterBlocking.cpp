@@ -36,7 +36,8 @@ namespace tpp {
 
 namespace {
 
-constexpr const static llvm::StringLiteral tiledFusedAttrName = "tiled_fused";
+constexpr const static llvm::StringLiteral tiledFusedAttrName =
+    "reg_tiled_fused";
 
 template <typename IntType>
 static SmallVector<IntType> extractVector(ArrayAttr arrayAttr) {
