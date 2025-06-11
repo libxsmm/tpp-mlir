@@ -55,9 +55,26 @@ private:
     pm.addNestedPass<func::FuncOp>(createRegisterBlocking());
     pm.addPass(createCleanup());
 
+    // TODO: Test alternative unrolling by additional tiling at linalg level.
+    //
+    // Unrolling could be achieved by tiling without fusion again and then
+    // immediately unrolling created loops.
+    // This alternative unrolling strategy offers potential benefits:
+    //   - unrolling interleaves operations - potential lower register pressure
+    //   - easier layout propagation - IR graph of linalg ops without explicit
+    //     reads and writes means fewer ops to consider
+    // This approach requires full layout propagation, otherwise, vectorized
+    // write-read pairs will not cancel out.
+
     // Vectorize ops.
     pm.addNestedPass<func::FuncOp>(createLinalgVectorize());
     pm.addPass(createCleanup());
+
+    // TODO: Unroll before hoisting.
+    //
+    // This can be beneficial only if full layout propagation is done and
+    // consumers are also unrolled. It will allow hoisting and canonicalization
+    // to cancel out unrolled write-read op pairs.
 
     // Hoist after vectorization.
     // Hoisting allows for more opportunities to fold write-read pairs which
@@ -67,6 +84,11 @@ private:
     pm.addPass(createCleanup());
 
     // Split vectors into register shapes.
+    //
+    // Current unrolling only targets contractions and relies on LLVM backend
+    // to cleanup and unroll elementwise consumers.
+    // TODO: Check if LLVM manages that correctly for all targets and
+    //       extensions.
     pm.addNestedPass<func::FuncOp>(createRegisterUnroll());
     pm.addPass(createCleanup());
 
