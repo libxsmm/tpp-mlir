@@ -68,7 +68,7 @@ def linalg_lowering(mod, /, *, skip_operations: Sequence[str] = (), **_config):
     func = apply_registered_pass(
         func,
         "convert-linalg-to-xsmm",
-        options={"skip-operations": ir.StringAttr.get(",".join(skip_operations))},
+        options={"skip-operations": ",".join(skip_operations)},
     )
     func = apply_registered_pass(func, "combine-xsmm-op-optimization")
     func = apply_registered_pass(func, "fold-xsmm-flags")
@@ -131,11 +131,7 @@ def low_level_parallel(
     # Run cleanup after LICM to allow CSE to eliminate common operations now
     # that they are hoisted out of loops.
     mod = cleanup(mod)
-    options = {
-        "parallel-loop-tile-sizes": ir.StringAttr.get(
-            ",".join(map(str, parallel_task_grid))
-        )
-    }
+    options = {"parallel-loop-tile-sizes": ",".join(map(str, parallel_task_grid))}
     mod = apply_registered_pass(mod, "scf-parallel-loop-tiling", options=options)
     return mod
 
@@ -233,11 +229,7 @@ def default_tpp_passes(
         mod = linalg_lowering(mod, skip_operations=skip_ops, **config)
         if linalg_to_vector or force_linalg_to_vector:
             func = match(mod, ops={"func.func"})
-            options = {
-                "registerTileShape": ir.StringAttr.get(
-                    ",".join(map(str, register_blocking))
-                )
-            }
+            options = {"registerTileShape": ",".join(map(str, register_blocking))}
             func = apply_registered_pass(func, "brgemm-linalg-tiling", options=options)
             func = apply_registered_pass(func, "loop-invariant-code-motion")
             apply_registered_pass(func, "vectorization-pass")
@@ -324,11 +316,7 @@ def default_pipeline(
     #     #if defined(__x86_64__)
     #     options.x86Vector = true;
     #     #endif
-    options = {
-        "enable-amx": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(xsmm_utils.has_amx())
-        )
-    }
+    options = {"enable-amx": int(xsmm_utils.has_amx())}
     mod = apply_registered_pass(mod, "convert-vector-to-llvm", options=options)
     mod = apply_registered_pass(mod, "finalize-memref-to-llvm")
     mod = apply_registered_pass(mod, "convert-scf-to-cf")
@@ -340,7 +328,7 @@ def default_pipeline(
         # gpu-to-llvm cannot be invoked from transform-interpreter as it
         # tries to load ... something while multi-threaded PassManager is running.
         mod = apply_registered_pass(mod, "gpu-to-llvm")
-        options = {"compilation-target": ir.StringAttr.get("fatbin")}
+        options = {"compilation-target": "fatbin"}
         mod = apply_registered_pass(mod, "gpu-module-to-binary", options=options)
     mod = apply_registered_pass(mod, "convert-math-to-llvm")
     if gpu_backend:
