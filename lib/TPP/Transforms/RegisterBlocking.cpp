@@ -119,6 +119,11 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
     if (matmulOp.hasDynamicShape())
       return rewriter.notifyMatchFailure(matmulOp, "expects static shape");
+    if (llvm::any_of(matmulOp.getIndexingMapsArray(), [](AffineMap map) {
+          return !map.isProjectedPermutation();
+        }))
+      return rewriter.notifyMatchFailure(matmulOp,
+                                         "expects projected permutation maps");
 
     FailureOr<linalg::ContractionDimensions> dims =
         linalg::inferContractionDims(matmulOp);
@@ -194,7 +199,7 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     tileAndFuseOptions.setTilingOptions(options);
     // Fuse only linalg eltwise ops and the original contraction.
     // Note that other contraction could also be fused when possible.
-    // However, its profitability is unclear at register (microkernel) level and
+    // However, its profitability is unclear at register (nanokernel) level and
     // it would complicate post-processing logic, thus, disable for now.
     DominanceInfo domInfo(matmulOp);
     scf::SCFTileAndFuseOptions::ControlFnTy controlFn =
