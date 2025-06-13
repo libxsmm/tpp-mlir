@@ -22,6 +22,7 @@
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -195,6 +196,7 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // Note that other contraction could also be fused when possible.
     // However, its profitability is unclear at register (microkernel) level and
     // it would complicate post-processing logic, thus, disable for now.
+    DominanceInfo domInfo(matmulOp);
     scf::SCFTileAndFuseOptions::ControlFnTy controlFn =
         [&](tensor::ExtractSliceOp candidateSliceOp, OpResult originalProducer,
             bool isDestinationOperand)
@@ -204,6 +206,10 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       if (!candidateOp)
         return std::nullopt;
       if (candidateOp != matmulOp && !linalg::isElementwise(candidateOp))
+        return std::nullopt;
+      // Fuse only contraction epilogue and data initialization ops.
+      if (!isa<linalg::FillOp, linalg::BroadcastOp>(candidateOp) &&
+          !domInfo.dominates(matmulOp, candidateOp))
         return std::nullopt;
       scf::SCFTileAndFuseOptions::ControlFnResult res;
       res.yieldProducerReplacement = false;
