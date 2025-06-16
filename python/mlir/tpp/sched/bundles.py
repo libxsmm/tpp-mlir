@@ -1,8 +1,7 @@
 from typing import Optional, Sequence
 
-from mlir import ir
 from mlir.dialects import transform
-from .common import apply_registered_pass, match
+from .common import apply_registered_pass, match, select
 from .utils import GpuBackend, PipelineInterrupt
 
 from ..xsmm import utils as xsmm_utils
@@ -34,7 +33,12 @@ def tpp_mapping(mod, lower_pack_unpack_without_transpose: bool = False, **_confi
     func = apply_registered_pass(func, "pack-conv2DNchwFchw")
     func = apply_registered_pass(func, "pack-conv2DNhwcHwcf")
     func = apply_registered_pass(func, "rewrite-conv-to-matmul-or-brgemm")
-    func = apply_registered_pass(func, "pack-matmul")
+    m = select("m", [2, 4, 8])
+    n = select("n", [4, 8, 16])
+    k = select("k", [2, 4, 8, 16])
+    func = apply_registered_pass(
+        func, "pack-matmul", options={"block-factors": [m, n, k]}
+    )
     apply_registered_pass(func, "pack-vnni")
     if lower_pack_unpack_without_transpose:
         mod = apply_registered_pass(mod, "lower-packs-unpacks-without-transpose")
