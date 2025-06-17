@@ -20,8 +20,13 @@ DiagnosedSilenceableFailure
 transform::TuneSelectOp::apply(transform::TransformRewriter &rewriter,
                                transform::TransformResults &results,
                                transform::TransformState &state) {
+  if (getOptions().size() == 1) {
+    results.setParams(getOperation()->getOpResults()[0], getOptions()[0]);
+    return DiagnosedSilenceableFailure::success();
+  }
+
   return emitDefiniteFailure()
-         << "this op does not have interpreted semantics!";
+         << "this op does not resolve non-deterministic choice!";
 }
 
 //===----------------------------------------------------------------------===//
