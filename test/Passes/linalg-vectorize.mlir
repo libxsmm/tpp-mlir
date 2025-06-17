@@ -32,6 +32,20 @@ func.func @vectorize_eltwise(
 
 // -----
 
+func.func @negative_vectorize_dynamic_shapes(
+    %arg0: tensor<?x?xf32>, %arg1: tensor<?x?xf32>
+    ) -> tensor<?x?xf32> {
+  %0 = linalg.add
+    ins(%arg0, %arg0 : tensor<?x?xf32>, tensor<?x?xf32>)
+    outs(%arg1 : tensor<?x?xf32>) -> tensor<?x?xf32>
+  return %0 : tensor<?x?xf32>
+}
+
+// CHECK-LABEL: @negative_vectorize_dynamic_shapes
+// CHECK: linalg.add
+
+// -----
+
 func.func @negative_vectorize_pack(
     %arg0: tensor<512x1024xf32>, %arg1: tensor<16x32x32x32xf32>)
     -> tensor<16x32x32x32xf32> {
