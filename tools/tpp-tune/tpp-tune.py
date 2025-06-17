@@ -46,6 +46,8 @@ with ir.Context(), ir.Location.unknown():
     @walker
     def choices_finder(op):
         if isinstance(op, transform_tune.TuneSelectOp):
+            if op.name in choices:
+                raise RuntimeError(f"options name collision: {op.name} used twice")
             choices[op.name] = tuple(op.options)
 
     choices_finder(schedule.operation)
