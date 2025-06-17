@@ -1,5 +1,6 @@
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
+from mlir import ir
 from mlir.dialects import transform
 from .common import apply_registered_pass, match, select
 from .utils import GpuBackend, PipelineInterrupt
@@ -21,7 +22,14 @@ __all__.append(cleanup.__name__)
 
 
 # TODO: make bundle into a NamedSequence to call with IncludeOp
-def tpp_mapping(mod, lower_pack_unpack_without_transpose: bool = False, **_config):
+def tpp_mapping(
+    mod,
+    lower_pack_unpack_without_transpose: bool = False,
+    pack_block_factors: Optional[
+        Sequence[Union[Sequence[Union[int, ir.IntegerAttr]], int, ir.IntegerAttr]]
+    ] = None,
+    **_config,
+):
     "High-level transforms that map operations to TPP-compatible forms."
 
     # Preprocess convolutions.
@@ -33,12 +41,14 @@ def tpp_mapping(mod, lower_pack_unpack_without_transpose: bool = False, **_confi
     func = apply_registered_pass(func, "pack-conv2DNchwFchw")
     func = apply_registered_pass(func, "pack-conv2DNhwcHwcf")
     func = apply_registered_pass(func, "rewrite-conv-to-matmul-or-brgemm")
-    m = select("m", [2, 4, 8])
-    n = select("n", [4, 8, 16])
-    k = select("k", [2, 4, 8, 16])
-    func = apply_registered_pass(
-        func, "pack-matmul", options={"block-factors": [m, n, k]}
-    )
+    options = None
+    if pack_block_factors:
+        m_vals, n_vals, k_vals = pack_block_factors
+        m = select("m", m_vals if isinstance(m_vals, Sequence) else [m_vals])
+        n = select("n", n_vals if isinstance(n_vals, Sequence) else [n_vals])
+        k = select("k", k_vals if isinstance(k_vals, Sequence) else [k_vals])
+        options = {"block-factors": [m, n, k]}
+    func = apply_registered_pass(func, "pack-matmul", options=options)
     apply_registered_pass(func, "pack-vnni")
     if lower_pack_unpack_without_transpose:
         mod = apply_registered_pass(mod, "lower-packs-unpacks-without-transpose")

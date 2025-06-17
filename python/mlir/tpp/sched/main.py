@@ -32,6 +32,15 @@ def config_from_args(args: Sequence[str]) -> Dict[str, Any]:
         "--payload", type=str, help="payload file to print with schedule"
     )
 
+    def block_factors(arg: str):
+        m, n, k = arg.split(",")
+
+        convert = lambda dim: list(map(int, dim))
+
+        return convert(m.split(";")), convert(n.split(";")), convert(k.split(";"))
+
+    parser.add_argument("--pack-block-factors", type=block_factors, default=None)
+
     parser.add_argument("--split-input-file", action="store_true")
 
     def comma_separated_bundles(arg: str):
