@@ -131,22 +131,23 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   TileAndFuseContraction(MLIRContext *ctx, tpp::RegisterBlockingOptions options)
       : OpInterfaceRewritePattern<linalg::LinalgOp>(ctx), options(options) {}
 
-  LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
+  LogicalResult matchAndRewrite(linalg::LinalgOp contractOp,
                                 PatternRewriter &rewriter) const override {
-    if (!matmulOp.hasPureTensorSemantics())
-      return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
-    if (matmulOp.hasDynamicShape())
-      return rewriter.notifyMatchFailure(matmulOp, "expects static shape");
-    if (llvm::any_of(matmulOp.getIndexingMapsArray(), [](AffineMap map) {
+    if (!contractOp.hasPureTensorSemantics())
+      return rewriter.notifyMatchFailure(contractOp,
+                                         "expects tensor semantics");
+    if (contractOp.hasDynamicShape())
+      return rewriter.notifyMatchFailure(contractOp, "expects static shape");
+    if (llvm::any_of(contractOp.getIndexingMapsArray(), [](AffineMap map) {
           return !map.isProjectedPermutation();
         }))
-      return rewriter.notifyMatchFailure(matmulOp,
+      return rewriter.notifyMatchFailure(contractOp,
                                          "expects projected permutation maps");
 
     FailureOr<linalg::ContractionDimensions> dims =
-        linalg::inferContractionDims(matmulOp);
+        linalg::inferContractionDims(contractOp);
     if (failed(dims))
-      return rewriter.notifyMatchFailure(matmulOp, "not a contraction");
+      return rewriter.notifyMatchFailure(contractOp, "not a contraction");
 
     // Matching is constrained to support only one M and one N dimensions.
     // If multiple are present then it is unclear what they represent and
@@ -159,20 +160,21 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // BRGEMM cases.
     if (dims->m.size() != 1 || dims->n.size() != 1)
       return rewriter.notifyMatchFailure(
-          matmulOp, "expects at only 2 parallel non-batch dimensions");
+          contractOp, "expects at only 2 parallel non-batch dimensions");
 
     SmallVector<int64_t> regBlocks = options.blocks;
     if (regBlocks.empty())
-      regBlocks = getRegisterBlocks(matmulOp);
+      regBlocks = getRegisterBlocks(contractOp);
     if (regBlocks.size() != 3)
-      return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
+      return rewriter.notifyMatchFailure(contractOp,
+                                         "invalid register blocking");
 
     // Tile only along parallel dimensions to allow for fusion.
     //
     // The register blocking is applied to the remaining innermost dimension.
     // Scalarize batch and other parallel dimensions - it is a fallback option,
     // ideally user should've preprocessed them earlier.
-    SmallVector<int64_t> parallelTileSizes(matmulOp.getNumLoops(), 1);
+    SmallVector<int64_t> parallelTileSizes(contractOp.getNumLoops(), 1);
     for (auto dim : dims->k)
       parallelTileSizes[dim] = 0;
     parallelTileSizes[dims->m[0]] = regBlocks[0];
@@ -204,14 +206,14 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       return consumer;
     };
     // Get the last fusable consumer to use for tiling and fusion root.
-    linalg::LinalgOp consumer = matmulOp;
+    linalg::LinalgOp consumer = contractOp;
     while (auto nextConsumer = isFusable(consumer)) {
       consumer = nextConsumer;
     }
     // Map original contraction tile sizes to consumer which has only
     // parallel iterators.
     SmallVector<OpFoldResult> consumerTiles = remapTilesToEltwiseConsumer(
-        consumer, matmulOp,
+        consumer, contractOp,
         getAsOpFoldResult(rewriter.getI64ArrayAttr(parallelTileSizes)));
 
     scf::SCFTilingOptions options;
@@ -221,7 +223,7 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // Fuse only linalg eltwise ops and the original contraction.
     // However, its profitability is unclear at register (nanokernel) level and
     // it would complicate post-processing logic, thus, disable for now.
-    DominanceInfo domInfo(matmulOp);
+    DominanceInfo domInfo(contractOp);
     scf::SCFTileAndFuseOptions::ControlFnTy controlFn =
         [&](tensor::ExtractSliceOp candidateSliceOp, OpResult originalProducer,
             bool isDestinationOperand)
@@ -230,11 +232,11 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
           dyn_cast_or_null<linalg::LinalgOp>(originalProducer.getOwner());
       if (!candidateOp)
         return std::nullopt;
-      if (candidateOp != matmulOp && !linalg::isElementwise(candidateOp))
+      if (candidateOp != contractOp && !linalg::isElementwise(candidateOp))
         return std::nullopt;
       // Fuse only contraction epilogue and data initialization ops.
       if (!isa<linalg::FillOp, linalg::BroadcastOp>(candidateOp) &&
-          !domInfo.dominates(matmulOp, candidateOp))
+          !domInfo.dominates(contractOp, candidateOp))
         return std::nullopt;
       scf::SCFTileAndFuseOptions::ControlFnResult res;
       res.yieldProducerReplacement = false;
@@ -288,47 +290,49 @@ struct TileContractionReductionDims
                                tpp::RegisterBlockingOptions options)
       : OpInterfaceRewritePattern<linalg::LinalgOp>(ctx), options(options) {}
 
-  LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
+  LogicalResult matchAndRewrite(linalg::LinalgOp contractOp,
                                 PatternRewriter &rewriter) const override {
     // Only target previously parallel dim tiled and fused operations.
-    auto tiledFusedAttr = matmulOp->getDiscardableAttr(tiledFusedAttrName);
+    auto tiledFusedAttr = contractOp->getDiscardableAttr(tiledFusedAttrName);
     if (!tiledFusedAttr)
       return rewriter.notifyMatchFailure(
-          matmulOp, "only targets previously register blocked ops");
+          contractOp, "only targets previously register blocked ops");
 
-    if (!matmulOp.hasPureTensorSemantics())
-      return rewriter.notifyMatchFailure(matmulOp, "expects tensor semantics");
-    if (matmulOp.hasDynamicShape())
-      return rewriter.notifyMatchFailure(matmulOp, "expects static shape");
+    if (!contractOp.hasPureTensorSemantics())
+      return rewriter.notifyMatchFailure(contractOp,
+                                         "expects tensor semantics");
+    if (contractOp.hasDynamicShape())
+      return rewriter.notifyMatchFailure(contractOp, "expects static shape");
 
     FailureOr<linalg::ContractionDimensions> dims =
-        linalg::inferContractionDims(matmulOp);
+        linalg::inferContractionDims(contractOp);
     if (failed(dims))
-      return rewriter.notifyMatchFailure(matmulOp, "not a contraction");
+      return rewriter.notifyMatchFailure(contractOp, "not a contraction");
 
     // Matching stil requires parallel dimensions to allow for VNNI detection.
     // TODO: Relax constraints.
     if (dims->m.size() != 1 || dims->n.size() != 1)
       return rewriter.notifyMatchFailure(
-          matmulOp, "expects at only 2 parallel non-batch dimensions");
+          contractOp, "expects at only 2 parallel non-batch dimensions");
 
     SmallVector<int64_t> regBlocks = options.blocks;
     if (regBlocks.empty())
-      regBlocks = getRegisterBlocks(matmulOp);
+      regBlocks = getRegisterBlocks(contractOp);
     if (regBlocks.size() != 3)
-      return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
+      return rewriter.notifyMatchFailure(contractOp,
+                                         "invalid register blocking");
 
-    auto matA = matmulOp->getOperand(0);
+    auto matA = contractOp->getOperand(0);
     unsigned rankA = dyn_cast<ShapedType>(matA.getType()).getRank();
     AffineMap mapA =
-        matmulOp.getMatchingIndexingMap(&matmulOp->getOpOperand(0));
+        contractOp.getMatchingIndexingMap(&contractOp->getOpOperand(0));
 
     // Find the innermost reduction dimension for tiling.
     // NOTE: It is assumed that all batch-reduce dimensions are outer w.r.t.
     //       K-dim reduce dimensions.
     // In case of VNNI, take the second inner dimension as the VNNI
     // dimension is guaranteed to be the innermost.
-    bool isVnni = vnni::utils::isInVnniLayout(matmulOp);
+    bool isVnni = vnni::utils::isInVnniLayout(contractOp);
     std::optional<unsigned> dimVnni = std::nullopt;
     if (isVnni)
       dimVnni =
@@ -351,7 +355,7 @@ struct TileContractionReductionDims
     //
     // Scalarize other reduction dimensions - it is a fallback option,
     // ideally user should've preprocessed them earlier.
-    SmallVector<int64_t> reductionTileSizes(matmulOp.getNumLoops(), 0);
+    SmallVector<int64_t> reductionTileSizes(contractOp.getNumLoops(), 0);
     for (auto dim : dims->k)
       reductionTileSizes[dim] = 1;
     if (isVnni)
@@ -380,11 +384,11 @@ struct TileContractionReductionDims
     tilingOptions.setInterchange(interchange);
 
     FailureOr<linalg::TiledLinalgOp> tiledOp =
-        linalg::tileLinalgOp(rewriter, matmulOp, tilingOptions);
+        linalg::tileLinalgOp(rewriter, contractOp, tilingOptions);
     if (failed(tiledOp))
-      return rewriter.notifyMatchFailure(matmulOp,
+      return rewriter.notifyMatchFailure(contractOp,
                                          "failed to tile reduction dims");
-    rewriter.replaceOp(matmulOp, tiledOp->tensorResults);
+    rewriter.replaceOp(contractOp, tiledOp->tensorResults);
 
     // Tiling cleanup.
     // It is easier to post-process loops now without need for complex matching.
