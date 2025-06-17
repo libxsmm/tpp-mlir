@@ -645,6 +645,10 @@ def RegisterBlocking : Pass<"register-blocking", "func::FuncOp"> {
                            "math::MathDialect",
                            "affine::AffineDialect",
                            "arith::ArithDialect"];
+  let options = [
+    ListOption<"blocks", "blocks", "int64_t",
+               "Block sizes for the innermost dims: [M, N, K]">
+  ];
 }
 
 #endif // TPP_DIALECT_TPP_PASSES

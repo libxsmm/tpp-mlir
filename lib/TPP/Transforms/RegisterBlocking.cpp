@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "TPP/Passes.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -50,7 +51,7 @@ static SmallVector<IntType> extractVector(ArrayAttr arrayAttr) {
       [](IntegerAttr attr) { return static_cast<IntType>(attr.getInt()); }));
 }
 
-// Returns register blocks for innermost dims: [M, N, K]
+// Returns register blocks for the innermost dims: [M, N, K]
 static SmallVector<int64_t> getRegisterBlocks(Operation *op) {
   auto res = dlti::query(op, {"CPU", "reg_blocks"});
   if (failed(res))
@@ -127,6 +128,9 @@ static void peelTiledLoops(ArrayRef<Operation *> loops,
 struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
   using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
 
+  TileAndFuseContraction(MLIRContext *ctx, tpp::RegisterBlockingOptions options)
+      : OpInterfaceRewritePattern<linalg::LinalgOp>(ctx), options(options) {}
+
   LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
                                 PatternRewriter &rewriter) const override {
     if (!matmulOp.hasPureTensorSemantics())
@@ -157,7 +161,9 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
       return rewriter.notifyMatchFailure(
           matmulOp, "expects at only 2 parallel non-batch dimensions");
 
-    SmallVector<int64_t> regBlocks = getRegisterBlocks(matmulOp);
+    SmallVector<int64_t> regBlocks = options.blocks;
+    if (regBlocks.empty())
+      regBlocks = getRegisterBlocks(matmulOp);
     if (regBlocks.size() != 3)
       return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
 
@@ -259,6 +265,9 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
 
     return success();
   }
+
+private:
+  tpp::RegisterBlockingOptions options;
 };
 
 // Tile reduction dimensions of previously tile-and-fused contraction ops.
@@ -274,6 +283,10 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
 struct TileContractionReductionDims
     : OpInterfaceRewritePattern<linalg::LinalgOp> {
   using OpInterfaceRewritePattern<linalg::LinalgOp>::OpInterfaceRewritePattern;
+
+  TileContractionReductionDims(MLIRContext *ctx,
+                               tpp::RegisterBlockingOptions options)
+      : OpInterfaceRewritePattern<linalg::LinalgOp>(ctx), options(options) {}
 
   LogicalResult matchAndRewrite(linalg::LinalgOp matmulOp,
                                 PatternRewriter &rewriter) const override {
@@ -299,7 +312,9 @@ struct TileContractionReductionDims
       return rewriter.notifyMatchFailure(
           matmulOp, "expects at only 2 parallel non-batch dimensions");
 
-    SmallVector<int64_t> regBlocks = getRegisterBlocks(matmulOp);
+    SmallVector<int64_t> regBlocks = options.blocks;
+    if (regBlocks.empty())
+      regBlocks = getRegisterBlocks(matmulOp);
     if (regBlocks.size() != 3)
       return rewriter.notifyMatchFailure(matmulOp, "invalid register blocking");
 
@@ -377,6 +392,9 @@ struct TileContractionReductionDims
 
     return success();
   }
+
+private:
+  tpp::RegisterBlockingOptions options;
 };
 
 struct RegisterBlocking
@@ -387,13 +405,16 @@ struct RegisterBlocking
     auto *ctx = &getContext();
     auto op = getOperation();
 
+    tpp::RegisterBlockingOptions options;
+    options.blocks = SmallVector<int64_t>{*blocks};
+
     GreedyRewriteConfig config;
     config.setStrictness(GreedyRewriteStrictness::ExistingOps);
 
     // First, tile and fuse contraction along parallel dimensions.
     {
       RewritePatternSet patterns(ctx);
-      patterns.add<TileAndFuseContraction>(ctx);
+      patterns.add<TileAndFuseContraction>(ctx, options);
       if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
         return signalPassFailure();
     }
@@ -419,7 +440,7 @@ struct RegisterBlocking
     // Then tile reduction dimensions.
     {
       RewritePatternSet patterns(ctx);
-      patterns.add<TileContractionReductionDims>(ctx);
+      patterns.add<TileContractionReductionDims>(ctx, options);
       if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
         return signalPassFailure();
     }
