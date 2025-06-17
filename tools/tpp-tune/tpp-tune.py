@@ -3,7 +3,6 @@
 import sys
 from pathlib import Path
 from typing import Union, Sequence, Dict
-from pprint import pprint
 
 
 # Enable automagically finding TPP-MLIR's python modules (which include
@@ -50,8 +49,6 @@ with ir.Context(), ir.Location.unknown():
             choices[op.name] = tuple(op.options)
 
     choices_finder(schedule.operation)
-
-    pprint(choices, stream=sys.stderr)
 
     selected = autotune(choices)
 
