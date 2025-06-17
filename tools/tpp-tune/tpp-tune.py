@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from typing import Union, Sequence, Dict
-
+import random
 
 # Enable automagically finding TPP-MLIR's python modules (which include
 # and extend MLIR's Python bindings).
@@ -30,7 +30,7 @@ def walker(f):
 
 def autotune(choices: Dict[str, Sequence[ir.Attribute]]) -> Dict[str, ir.Attribute]:
     # Aint tuning easy!!
-    return {key: values[0] for key, values in choices.items()}
+    return {key: random.choice(values) for key, values in choices.items()}
 
 
 file = sys.stdin
