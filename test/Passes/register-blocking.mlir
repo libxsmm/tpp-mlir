@@ -211,6 +211,41 @@ func.func @peel_remainder_block(
 
 // -----
 
+!matA = tensor<3x5x256x16x2xbf16>
+!matB = tensor<3x5x16x128x2xbf16>
+!matC = tensor<256x128xbf16>
+#map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d5, d0, d2, d4, d1)>
+#map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d5, d0, d4, d3, d1)>
+#map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d3)>
+func.func @tile_multiple_reduction_dims_vnni(
+  %arg0: !matA, %arg1: !matB, %arg2: !matC) -> !matC
+  attributes {
+    dlti.target_system_spec = #dlti.target_system_spec<
+    "CPU" = #dlti.target_device_spec<
+      #dlti.dl_entry<"reg_blocks", [8, 32, 4]>
+  >>}
+{
+  %0 = linalg.contract
+    indexing_maps = [#map, #map1, #map2]
+    ins(%arg0, %arg1 : !matA, !matB)
+    outs(%arg2 : !matC) -> !matC
+  return %0 : !matC
+}
+
+// Validate that:
+//   - parallel loops are tiled as specified
+//   - K-dim is tiled as specified
+//   - VNNI dim remains untiled
+//   - other reduction dimensions are tiled by one
+
+// CHECK-LABEL: @tile_multiple_reduction_dims_vnni
+// CHECK-COUNT-5: scf.for
+// CHECK:      linalg.contract
+// CHECK-SAME:   ins({{.*}}: tensor<1x1x8x4x2xbf16>, tensor<1x1x4x32x2xbf16>)
+// CHECK-SAME:   outs({{.*}}: tensor<8x32xbf16>)
+
+// -----
+
 !matA = tensor<4x32x64x16xf32>
 !matB = tensor<4x32x16x32xf32>
 !matC = tensor<4x4x64x32xf32>
