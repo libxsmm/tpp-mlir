@@ -34,6 +34,7 @@ add_mlir_library(TPPTransforms
   VectorContractToAMX.cpp
   RegisterBlocking.cpp
   LinalgVectorize.cpp
+  VectorDropUnitDims.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${PROJECT_SOURCE_DIR}/include/TPP

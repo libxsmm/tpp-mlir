@@ -664,4 +664,9 @@ def LinalgVectorize : Pass<"linalg-vectorize"> {
                            "arith::ArithDialect"];
 }
 
+def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
+  let summary = "Drop unit dims from vector ops.";
+  let dependentDialects = ["vector::VectorDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
