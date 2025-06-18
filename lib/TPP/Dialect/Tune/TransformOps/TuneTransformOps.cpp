@@ -30,6 +30,34 @@ transform::TuneSelectOp::apply(transform::TransformRewriter &rewriter,
 }
 
 //===----------------------------------------------------------------------===//
+// TunePickOp
+//===----------------------------------------------------------------------===//
+
+void transform::TunePickOp::getEffects(
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  producesHandle(getOperation()->getOpResults(), effects);
+  onlyReadsPayload(effects);
+}
+
+DiagnosedSilenceableFailure
+transform::TunePickOp::apply(transform::TransformRewriter &rewriter,
+                             transform::TransformResults &results,
+                             transform::TransformState &state) {
+  if (getSelected()) {
+    results.setParams(getOperation()->getOpResults()[0], *getSelected());
+    return DiagnosedSilenceableFailure::success();
+  }
+
+  if (getOptions().size() == 1) {
+    results.setParams(getOperation()->getOpResults()[0], getOptions()[0]);
+    return DiagnosedSilenceableFailure::success();
+  }
+
+  return emitDefiniteFailure() << "non-deterministic choice is only resolved "
+                                  "through providing a `selected` attr!";
+}
+
+//===----------------------------------------------------------------------===//
 // Transform op registration
 //===----------------------------------------------------------------------===//
 

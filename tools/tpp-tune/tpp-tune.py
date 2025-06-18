@@ -49,6 +49,10 @@ with ir.Context(), ir.Location.unknown():
             if op.name in choices:
                 raise RuntimeError(f"options name collision: {op.name} used twice")
             choices[op.name] = tuple(op.options)
+        elif isinstance(op, transform_tune.TunePickOp):
+            if op.name in choices:
+                raise RuntimeError(f"options name collision: {op.name} used twice")
+            choices[op.name] = tuple(op.options)
 
     choices_finder(schedule.operation)
 
@@ -63,6 +67,8 @@ with ir.Context(), ir.Location.unknown():
                 )
                 for use in op.result.uses:
                     use.owner.operands[use.operand_number] = param
+        elif isinstance(op, transform_tune.TunePickOp):
+            op.attributes["selected"] = selected[op.name]
 
     selected_rewriter(schedule.operation)
 

@@ -2,7 +2,7 @@ from typing import Optional, Sequence, Union
 
 from mlir import ir
 from mlir.dialects import transform
-from .common import apply_registered_pass, match, select
+from .common import apply_registered_pass, match, select, pick
 from .utils import GpuBackend, PipelineInterrupt
 
 from ..xsmm import utils as xsmm_utils
@@ -46,7 +46,7 @@ def tpp_mapping(
         m_vals, n_vals, k_vals = pack_block_factors
         m = select("m", m_vals if isinstance(m_vals, Sequence) else [m_vals])
         n = select("n", n_vals if isinstance(n_vals, Sequence) else [n_vals])
-        k = select("k", k_vals if isinstance(k_vals, Sequence) else [k_vals])
+        k = pick("k", k_vals if isinstance(k_vals, Sequence) else [k_vals])
         options = {"block-factors": [m, n, k]}
     func = apply_registered_pass(func, "pack-matmul", options=options)
     apply_registered_pass(func, "pack-vnni")
