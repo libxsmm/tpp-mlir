@@ -32,6 +32,33 @@ func.func @vectorize_eltwise(
 
 // -----
 
+#map = affine_map<(d0, d1, d2, d3) -> (d0, d2, d3)>
+#map1 = affine_map<(d0, d1, d2, d3) -> (d2, d1, d3)>
+#map2 = affine_map<(d0, d1, d2, d3) -> (d0, d1)>
+func.func @vectorize_contract_mixed_precision(
+    %arg0: tensor<256x128x2xbf16>, %arg1: tensor<128x256x2xbf16>,
+    %arg2: tensor<256x256xf32>) -> tensor<256x256xf32> {
+  %0 = linalg.contract
+    indexing_maps = [#map, #map1, #map2]
+    ins(%arg0, %arg1 : tensor<256x128x2xbf16>, tensor<128x256x2xbf16>)
+    outs(%arg2 : tensor<256x256xf32>) -> tensor<256x256xf32>
+  return %0 : tensor<256x256xf32>
+}
+
+// Ensure that mixed precision contraction vectorizes cleanly.
+
+// CHECK-LABEL: @vectorize_contract_mixed_precision
+// CHECK: vector.transfer_read
+// CHECK-NOT: vector.broadcast
+// CHECK-NOT: vector.transpose
+// CHECK-COUNT-2: vector.transfer_read
+// CHECK-COUNT-2: arith.extf
+// CHECK: vector.contract
+// CHECK: vector.transfer_write
+
+
+// -----
+
 func.func @vectorize_memref(%arg0: memref<256x256xf32>,
     %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>,
     %arg3: memref<256x256xf32>) {
