@@ -32,6 +32,24 @@ func.func @vectorize_eltwise(
 
 // -----
 
+func.func @vectorize_memref(%arg0: memref<256x256xf32>,
+    %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>,
+    %arg3: memref<256x256xf32>) {
+  linalg.matmul
+    ins(%arg0, %arg1 : memref<256x256xf32>, memref<256x256xf32>)
+    outs(%arg2 : memref<256x256xf32>)
+  linalg.add
+    ins(%arg2, %arg3 : memref<256x256xf32>, memref<256x256xf32>)
+    outs(%arg2 : memref<256x256xf32>)
+  return
+}
+
+// CHECK-LABEL: @vectorize_memref
+// CHECK: vector.contract
+// CHECK: arith.addf
+
+// -----
+
 func.func @negative_vectorize_dynamic_shapes(
     %arg0: tensor<?x?xf32>, %arg1: tensor<?x?xf32>
     ) -> tensor<?x?xf32> {
