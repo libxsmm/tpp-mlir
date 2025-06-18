@@ -56,7 +56,6 @@ func.func @vectorize_contract_mixed_precision(
 // CHECK: vector.contract
 // CHECK: vector.transfer_write
 
-
 // -----
 
 func.func @vectorize_memref(%arg0: memref<256x256xf32>,
