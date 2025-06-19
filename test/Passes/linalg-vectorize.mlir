@@ -45,13 +45,15 @@ func.func @vectorize_contract_mixed_precision(
   return %0 : tensor<256x256xf32>
 }
 
-// Ensure that mixed precision contraction vectorizes cleanly.
+// Ensure that mixed precision contraction vectorizes cleanly
+// without extra operations and/or dimensions.
 
 // CHECK-LABEL: @vectorize_contract_mixed_precision
-// CHECK: vector.transfer_read
+// CHECK: vector.transfer_read{{.*}}: tensor<256x128x2xbf16>, vector<256x128x2xbf16>
 // CHECK-NOT: vector.broadcast
 // CHECK-NOT: vector.transpose
-// CHECK-COUNT-2: vector.transfer_read
+// CHECK: vector.transfer_read{{.*}}: tensor<128x256x2xbf16>, vector<128x256x2xbf16>
+// CHECK: vector.transfer_read{{.*}}: tensor<256x256xf32>, vector<256x256xf32>
 // CHECK-COUNT-2: arith.extf
 // CHECK: vector.contract
 // CHECK: vector.transfer_write

@@ -67,6 +67,7 @@ struct LinalgVectorize
 
     RewritePatternSet patterns(ctx);
     patterns.add<VectorizationPattern>(ctx);
+    vector::populateVectorTransferPermutationMapLoweringPatterns(patterns);
     vector::populateVectorReductionToContractPatterns(patterns);
     vector::populateSinkVectorOpsPatterns(patterns);
     patterns.add<linalg::LinalgCopyVTRForwardingPattern,
