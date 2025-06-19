@@ -160,7 +160,7 @@ struct TileAndFuseContraction : OpInterfaceRewritePattern<linalg::LinalgOp> {
     // BRGEMM cases.
     if (dims->m.size() != 1 || dims->n.size() != 1)
       return rewriter.notifyMatchFailure(
-          contractOp, "expects at only 2 parallel non-batch dimensions");
+          contractOp, "expects only 2 parallel (M and N) non-batch dimensions");
 
     SmallVector<int64_t> regBlocks = options.blocks;
     if (regBlocks.empty())
@@ -313,7 +313,7 @@ struct TileContractionReductionDims
     // TODO: Relax constraints.
     if (dims->m.size() != 1 || dims->n.size() != 1)
       return rewriter.notifyMatchFailure(
-          contractOp, "expects at only 2 parallel non-batch dimensions");
+          contractOp, "expects only 2 parallel (M and N) non-batch dimensions");
 
     SmallVector<int64_t> regBlocks = options.blocks;
     if (regBlocks.empty())
