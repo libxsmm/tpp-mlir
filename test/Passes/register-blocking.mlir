@@ -246,6 +246,34 @@ func.func @tile_multiple_reduction_dims_vnni(
 
 // -----
 
+!matA = tensor<4x48xf32>
+!matB = tensor<48x128xf32>
+!matC = tensor<4x128xf32>
+func.func @tile_small_dims(
+  %arg0: !matA, %arg1: !matB, %arg2: !matC) -> !matC
+  attributes {
+    dlti.target_system_spec = #dlti.target_system_spec<
+    "CPU" = #dlti.target_device_spec<
+      #dlti.dl_entry<"reg_blocks", [6, 32, 64]>
+  >>}
+{
+  %0 = linalg.matmul ins(%arg0, %arg1 : !matA, !matB)
+    outs(%arg2 : !matC) -> !matC
+  return %0 : !matC
+}
+
+// Validate that partial tiling is still performed when dimensions
+// smaller than tiles sizes are present.
+// Expects to tile N dim, and leave M and K dims untiled.
+
+// CHECK-LABEL: @tile_small_dims
+// CHECK-COUNT-1: scf.for
+// CHECK:      linalg.matmul
+// CHECK-SAME:   ins({{.*}}: tensor<4x48xf32>, tensor<48x32xf32>)
+// CHECK-SAME:   outs({{.*}}: tensor<4x32xf32>)
+
+// -----
+
 !matA = tensor<4x32x64x16xf32>
 !matB = tensor<4x32x16x32xf32>
 !matC = tensor<4x4x64x32xf32>
