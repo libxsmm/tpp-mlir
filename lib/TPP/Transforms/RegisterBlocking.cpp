@@ -64,8 +64,9 @@ static SmallVector<int64_t> getRegisterBlocks(Operation *op) {
 
 // Returns position of a dimension corresponding to the given iteration map
 // and an iterator.
-static std::optional<unsigned>
-mapIteratorToDim(PatternRewriter &rewriter, AffineMap map, unsigned iterPos) {
+static std::optional<unsigned> mapIteratorToDimPos(PatternRewriter &rewriter,
+                                                   AffineMap map,
+                                                   unsigned iterPos) {
   return map.getResultPosition(rewriter.getAffineDimExpr(iterPos));
 }
 
@@ -340,7 +341,7 @@ struct TileContractionReductionDims
     unsigned dimK = 0;
     int innermostDim = -1;
     for (auto pos : dims->k) {
-      auto dimPos = mapIteratorToDim(rewriter, mapA, pos);
+      auto dimPos = mapIteratorToDimPos(rewriter, mapA, pos);
       assert(dimPos && "failed to map iterator to dim");
       if (static_cast<int>(*dimPos) > innermostDim &&
           (!isVnni || pos != *dimVnni)) {
