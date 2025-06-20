@@ -51,7 +51,7 @@ func.func @batch_matmul(
 }
 
 // Check that batch dimension is tiled by 1.
-// Loops reordered should be as follows:
+// Loops order should be as follows:
 //   - batch dimension
 //   - parallel dimensions
 //   - reduction dimension
@@ -127,7 +127,7 @@ func.func @brgemm_vnni(
   return %0 : !matC
 }
 
-// VNNI dimension must remains untiled.
+// VNNI dimension must remain untiled.
 // To achieve that, generic's iterator loops, affine maps, and operands' shapes
 // must be correctly matched.
 
@@ -183,8 +183,9 @@ func.func @peel_remainder_block(
   return %0 : !matC
 }
 
-// Check that the last block is peeled for not perfectly divisible tile sizes.
-// There must not be any dynamic shapes in this case.
+// Check that the last block is peeled when a dimension is not perfectly
+// divisible by a tile sizes.
+// This ensures there are no dynamic shapes after tiling.
 
 // CHECK-LABEL: @peel_remainder_block(
 // CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
@@ -474,9 +475,6 @@ func.func @fuse_only_eltwise_consumers(
 
 // -----
 
-// Do not fuse consumers with multiple uses (even if it has only one user)
-// to avoid introducing recomputations.
-
 !matA = tensor<256x512xf32>
 !matB = tensor<512x128xf32>
 !matC = tensor<256x128xf32>
@@ -494,6 +492,9 @@ func.func @negative_fuse_multi_use_consumer(
     outs(%0 : !matC) -> !matC
   return %1 : !matC
 }
+
+// Do not fuse consumers with multiple uses (even if it has only one user)
+// to avoid introducing recomputations.
 
 // CHECK-LABEL: @negative_fuse_multi_use_consumer
 // CHECK-COUNT-3: scf.for
