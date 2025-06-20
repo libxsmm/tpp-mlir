@@ -35,7 +35,7 @@ func.func @vectorize_eltwise(
 #map = affine_map<(d0, d1, d2, d3) -> (d0, d2, d3)>
 #map1 = affine_map<(d0, d1, d2, d3) -> (d2, d1, d3)>
 #map2 = affine_map<(d0, d1, d2, d3) -> (d0, d1)>
-func.func @vectorize_contract_mixed_precision(
+func.func @vectorize_contract_mixed_precision_float(
     %arg0: tensor<256x128x2xbf16>, %arg1: tensor<128x256x2xbf16>,
     %arg2: tensor<256x256xf32>) -> tensor<256x256xf32> {
   %0 = linalg.contract
@@ -48,13 +48,51 @@ func.func @vectorize_contract_mixed_precision(
 // Ensure that mixed precision contraction vectorizes cleanly
 // without extra operations and/or dimensions.
 
-// CHECK-LABEL: @vectorize_contract_mixed_precision
+// CHECK-LABEL: @vectorize_contract_mixed_precision_float
 // CHECK: vector.transfer_read{{.*}}: tensor<256x128x2xbf16>, vector<256x128x2xbf16>
 // CHECK-NOT: vector.broadcast
 // CHECK-NOT: vector.transpose
 // CHECK: vector.transfer_read{{.*}}: tensor<128x256x2xbf16>, vector<128x256x2xbf16>
 // CHECK: vector.transfer_read{{.*}}: tensor<256x256xf32>, vector<256x256xf32>
 // CHECK-COUNT-2: arith.extf
+// CHECK: vector.contract
+// CHECK: vector.transfer_write
+
+// -----
+
+#map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
+#map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+#map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+module {
+  func.func @vectorize_contract_mixed_precision_int(
+      %arg0: tensor<1x2x32x8x4xi8>, %arg1: tensor<2x2x8x32x4xi8>,
+      %arg2: tensor<1x2x32x32xi32>) -> tensor<1x2x32x32xi32> {
+    %0 = linalg.generic {
+      indexing_maps = [#map, #map1, #map2],
+      iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]}
+      ins(%arg0, %arg1 : tensor<1x2x32x8x4xi8>, tensor<2x2x8x32x4xi8>)
+      outs(%arg2 : tensor<1x2x32x32xi32>) {
+    ^bb0(%in: i8, %in_0: i8, %out: i32):
+      %0 = arith.extsi %in : i8 to i32
+      %1 = arith.extsi %in_0 : i8 to i32
+      %2 = arith.muli %0, %1 : i32
+      %3 = arith.addi %out, %2 : i32
+      linalg.yield %3 : i32
+    } -> tensor<1x2x32x32xi32>
+    return %0 : tensor<1x2x32x32xi32>
+  }
+}
+
+// Validate mixed precision case with more complex affine maps
+// and integer types.
+
+// CHECK-LABEL: @vectorize_contract_mixed_precision_int
+// CHECK: vector.transfer_read{{.*}}: tensor<1x2x32x8x4xi8>, vector<1x2x32x8x4xi8>
+// CHECK-NOT: vector.broadcast
+// CHECK-NOT: vector.transpose
+// CHECK: vector.transfer_read{{.*}}: tensor<2x2x8x32x4xi8>, vector<2x2x8x32x4xi8>
+// CHECK: vector.transfer_read{{.*}}: tensor<1x2x32x32xi32>, vector<1x2x32x32xi32>
+// CHECK-COUNT-2: arith.extsi
 // CHECK: vector.contract
 // CHECK: vector.transfer_write
 
