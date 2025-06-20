@@ -37,6 +37,7 @@ add_mlir_library(TPPTransforms
   LinalgVectorize.cpp
   VectorDropUnitDims.cpp
   ConvertVectorToX86.cpp
+  RegisterUnroll.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${PROJECT_SOURCE_DIR}/include/TPP

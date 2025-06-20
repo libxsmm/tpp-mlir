@@ -697,4 +697,19 @@ def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
                            "arith::ArithDialect"];
 }
 
+def RegisterUnroll : Pass<"register-unroll"> {
+  let summary = "Unroll ops for register sizes.";
+  let description = [{
+    Unroll vector ops to bring them to hardware-compatible shapes.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "arith::ArithDialect",
+                           "math::MathDialect",
+                           "affine::AffineDialect"];
+  let options = [
+    ListOption<"gemmShape", "gemm-shape", "int64_t",
+               "Unroll shape sizes for the innermost dims: [M, N, K]">
+  ];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
