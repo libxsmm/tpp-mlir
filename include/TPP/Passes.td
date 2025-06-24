@@ -669,4 +669,16 @@ def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
   let dependentDialects = ["vector::VectorDialect"];
 }
 
+def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
+  let summary = "Convert vector ops to x86 sequences.";
+  let description = [{
+    Lowers generic vector ops into specialized x86
+    sequences of operations.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "x86vector::X86VectorDialect",
+                           "amx::AMXDialect",
+                           "arith::ArithDialect"];
+}
+
 #endif // TPP_DIALECT_TPP_PASSES
