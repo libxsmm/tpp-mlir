@@ -28,7 +28,7 @@ namespace tpp {
 
 namespace {
 
-// Implements outer produce contraction as a sequence of broadcast and
+// Implements outer product contraction as a sequence of broadcast and
 // FMA operations.
 //
 // For example - for F32 type:
