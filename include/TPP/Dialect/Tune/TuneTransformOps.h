@@ -2,6 +2,7 @@
 #define TPP_DIALECT_TUNE_TUNETRANSFORMOPS_H
 
 #include "mlir/Dialect/Transform/IR/TransformOps.h"
+#include "mlir/Dialect/Transform/IR/TransformTypes.h"
 #include "mlir/Dialect/Transform/Interfaces/TransformInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 
@@ -11,6 +12,11 @@
 namespace mlir {
 namespace tune {
 void registerTransformDialectExtension(DialectRegistry &registry);
+
+using Handler = std::function<SmallVector<SmallVector<transform::MappedValue>>(
+    StringRef, SmallVector<SmallVector<transform::MappedValue>>)>;
+
+extern Handler handler;
 } // namespace tune
 } // namespace mlir
 

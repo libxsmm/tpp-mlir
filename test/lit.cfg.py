@@ -17,7 +17,7 @@ config.name = "TPP_OPT"
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = [".mlir"]
+config.suffixes = [".mlir", ".py"]
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -42,6 +42,7 @@ config.excludes = []
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.tpp_obj_root, "test")
 config.tpp_tools_dir = os.path.join(config.tpp_obj_root, "bin")
+config.python_packages_dir = os.path.join(config.tpp_obj_root, "python_packages")
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment("PATH", config.llvm_tools_dir, append_path=True)
@@ -50,3 +51,10 @@ tool_dirs = [config.tpp_tools_dir, config.llvm_tools_dir]
 tools = ["mlir-gen", "tpp-opt", "tpp-run", "fpcmp", "tpp-sched"]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+
+config.environment["PYTHONPATH"] = os.getenv("MLIR_LIT_PYTHONPATH", "")
+llvm_config.with_environment(
+    "PYTHONPATH", [config.python_packages_dir],
+    append_path=True,
+)
