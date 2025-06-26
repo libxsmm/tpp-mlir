@@ -144,7 +144,7 @@ void selectUnrollSizes(Operation *op,
     return;
 
   std::optional<SmallVector<int64_t>> unrollShape =
-      getContractionUnrollShape(contractOp, options.gemmShape);
+      getContractionUnrollShape(contractOp, options.gemmUnroll);
   if (!unrollShape)
     return;
 
@@ -227,7 +227,7 @@ struct RegisterUnroll
     auto *ctx = &getContext();
 
     tpp::RegisterUnrollOptions options;
-    options.gemmShape = SmallVector<int64_t>{*gemmShape};
+    options.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
 
     // Assign and propagate unroll shapes.
     //

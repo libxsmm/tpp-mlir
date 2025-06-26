@@ -707,7 +707,7 @@ def RegisterUnroll : Pass<"register-unroll"> {
                            "math::MathDialect",
                            "affine::AffineDialect"];
   let options = [
-    ListOption<"gemmShape", "gemm-shape", "int64_t",
+    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
                "Unroll shape sizes for the innermost dims: [M, N, K]">
   ];
 }
