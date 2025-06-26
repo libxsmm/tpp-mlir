@@ -203,6 +203,22 @@ static std::optional<SmallVector<int64_t>> getVectorShape(Operation *op) {
   return SmallVector<int64_t>(unrollAttr.asArrayRef());
 }
 
+// Vector unroll driver pass designed to split operations into smaller
+// hardware-compatible shapes in preparation for target-specific code
+// generation.
+//
+// First, unroll shapes are assigned and propagated thorughout the graph as
+// attribute annotations. Then the unroll driver consumes these annotations
+// to apply rewrites.
+// For example - in prepation for further FMA lowering:
+// ```
+//   vector.contract {unroll_shape = [1, 16, 1]}
+//     : vector<4x1xf32>, vector<1x32xf32> into vector<4x32xf32>
+// ```
+// get split into eight smaller contractions:
+// ```
+//   vector.contract : vector<1x1xf32>, vector<1x16xf32> into vector<1x16xf32>
+// ```
 struct RegisterUnroll
     : public tpp::impl::RegisterUnrollBase<RegisterUnroll> {
   using RegisterUnrollBase::RegisterUnrollBase;
