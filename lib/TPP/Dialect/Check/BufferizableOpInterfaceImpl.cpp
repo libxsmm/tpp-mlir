@@ -48,11 +48,12 @@ struct ExpectTrueLayoutInterface
   }
 
   LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options) const {
+                          const BufferizationOptions &options,
+                          BufferizationState &state) const {
     check::ExpectTrueOp expectTrueOp = cast<check::ExpectTrueOp>(op);
 
     FailureOr<Value> maybeSrcBuffer =
-        getBuffer(rewriter, expectTrueOp.getOperand(), options);
+        getBuffer(rewriter, expectTrueOp.getOperand(), options, state);
     if (failed(maybeSrcBuffer))
       return failure();
     Value srcBuffer = *maybeSrcBuffer;
@@ -91,16 +92,17 @@ struct ExpectAlmostEqLayoutInterface
   }
 
   LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options) const {
+                          const BufferizationOptions &options,
+                          BufferizationState &state) const {
     check::ExpectAlmostEqOp almostEqOp = cast<check::ExpectAlmostEqOp>(op);
     FailureOr<Value> maybeFirstBuffer =
-        getBuffer(rewriter, almostEqOp.getLhs(), options);
+        getBuffer(rewriter, almostEqOp.getLhs(), options, state);
     if (failed(maybeFirstBuffer))
       return failure();
     Value firstBuffer = *maybeFirstBuffer;
 
     FailureOr<Value> maybeSecondBuffer =
-        getBuffer(rewriter, almostEqOp.getRhs(), options);
+        getBuffer(rewriter, almostEqOp.getRhs(), options, state);
     if (failed(maybeSecondBuffer))
       return failure();
     Value secondBuffer = *maybeSecondBuffer;
@@ -142,10 +144,11 @@ struct ExpectSaneLayoutInterface
   }
 
   LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options) const {
+                          const BufferizationOptions &options,
+                          BufferizationState &state) const {
     check::ExpectSaneOp saneOp = cast<check::ExpectSaneOp>(op);
     FailureOr<Value> maybeBuffer =
-        getBuffer(rewriter, saneOp.getOperand(), options);
+        getBuffer(rewriter, saneOp.getOperand(), options, state);
     if (failed(maybeBuffer)) {
       return failure();
     }

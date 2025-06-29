@@ -55,10 +55,12 @@ struct SinkLayoutInterface
   }
 
   LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options) const {
+                          const BufferizationOptions &options,
+                          BufferizationState &state) const {
     auto sink = cast<perf::SinkOp>(op);
 
-    FailureOr<Value> srcBuffer = getBuffer(rewriter, sink.getInput(), options);
+    FailureOr<Value> srcBuffer =
+        getBuffer(rewriter, sink.getInput(), options, state);
     if (failed(srcBuffer))
       return failure();
 

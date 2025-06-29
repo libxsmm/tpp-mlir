@@ -41,6 +41,18 @@ bool hasAVX512() {
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 
+// Returns the current target architecture name
+std::string getTargetArchName() {
+  if (libxsmm_get_target_archid() == LIBXSMM_X86_AVX2_SRF)
+    return "SRF";
+
+  if ((libxsmm_get_target_archid() == LIBXSMM_X86_AVX512_CPX) ||
+		  (libxsmm_get_target_archid() == LIBXSMM_X86_AVX512_SPR))
+    return "CPX_SPR";
+
+  return "GEN";
+}
+
 unsigned getVnniBlockingFactor(Type type, Operation *op) {
   unsigned blockingFactor = 0;
 

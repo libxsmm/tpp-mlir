@@ -111,7 +111,7 @@ struct RewriteBatchMatmulToMatmul
           tilingOpts);
       if (failed(tilingResult))
         return signalPassFailure();
-      rewriter.replaceOp(batchMatmulOp, tilingResult->mergeResult.replacements);
+      rewriter.replaceOp(batchMatmulOp, tilingResult->replacements);
     });
 
     // Step2:

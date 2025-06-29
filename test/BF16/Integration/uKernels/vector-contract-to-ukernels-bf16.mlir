@@ -1,5 +1,5 @@
 // RUN: tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=4,32,2"  --loop-invariant-code-motion --vectorization-pass --vector-contract-to-bf16dp | tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void -print  --splat-to-random --init-type normal  -seed 123  > %t.2
+// RUN: tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void --vector-to-kernels --registerBlocking=8,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 memref.global "private" constant @__constant_2x16x32x2xbf16 : memref<2x16x32x2xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
@@ -24,7 +24,7 @@ func.func @gemm_bf16_dp_random_AB(%arg0: memref<8x2x32x32xbf16>) -> memref<8x2x3
 
 
 // RUN: tpp-run -e gemm_bf16_args --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32,2"  --loop-invariant-code-motion --vectorization-pass --vector-contract-to-bf16dp | tpp-run -e  gemm_bf16_args --entry-point-result=void -print  --splat-to-random --init-type normal  -seed 123  > %t.2
+// RUN: tpp-run -e gemm_bf16_args --entry-point-result=void  --vector-to-kernels --registerBlocking=8,32,2 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 func.func @gemm_bf16_args(%arg0: memref<4x2x64x64xbf16>, %arg1: memref<2x2x32x64x2xbf16>, %arg2: memref<4x2x64x64xbf16>) -> memref<4x2x64x64xbf16> {
@@ -47,7 +47,7 @@ func.func @gemm_bf16_args(%arg0: memref<4x2x64x64xbf16>, %arg1: memref<2x2x32x64
 
 
 // RUN: tpp-run -e mlp_bf16 --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=8,32,2"  --loop-invariant-code-motion --vectorization-pass --vector-contract-to-bf16dp | tpp-run -e  mlp_bf16 --entry-point-result=void -print  --splat-to-random --init-type normal  -seed 123  > %t.2
+// RUN: tpp-run -e  mlp_bf16 --entry-point-result=void --vector-to-kernels --registerBlocking=4,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 memref.global "private" constant @__constant_32xbf16 : memref<32xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
@@ -79,4 +79,26 @@ func.func @mlp_bf16(%arg0: memref<8x2x32x32xbf16>) -> memref<8x2x32x32xbf16> {
     }
   }
   return %alloc : memref<8x2x32x32xbf16>
+}
+
+// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
+// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --vector-to-kernels --registerBlocking=6,64,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --vector-to-kernels --registerBlocking=3,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.3
+// RUN: fpcmp -r 0.01 %t.1 %t.2
+// RUN: fpcmp -r 0.01 %t.1 %t.3
+
+memref.global "private" constant @__constant_2x16x128x2xbf16 : memref<2x16x128x2xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
+func.func @optimal_register_blocking(%arg0: memref<2x24x16x2xbf16>) -> memref<24x128xbf16> {
+  %0 = memref.get_global @__constant_2x16x128x2xbf16 : memref<2x16x128x2xbf16>
+  %alloc = memref.alloc() {alignment = 64 : i64} : memref<24x128xbf16>
+  %cst = arith.constant 0.000000e+00 : bf16
+  linalg.fill ins(%cst : bf16) outs(%alloc : memref<24x128xbf16>)
+
+    linalg.generic {indexing_maps = [affine_map<(d0, d1, d2, d3, d4) -> (d0, d2, d4, d1)>, affine_map<(d0, d1, d2, d3, d4) -> (d0, d4, d3, d1)>, affine_map<(d0, d1, d2, d3, d4) -> (d2, d3)>], iterator_types = ["reduction", "reduction", "parallel", "parallel", "reduction"]} ins(%arg0, %0 : memref<2x24x16x2xbf16>, memref<2x16x128x2xbf16>) outs(%alloc : memref<24x128xbf16>) {
+    ^bb0(%in: bf16, %in_1: bf16, %out: bf16):
+      %1 = arith.mulf %in, %in_1 : bf16
+      %2 = arith.addf %out, %1 : bf16
+      linalg.yield %2 : bf16
+    }
+  return %alloc : memref<24x128xbf16>
 }

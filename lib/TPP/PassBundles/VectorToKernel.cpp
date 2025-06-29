@@ -60,6 +60,7 @@ private:
     pm.addNestedPass<func::FuncOp>(createHoistVectorTransfers());
     if (vnni::utils::hasAMX())
       pm.addNestedPass<func::FuncOp>(createVectorContractToAMX());
+    pm.addNestedPass<func::FuncOp>(createMicroKernels());
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
     VectorContractToFMAOptions options;
     options.targetFeature = vecBundleCpuTargetFeature;

@@ -344,8 +344,8 @@ struct VectorContractToAMXPattern
       return rewriter.notifyMatchFailure(
           op, "Accumulator defined by TransferReadOp");
 
-    if (!llvm::all_of(lhsDefiningOp.getIndices(), isZeroIndex) ||
-        !llvm::all_of(rhsDefiningOp.getIndices(), isZeroIndex))
+    if (!llvm::all_of(lhsDefiningOp.getIndices(), isZeroInteger) ||
+        !llvm::all_of(rhsDefiningOp.getIndices(), isZeroInteger))
       return rewriter.notifyMatchFailure(
           op, "Inputs are not whole tensor or subview");
 

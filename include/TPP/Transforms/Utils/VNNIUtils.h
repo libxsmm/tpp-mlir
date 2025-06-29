@@ -12,6 +12,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace mlir {
 class Type;
@@ -42,6 +43,9 @@ bool hasAVX512();
 
 // Returns True if the current architecture supports AMX instructions.
 bool hasAMX();
+
+// Returns the current target architecture name
+std::string getTargetArchName();
 
 // Return the VNNI blocking factor if it can be determined for the given type or
 // zero, otherwise.
