@@ -1,5 +1,4 @@
-// RUN: tpp-opt %s | \
-// RUN:  tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.1
+// RUN: tpp-run %s -e entry --entry-point-result=void -seed 123 -print > %t.1
 // RUN: tpp-opt %s -tpp-mapping -x86-vectorizer | \
 // RUN:  tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
