@@ -31,34 +31,65 @@
     }
   }},
   {
-  "gemm_bf16_dp2_mlir_vector_kernel_avx512bf16": {
+  "gemm_bf16_dp2_mlir_vector_kernel_avx512": {
     "bf16_dp2_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
+    }
+  }},
+  {
+  "gemm_bf16_dp2_mlir_vector_kernel_avx2": {
+    "bf16_dp2_3x1024_omp_2_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_4_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_8_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_16_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
     }
   }},
   {
@@ -93,34 +124,65 @@
     }
   }},
   {
-  "mlp_bf16_dp2_mlir_vector_kernel_avx512bf16": {
+  "mlp_bf16_dp2_mlir_vector_kernel_avx512": {
     "bf16_dp2_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
     },
     "bf16_dp2_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512_bf16" ]
+      "extensions": [ "(avx512.*)" ]
+    }
+  }},
+  {
+  "mlp_bf16_dp2_mlir_vector_kernel_avx2": {
+    "bf16_dp2_3x1024_omp_2_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_4_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_8_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
+    },
+    "bf16_dp2_3x1024_omp_16_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=2,32,2'" ],
+      "extensions": [ "(avx2)" ]
     }
   }},
   {

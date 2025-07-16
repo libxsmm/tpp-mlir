@@ -143,7 +143,23 @@ def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
      Perform avx512bf16 dot product lowering of vector contraction operation for bf16 type with vnni layout=2.
    }];
    let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86vector::X86VectorDialect" ];
- }
+}
+
+
+def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
+   let summary = "Perform  lowering of vector contraction operation";
+   let description = [{Add commentMore actions
+     Perform  micro kernel lowering of vector contraction operation.
+   }];
+   let dependentDialects = [ "vector::VectorDialect", 
+			     "scf::SCFDialect", 
+			     "arith::ArithDialect",
+			     "x86vector::X86VectorDialect" ];
+  let options = [
+         Option<"targetFeature", "target-feature", "std::string", "",
+                "Target feature for a given architecture">,
+  ];
+}
 
 def ConvertXsmmToFunc : Pass<"convert-xsmm-to-func", "ModuleOp"> {
   let summary = "Convert xsmm to func";
@@ -631,6 +647,69 @@ def GpuVectorize : Pass<"gpu-vectorize", "ModuleOp"> {
                            "math::MathDialect",
                            "arith::ArithDialect",
                            "vector::VectorDialect"];
+}
+
+def RegisterBlocking : Pass<"register-blocking", "func::FuncOp"> {
+  let summary = "Block ops for register sizes.";
+  let description = [{
+    Tile, fuse, and post-process ops to bring them to hardware-friendly
+    shapes in preparation for vectorization.
+  }];
+  let dependentDialects = ["scf::SCFDialect",
+                           "tensor::TensorDialect",
+                           "linalg::LinalgDialect",
+                           "math::MathDialect",
+                           "affine::AffineDialect",
+                           "arith::ArithDialect"];
+  let options = [
+    ListOption<"blocks", "blocks", "int64_t",
+               "Block sizes for the innermost dims: [M, N, K]">
+  ];
+}
+
+def LinalgVectorize : Pass<"linalg-vectorize"> {
+  let summary = "Vectorize linalg ops.";
+  let description = [{
+    Applies vectorization and cleanup to lower all suitable
+    linalg ops into vectors.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "tensor::TensorDialect",
+                           "linalg::LinalgDialect",
+                           "math::MathDialect",
+                           "arith::ArithDialect"];
+}
+
+def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
+  let summary = "Drop unit dims from vector ops.";
+  let dependentDialects = ["vector::VectorDialect"];
+}
+
+def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
+  let summary = "Convert vector ops to x86 sequences.";
+  let description = [{
+    Lowers generic vector ops into specialized x86
+    sequences of operations.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "x86vector::X86VectorDialect",
+                           "amx::AMXDialect",
+                           "arith::ArithDialect"];
+}
+
+def RegisterUnroll : Pass<"register-unroll"> {
+  let summary = "Unroll ops for register sizes.";
+  let description = [{
+    Unroll vector ops to bring them to hardware-compatible shapes.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "arith::ArithDialect",
+                           "math::MathDialect",
+                           "affine::AffineDialect"];
+  let options = [
+    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
+               "Unroll shape sizes for the innermost dims: [M, N, K]">
+  ];
 }
 
 #endif // TPP_DIALECT_TPP_PASSES

@@ -1,7 +1,8 @@
-from typing import Callable, Union, Dict
+from typing import Callable, Union, Dict, Optional
 
+from mlir import ir
 from mlir.dialects import transform
-from mlir.dialects.transform import structured, tune
+from mlir.dialects.transform import ffi, structured
 
 
 # Wrapper to addresss verbosity.
@@ -19,19 +20,20 @@ HANDLER_MAPPING: Dict[str, Callable] = {}
 
 
 # The python function that actually gets called from C++ to deal with
-# transform.tune.callback callbacks.
+# transform.ffi.callback callbacks.
 def callback_handler(name, *args):
     if (handler := HANDLER_MAPPING.get(name)) is None:
         raise RuntimeError(f"callback '{name}' requested but was not registered")
     return handler(*args)
 
-
-tune.register_callback_handler(callback_handler)
+ffi.register_callback_handler(callback_handler)
 
 
 # Decorator to register named Python callback functions. Return types need to be
 # provided as part of the signature.
-def callback(function: Callable):
+def callback(function: Callable, context: Optional[ir.Context]=None):
+    setattr(ir.Context.current, "_callback_handler", callback_handler)
+
     if function.__name__ in HANDLER_MAPPING:
         raise RuntimeError("tried to register a callback with the same name twice")
     HANDLER_MAPPING[function.__name__] = function
@@ -42,7 +44,7 @@ def callback(function: Callable):
             transform.AnyOpType, transform.AnyValueType, transform.AnyParamType
         ]
     ):
-        return transform.tune.callback(results_type, function.__name__, *args)
+        return ffi.callback(results_type, function.__name__, *args)
 
     return wrapper
 
@@ -57,6 +59,6 @@ def call_with(
             raise RuntimeError("tried to register a callback with the same name twice")
         HANDLER_MAPPING[function.__name__] = function
         results_type = function.__annotations__.get("return", ())
-        return transform.tune.callback(results_type, function.__name__, *args)
+        return ffi.callback(results_type, function.__name__, *args)
 
     return decorator

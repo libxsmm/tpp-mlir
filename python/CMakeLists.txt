@@ -31,14 +31,6 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT TPPPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
-  SOURCES
-  dialects/tune.py
-  DIALECT_NAME tune
-)
-
-declare_mlir_dialect_python_bindings(
-  ADD_TO_PARENT TPPPythonSources.Dialects
-  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
   TD_FILE dialects/XsmmOps.td
   SOURCES
   dialects/xsmm.py
@@ -48,11 +40,11 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_extension_python_bindings(
   ADD_TO_PARENT TPPPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mlir"
-  TD_FILE dialects/TuneTransformOps.td
+  TD_FILE dialects/TransformFfiExtensionTransformOps.td
   SOURCES
-  dialects/transform/tune.py
+  dialects/transform/ffi.py
   DIALECT_NAME transform
-  EXTENSION_NAME tune_transform
+  EXTENSION_NAME transform_ffi
 )
 
 declare_mlir_python_extension(TPPPythonSources.DialectExtension
@@ -117,5 +109,6 @@ add_mlir_python_modules(TPPPythonModules
   TPPPythonCAPI
   TPPTransforms
   TPPPipeline
+  TransformFfiExtensionTransformOps
   TPPRunner  # Only here because of weird dependency elsewhere...
 )

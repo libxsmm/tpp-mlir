@@ -420,7 +420,8 @@ struct VectorContractToAMXPattern
                 // Create sequence of Read, Up-Convert and Write
                 auto readC = rewriter.create<vector::TransferReadOp>(
                     loc, VectorType::get({16}, accType.getElementType()),
-                    accSubview, ValueRange{iv, innerIv}, ArrayRef{true});
+                    accSubview, ValueRange{iv, innerIv}, std::nullopt /* padding */, 
+		    ArrayRef{true});
                 auto bitcastLoad = rewriter.create<vector::BitCastOp>(
                     loc, VectorType::get({16}, rewriter.getI16Type()), readC);
 
@@ -586,8 +587,8 @@ struct VectorContractToAMXPattern
                 auto elementType = bufferType.getElementType();
                 FloatType floatType = cast<FloatType>(elementType);
                 Value f0 = rewriter.create<arith::ConstantFloatOp>(
-                    loc, APFloat::getZero(floatType.getFloatSemantics()),
-                    floatType);
+                    loc, floatType,
+                    APFloat::getZero(floatType.getFloatSemantics()));
 
                 // Read
                 auto readC = rewriter.create<vector::TransferReadOp>(

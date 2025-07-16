@@ -8,8 +8,7 @@
 
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
-#include "TPP/Dialect/Tune/TuneDialect.h"
-#include "TPP/Dialect/Tune/TuneTransformOps.h"
+#include "TPP/Dialect/Transform/FfiExtension/TransformOps.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
@@ -27,9 +26,9 @@ NB_MODULE(_tppDialects, m) {
   checkModule.def(
       "register_dialect",
       [](MlirDialectRegistry wrappedRegistry) {
-        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
-        registry->insert<mlir::check::CheckDialect, mlir::perf::PerfDialect,
-                         mlir::xsmm::XsmmDialect>();
+        DialectRegistry *registry = unwrap(wrappedRegistry);
+        registry->insert<check::CheckDialect, perf::PerfDialect,
+                         xsmm::XsmmDialect>();
       },
       "registry");
 
@@ -38,8 +37,8 @@ NB_MODULE(_tppDialects, m) {
   perfModule.def(
       "register_dialect",
       [](MlirDialectRegistry wrappedRegistry) {
-        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
-        registry->insert<mlir::perf::PerfDialect>();
+        DialectRegistry *registry = unwrap(wrappedRegistry);
+        registry->insert<perf::PerfDialect>();
       },
       "registry");
 
@@ -48,43 +47,33 @@ NB_MODULE(_tppDialects, m) {
   xsmmModule.def(
       "register_dialect",
       [](MlirDialectRegistry wrappedRegistry) {
-        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
-        registry->insert<mlir::xsmm::XsmmDialect>();
-      },
-      "registry");
-
-  auto tuneModule = m.def_submodule("tune");
-
-  tuneModule.def(
-      "register_dialect",
-      [](MlirDialectRegistry wrappedRegistry) {
-        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
-        registry->insert<mlir::tune::TuneDialect>();
+        DialectRegistry *registry = unwrap(wrappedRegistry);
+        registry->insert<xsmm::XsmmDialect>();
       },
       "registry");
 
   auto transformModule = m.def_submodule("transform");
-  auto transformTuneModule = transformModule.def_submodule("tune");
+  auto transformFfiModule = transformModule.def_submodule("ffi");
 
-  transformTuneModule.def(
+  transformFfiModule.def(
       "register_dialect_extension",
       [](MlirDialectRegistry wrappedRegistry) {
-        mlir::DialectRegistry *registry = unwrap(wrappedRegistry);
-        mlir::tune::registerTransformDialectExtension(*registry);
+        DialectRegistry *registry = unwrap(wrappedRegistry);
+        transform::ffi::registerDialectExtension(*registry);
       },
       "registry");
 
-  transformTuneModule.def(
+  transformFfiModule.def(
       "register_callback_handler", [&](nb::callable callable) {
         callback_handler =
-            nb::steal(callable); // TODO: should we ever release this?
+            nb::borrow(callable); // TODO: should we ever release this?
 
         // Register a C++ callback that will
         // 1) wrap its arguments,
         // 2) call a Python callback with the wrapped-up arguments,
         // 3) and unwrap the results that the Python callback returned.
-        tune::handler =
-            [&](mlir::StringRef name,
+        transform::ffi::handler =
+            [&](StringRef name,
                 SmallVector<SmallVector<transform::MappedValue>> args)
             -> SmallVector<SmallVector<transform::MappedValue>> {
           // Wrap up the arguments to prepare for passing them to Python.
@@ -150,6 +139,6 @@ NB_MODULE(_tppDialects, m) {
         };
       });
 
-  mlir::tpp::registerTppCompilerPasses();
-  mlir::tpp::registerTppPassBundlePasses();
+  tpp::registerTppCompilerPasses();
+  tpp::registerTppPassBundlePasses();
 }

@@ -10,8 +10,10 @@
 #define TPP_TRANSFORMS_UTILS_VNNIUTILS_H
 
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/ArrayRef.h"
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace mlir {
 class Type;
@@ -43,6 +45,9 @@ bool hasAVX512();
 // Returns True if the current architecture supports AMX instructions.
 bool hasAMX();
 
+// Returns the current target architecture name
+std::string getTargetArchName();
+
 // Return the VNNI blocking factor if it can be determined for the given type or
 // zero, otherwise.
 // Optionally, an operation can be provided to give access to DLTI.
@@ -61,6 +66,11 @@ bool isInVnniLayout(int64_t expectedRank, ShapedType shape,
 // Return true if the linalg operation is in VNNI layout.
 // Optionally, the check can be constrained to a specific VNNI blocking factor.
 bool isInVnniLayout(linalg::LinalgOp linalgOp,
+                    std::optional<unsigned> blockingFactor = std::nullopt);
+
+// Return true if the operation is in VNNI layout.
+// Optionally, the check can be constrained to a specific VNNI blocking factor.
+bool isInVnniLayout(Operation *op, llvm::ArrayRef<AffineMap> indexingMaps,
                     std::optional<unsigned> blockingFactor = std::nullopt);
 
 } // namespace utils

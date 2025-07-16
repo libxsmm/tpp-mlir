@@ -187,9 +187,10 @@ static std::optional<Value> lowerGenericOp(linalg::GenericOp genericOp,
     if (isa<FloatType>(eltType)) {
       auto floatType = cast<FloatType>(eltType);
       zeroConst = rewriter.create<arith::ConstantFloatOp>(
-          loc, APFloat::getZero(floatType.getFloatSemantics()), floatType);
+          loc, floatType, APFloat::getZero(floatType.getFloatSemantics()));
     } else if (isa<IntegerType>(eltType)) {
-      zeroConst = rewriter.create<arith::ConstantIntOp>(loc, 0, eltType);
+      auto intType = llvm::dyn_cast<mlir::IntegerType>(eltType);
+      zeroConst = rewriter.create<arith::ConstantIntOp>(loc, 0, intType.getWidth());
     } else {
       // Unhandled type. Bail out.
       return std::nullopt;

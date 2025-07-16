@@ -1,9 +1,9 @@
 add_mlir_public_c_api_library(TPPCAPI
   Dialects.cpp
   LINK_LIBS PUBLIC
+  TransformFfiExtensionTransformOps
   TPPCheckDialect
   TPPPerfDialect
-  TPPTuneDialect
   TPPXsmmDialect
   TPPTransforms
   TPPPipeline

@@ -4,6 +4,7 @@ import mlir.ir as ir
 from mlir.dialects import transform, func, linalg, tensor
 from mlir.dialects.transform import interpreter as transform_interpreter
 
+from mlir.tpp.sched import common
 from mlir.tpp.sched.common import match, call_with, callback
 
 
@@ -55,9 +56,9 @@ def run_schedule(f):
 
 # CHECK-LABEL: TEST: testTransformCallbackAttrAnnotation
 # CHECK: transform.named_sequence
-# CHECK: transform.tune.callback @called_directly(
-# CHECK: transform.tune.callback @called_multiple_times(
-# CHECK: transform.tune.callback @called_multiple_times(
+# CHECK: transform.ffi.callback @called_directly(
+# CHECK: transform.ffi.callback @called_multiple_times(
+# CHECK: transform.ffi.callback @called_multiple_times(
 # CHECK: func.func @payload
 # CHECK-SAME: direct = "A"
 # CHECK-SAME: indirect = "B"
@@ -90,7 +91,7 @@ def testTransformCallbackAttrAnnotation(target):
 # CHECK: %[[FUNCS:.*]] = transform.structured.match ops{["func.func"]}
 # CHECK: %[[MATMULS:.*]] = transform.structured.match ops{["linalg.matmul"]}
 # CHECK: %[[PARAM:.*]] = transform.param.constant
-# CHECK: %[[RES:.*]] = transform.tune.callback @py_transform(%[[FUNCS]], %[[MATMULS]], %[[PARAM]])
+# CHECK: %[[RES:.*]] = transform.ffi.callback @py_transform(%[[FUNCS]], %[[MATMULS]], %[[PARAM]])
 # CHECK-SAME: : (!transform.any_op, !transform.any_op, !transform.any_param) -> !transform.any_value
 # CHECK: func.func @payload
 # CHECK-SAME: marked_with = "ABC"

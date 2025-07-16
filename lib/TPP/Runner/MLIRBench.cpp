@@ -190,13 +190,13 @@ Value MLIRBench::registerOnGpu(Value buf, MemRefType memRefTy) {
   if (backend == "intel") {
     memcpy = builder.create<memref::CopyOp>(unkLoc, buf, gpuBuf);
   } else {
-    memcpy = builder.create<gpu::MemcpyOp>(unkLoc, /*asyncToken=*/std::nullopt,
+    memcpy = builder.create<gpu::MemcpyOp>(unkLoc, /*asyncToken=*/ValueRange{},
                                            ValueRange{}, gpuBuf, buf);
   }
 
   // Dealloc the arg buffer at the end of program
   builder.setInsertionPointToEnd(&getMainBlock());
-  builder.create<gpu::DeallocOp>(unkLoc, /*asyncToken=*/std::nullopt, gpuBuf);
+  builder.create<gpu::DeallocOp>(unkLoc, /*asyncToken=*/ValueRange{}, gpuBuf);
 
   // Continue inserting ops after the created kernel arg
   builder.setInsertionPointAfter(memcpy);
@@ -232,7 +232,7 @@ LogicalResult MLIRBench::createKernelArgs() {
                                                    memrefType, seed);
                      data = registerOnGpu(data, memrefType);
                      return builder.create<bufferization::ToTensorOp>(
-                         unkLoc, data, /*restrict=*/true, /*writable=*/true);
+                         unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
                    })
                    .Default([&](auto t) { return std::nullopt; });
 
@@ -267,7 +267,7 @@ Value MLIRBench::createTimerLoop(unsigned iters) {
   auto count = getConstInt(builder, iters, 64);
 
   // Create perf benchmarking region, set insertion to inside the body
-  auto bench = builder.create<perf::BenchOp>(unkLoc, count);
+  auto bench = builder.create<perf::BenchOp>(unkLoc, count, ValueRange{});
   builder.setInsertionPointToStart(bench.getBody());
 
   // Call the kernel, ignore output
@@ -305,7 +305,7 @@ void MLIRBench::printVector(Value vector) {
   if (vectorValue.getElementType().isBF16()) {
     VectorType vecType =
         VectorType::get(vectorValue.getShape(), builder.getF32Type());
-    op = builder.create<arith::ExtFOp>(unkLoc, vecType, vector, std::nullopt);
+    op = builder.create<arith::ExtFOp>(unkLoc, vecType, vector, arith::FastMathFlagsAttr{});
   }
   builder.create<vector::PrintOp>(unkLoc, op);
 }
@@ -398,7 +398,7 @@ LogicalResult MLIRBench::printResult(Operation *kernelCall) {
       memcpy = builder.create<memref::CopyOp>(unkLoc, result, outBuf);
     } else {
       memcpy = builder.create<gpu::MemcpyOp>(
-          unkLoc, /*asyncToken=*/std::nullopt, ValueRange{}, outBuf, result);
+          unkLoc, /*asyncToken=*/ValueRange{}, ValueRange{}, outBuf, result);
     }
 
     // Dealloc the output buffer at the end of program.

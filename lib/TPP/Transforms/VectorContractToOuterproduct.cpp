@@ -177,7 +177,7 @@ struct VectorContractToOuterproductPattern
     auto elementType = lhsType.getElementType();
     FloatType floatType = cast<FloatType>(elementType);
     Value f0 = rewriter.create<arith::ConstantFloatOp>(
-        loc, APFloat::getZero(floatType.getFloatSemantics()), floatType);
+        loc, floatType, APFloat::getZero(floatType.getFloatSemantics()));
 
     // Create the outer scf.for loop
     auto forOp = rewriter.create<scf::ForOp>(
