@@ -17,13 +17,14 @@
 // RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=normal 2>&1 | \
 // RUN: FileCheck %s --check-prefix=OPT-NORMAL
 
-func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4x2xi32>, %arg3: tensor<4x2xf16>) {
+func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4x2xi32>, %arg3: tensor<4x2xf16>, %arg4: tensor<4x2xi8>) {
   %0 = arith.constant dense<1.0> : tensor<2x16xf32>
   %5 = arith.constant dense<1.0> : tensor<2x16xf64>
   %1 = arith.constant dense<2.0> : tensor<4x16xf32>
   %10 = arith.constant dense<2.0> : tensor<4x4xf32>
   %2 = arith.constant dense<0.0> : tensor<4x8xf32>
   %3 = arith.constant dense<[[0.0, 1.0],[2.0, 3.0]]> : tensor<2x2xf32>
+  %13 = arith.constant dense<1> : tensor<4x2xi8>
   %4 = arith.constant dense<0> : tensor<4x8xi32>
   %6 = arith.constant dense<1> : tensor<4x8xi32>
   %11 = arith.constant dense<1> : tensor<4x8xi32>
@@ -39,6 +40,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // SPLAT-DAG: memref.global "private" @__wrapper_1 : memref<4x2xi32> = dense<1>
 // SPLAT-DAG: memref.global "private" @__wrapper_2 : memref<4x2xi32> = dense<1>
 // SPLAT-DAG: memref.global "private" @__wrapper_3 : memref<4x2xf16> = dense<1.000000e+00>
+// SPLAT-DAG: memref.global "private" @__wrapper_4 : memref<4x2xi8> = dense<1>
 // SPLAT-LABEL: @_entry
 // SPLAT: arith.constant dense<1.000000e+00> : tensor<2x16xf32>
 // SPLAT: arith.constant dense<1.000000e+00> : tensor<2x16xf64>
@@ -46,6 +48,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // SPLAT: arith.constant dense<2.000000e+00> : tensor<4x4xf32>
 // SPLAT: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // SPLAT: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}> : tensor<2x2xf32>
+// SPLAT: arith.constant dense<1> : tensor<4x2xi8>
 // SPLAT: arith.constant dense<0> : tensor<4x8xi32>
 // SPLAT: arith.constant dense<1> : tensor<4x8xi32>
 // SPLAT: arith.constant dense<1> : tensor<4x8xi32>
@@ -62,6 +65,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // RANDOM-DAG: memref.global "private" @__wrapper_1 : memref<4x2xi32> = dense<{{\[}}{{\[}}132, 126], [117, 123], [126, 121], [132, 133]]>
 // RANDOM-DAG: memref.global "private" @__wrapper_2 : memref<4x2xi32> = dense<{{\[}}{{\[}}129, 134], [129, 126], [141, 131], [138, 121]]>
 // RANDOM-DAG: memref.global "private" @__wrapper_3 : memref<4x2xf16> = dense<{{\[}}{{\[}}0.000000e+00, 1.303710e-01], [1.512450e-01, 1.063540e-02]
+// RANDOM-DAG: memref.global "private" @__wrapper_4 : memref<4x2xi8> = dense<{{\[}}{{\[}}67, 63], [56, 60], [62, 59], [60, 71]]>
 // RANDOM-LABEL: @_entry
 // RANDOM: arith.constant dense<1.000000e+00> : tensor<2x16xf32>
 // RANDOM: arith.constant dense<1.000000e+00> : tensor<2x16xf64>
@@ -69,6 +73,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // RANDOM: arith.constant dense<2.000000e+00> : tensor<4x4xf32>
 // RANDOM: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // RANDOM: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}> : tensor<2x2xf32>
+// RANDOM: arith.constant dense<1> : tensor<4x2xi8>
 // RANDOM: arith.constant dense<0> : tensor<4x8xi32>
 // RANDOM: arith.constant dense<1> : tensor<4x8xi32>
 // RANDOM: arith.constant dense<1> : tensor<4x8xi32>
@@ -85,6 +90,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // RANDOM-SPLAT-NOT: memref.global "private" @__wrapper_1 : memref<4x2xi32> = dense<1>
 // RANDOM-SPLAT-NOT: memref.global "private" @__wrapper_2 : memref<4x2xi32> = dense<1>
 // RANDOM-SPLAT-NOT: memref.global "private" @__wrapper_3 : memref<4x2xf16> = dense<1.000000e+00>
+// RANDOM-SPLAT-NOT: memref.global "private" @__wrapper_4 : memref<4x2xi8> = dense<1>
 // RANDOM-SPLAT-LABEL: @_entry
 // RANDOM-SPLAT-NOT: arith.constant dense<1.000000e+00> : tensor<2x16xf32>
 // RANDOM-SPLAT-NOT: arith.constant dense<1.000000e+00> : tensor<2x16xf64>
@@ -96,6 +102,9 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // RANDOM-SPLAT: arith.constant dense<{{\[}}{{\[}}0.0440550111, 0.221581057, 0.000000e+00{{.*}}: tensor<4x4xf32>
 // RANDOM-SPLAT: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // RANDOM-SPLAT: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}> : tensor<2x2xf32>
+// RANDOM-SPLAT-NOT: arith.constant dense<1> : tensor<4x2xi8>
+// RANDOM-SPLAT: arith.constant dense<{{\[}}{{\[}}67, 63{{.*}}> : tensor<4x2xi8>
+// RANDOM-SPLAT-NOT: arith.constant dense<1> : tensor<4x2xi8>
 // RANDOM-SPLAT: arith.constant dense<0> : tensor<4x8xi32>
 // RANDOM-SPLAT-NOT: arith.constant dense<1> : tensor<4x8xi32>
 // RANDOM-SPLAT-NOT: arith.constant dense<1> : tensor<4x8xi64>
@@ -116,6 +125,7 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-CONST: arith.constant dense<1.000000e+00> : tensor<4x4xf32>
 // OPT-CONST: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // OPT-CONST: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
+// OPT-CONST: arith.constant dense<1> : tensor<4x2xi8>
 // OPT-CONST: arith.constant dense<0> : tensor<4x8xi32>
 // OPT-CONST: arith.constant dense<1> : tensor<4x8xi32>
 // OPT-CONST: arith.constant dense<1> : tensor<4x8xi32>
@@ -131,6 +141,8 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-SIMPLE: arith.constant dense<{{.*}}3.000000e-01, 6.000000e-01, 0.899999976, {{.*}}> : tensor<4x4xf32>
 // OPT-SIMPLE: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // OPT-SIMPLE: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
+// OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x2xi8>
+// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1{{.*}}> : tensor<4x2xi8>
 // OPT-SIMPLE: arith.constant dense<0> : tensor<4x8xi32>
 // OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x8xi32>
 // OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x8xi64>
@@ -148,6 +160,8 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 6.250000e-02, 1.250000e-01,  {{.*}}> : tensor<4x4xf32>
 // OPT-CONT: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
+// OPT-CONT-NOT: arith.constant dense<1> : tensor<4x2xi8>
+// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 15{{.*}}> : tensor<4x2xi8>
 // OPT-CONT: arith.constant dense<0> : tensor<4x8xi32>
 // OPT-CONT-NOT: arith.constant dense<1> : tensor<4x8xi32>
 // OPT-CONT-NOT: arith.constant dense<1> : tensor<4x8xi64>
@@ -165,6 +179,8 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-RANDOM: arith.constant dense<{{.*}}0.685934782, 0.505808651, 0.126024485, {{.*}}> : tensor<4x4xf32>
 // OPT-RANDOM: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // OPT-RANDOM: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
+// OPT-RANDOM: arith.constant dense<{{\[}}{{\[}}0, 22{{.*}}> : tensor<4x2xi8>
+// OPT-RANDOM-NOT: arith.constant dense<1> : tensor<4x2xi8>
 // OPT-RANDOM: arith.constant dense<0> : tensor<4x8xi32>
 // OPT-RANDOM-NOT: arith.constant dense<1> : tensor<4x8xi32>
 // OPT-RANDOM-NOT: arith.constant dense<1> : tensor<4x8xi64>
@@ -182,6 +198,8 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-NORMAL: arith.constant dense<{{.*}}0.0440550111, 0.221581057, 0.000000e+00, {{.*}}> : tensor<4x4xf32>
 // OPT-NORMAL: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
 // OPT-NORMAL: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
+// OPT-NORMAL-NOT: arith.constant dense<1> : tensor<4x2xi8>
+// OPT-NORMAL: arith.constant dense<{{\[}}{{\[}}67, 63{{.*}}> : tensor<4x2xi8>
 // OPT-NORMAL: arith.constant dense<0> : tensor<4x8xi32>
 // OPT-NORMAL-NOT: arith.constant dense<1> : tensor<4x8xi32>
 // OPT-NORMAL-NOT: arith.constant dense<1> : tensor<4x8xi64>

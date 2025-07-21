@@ -14,6 +14,7 @@ set(TPP_OPT_TEST_DEPENDS
         tpp-run
         tpp-sched
         fpcmp
+	check-cpuid
         )
 
 add_lit_testsuite(check-tpp "Running the regression tests"
