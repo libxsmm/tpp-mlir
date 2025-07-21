@@ -1,5 +1,7 @@
 from typing import Callable, Union, Dict, Optional
 
+import atexit
+
 from mlir import ir
 from mlir.dialects import transform
 from mlir.dialects.transform import ffi, structured
@@ -26,12 +28,14 @@ def callback_handler(name, *args):
         raise RuntimeError(f"callback '{name}' requested but was not registered")
     return handler(*args)
 
+
 ffi.register_callback_handler(callback_handler)
+atexit.register(ffi.register_callback_handler, None)
 
 
 # Decorator to register named Python callback functions. Return types need to be
 # provided as part of the signature.
-def callback(function: Callable, context: Optional[ir.Context]=None):
+def callback(function: Callable, context: Optional[ir.Context] = None):
     setattr(ir.Context.current, "_callback_handler", callback_handler)
 
     if function.__name__ in HANDLER_MAPPING:

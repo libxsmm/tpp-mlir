@@ -64,9 +64,20 @@ NB_MODULE(_tppDialects, m) {
       "registry");
 
   transformFfiModule.def(
-      "register_callback_handler", [&](nb::callable callable) {
-        callback_handler =
-            nb::borrow(callable); // TODO: should we ever release this?
+      "register_callback_handler",
+      [&](nb::object callable) {
+        if (callback_handler) {
+          callback_handler.reset();
+          transform::ffi::handler = nullptr;
+        }
+
+        // Mechanism to release borrow of last set callback, e.g. upon exit:
+        if (callable.is_none())
+          return;
+
+        callback_handler = nb::borrow(callable);
+        // NB: this borrow is only released upon another
+        //     `register_callback_handler` invocation.
 
         // Register a C++ callback that will
         // 1) wrap its arguments,
@@ -83,7 +94,6 @@ NB_MODULE(_tppDialects, m) {
 
             for (auto associatedValue : handleAssociatedValues) {
               if (auto *op = dyn_cast<Operation *>(associatedValue)) {
-                // std::cout << "CALLBACK: pushing op\n";
                 pyAssociatedValues.append(wrap(op));
               } else if (auto value = dyn_cast<Value>(associatedValue)) {
                 pyAssociatedValues.append(wrap(value));
@@ -137,7 +147,8 @@ NB_MODULE(_tppDialects, m) {
           }
           return results;
         };
-      });
+      },
+      nb::arg("callback").none());
 
   tpp::registerTppCompilerPasses();
   tpp::registerTppPassBundlePasses();
