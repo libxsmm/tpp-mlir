@@ -28,7 +28,8 @@ struct ITensorInit {
   // Returns a dense attribute with a specified shape, initialized
   // with a particular implementation (see derived classes) with
   // a reasonable distribution.
-  virtual mlir::DenseElementsAttr get(mlir::ShapedType shape) = 0;
+  virtual llvm::FailureOr<mlir::DenseElementsAttr>
+  get(mlir::ShapedType shape) = 0;
 };
 
 // Base class.
@@ -39,12 +40,15 @@ template <typename T> struct TensorInit : public ITensorInit {
   // Returns a dense attribute with a specified shape, initialized
   // with a particular implementation (see derived classes) with
   // a reasonable distribution.
-  virtual mlir::DenseElementsAttr get(mlir::ShapedType shape) override {
+  virtual llvm::FailureOr<mlir::DenseElementsAttr>
+  get(mlir::ShapedType shape) override {
+    if (!checkShape(shape))
+      return llvm::failure();
+
+    // Populate the shape
     buffer.clear();
-    size = 1;
-    for (size_t dim = 0, rank = shape.getRank(); dim < rank; dim++)
-      size *= shape.getDimSize(dim);
     fillData();
+
     // For some reason, memref global op needs dense tensor type
     // See: lib/Dialect/MemRef/IR/MemRefOps.cpp :: GlobalOp::verify
     auto tensorType =
@@ -53,10 +57,24 @@ template <typename T> struct TensorInit : public ITensorInit {
   }
 
 protected:
+  // Shape dims
+  std::vector<size_t> dims;
   // Number of elements in the shape
   size_t size;
   // Data pointer
   std::vector<T> buffer;
+
+  // Check the shape and fill the internal structure
+  virtual bool checkShape(mlir::ShapedType shape) {
+    size = 1;
+    dims.clear();
+    for (size_t i = 0, rank = shape.getRank(); i < rank; i++) {
+      auto dim = shape.getDimSize(i);
+      dims.push_back(dim);
+      size *= dim;
+    }
+    return true;
+  }
 
   // Insert element indexed on the buffer
   virtual void insert(size_t index, T value) {
@@ -82,10 +100,9 @@ protected:
 enum class TensorInitType {
   Auto,
   Constant,
-  Simple,
-  Continuous,
   Random,
   Normal,
+  Identity,
   Invalid
 };
 

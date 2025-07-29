@@ -79,7 +79,8 @@ Value createDenseTensor(OpBuilder &builder, TensorInitType initType,
   auto unkLoc = builder.getUnknownLoc();
   auto init = getTensorInit(initType, type.getElementType(), seed);
   auto floatInit = init->get(type);
-  return builder.create<arith::ConstantOp>(unkLoc, type, floatInit);
+  assert(!failed(floatInit) && "Invalid dense tensor initializer");
+  return builder.create<arith::ConstantOp>(unkLoc, type, floatInit.value());
 }
 
 Value createDenseMemref(OpBuilder &builder, ModuleOp module,
@@ -103,10 +104,11 @@ Value createDenseMemref(OpBuilder &builder, ModuleOp module,
     auto alignment = builder.getIntegerAttr(builder.getI64Type(), 128);
     auto init = getTensorInit(initType, type.getElementType(), seed);
     auto floatInit = init->get(type);
+    assert(!failed(floatInit) && "Invalid dense tensor initializer");
 
     // Create the global object in the Module's region
     auto global = builder.create<memref::GlobalOp>(
-        unkLoc, StringRef(name), privAttr, type, floatInit,
+        unkLoc, StringRef(name), privAttr, type, floatInit.value(),
         /*constant=*/false, alignment);
     globalName = global.getName();
   }

@@ -8,10 +8,6 @@
 // Options for -init-type
 // RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=const 2>&1 | \
 // RUN: FileCheck %s --check-prefix=OPT-CONST
-// RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=simple 2>&1 | \
-// RUN: FileCheck %s --check-prefix=OPT-SIMPLE
-// RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=cont 2>&1 | \
-// RUN: FileCheck %s --check-prefix=OPT-CONT
 // RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=random 2>&1 | \
 // RUN: FileCheck %s --check-prefix=OPT-RANDOM
 // RUN: tpp-run %s -e entry -entry-point-result=void -print-mlir=early -seed 123 -splat-to-random -init-type=normal 2>&1 | \
@@ -133,44 +129,6 @@ func.func @entry(%arg0: tensor<4x2xf32>, %arg1: tensor<4x2xi32>, %arg2: tensor<4
 // OPT-CONST: arith.constant dense<{{\[}}{{\[}}0, 1], [2, 3]]> : tensor<2x2xi32>
 // OPT-CONST: arith.constant 1.000000e+00 : f32
 // OPT-CONST: arith.constant dense<1.000000e+00> : tensor<4x8xf16>
-
-// OPT-SIMPLE-LABEL: @_entry
-// OPT-SIMPLE: arith.constant dense<{{.*}}3.000000e-01, 6.000000e-01, 0.899999976, {{.*}}> : tensor<2x16xf32>
-// OPT-SIMPLE: arith.constant dense<{{.*}}0.30000001192092896, 0.60000002384185791, 0.89999997615814208, {{.*}}> : tensor<2x16xf64>
-// OPT-SIMPLE: arith.constant dense<{{.*}}3.000000e-01, 6.000000e-01, 0.899999976, {{.*}}> : tensor<4x16xf32>
-// OPT-SIMPLE: arith.constant dense<{{.*}}3.000000e-01, 6.000000e-01, 0.899999976, {{.*}}> : tensor<4x4xf32>
-// OPT-SIMPLE: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
-// OPT-SIMPLE: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
-// OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x2xi8>
-// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1{{.*}}> : tensor<4x2xi8>
-// OPT-SIMPLE: arith.constant dense<0> : tensor<4x8xi32>
-// OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x8xi32>
-// OPT-SIMPLE-NOT: arith.constant dense<1> : tensor<4x8xi64>
-// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1, 2, 0, 1, 2{{.*}}> : tensor<4x8xi32>
-// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1, 2, 0, 1, 2{{.*}}> : tensor<4x8xi32>
-// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1, 2, 0, 1, 2{{.*}}> : tensor<4x8xi64>
-// OPT-SIMPLE: arith.constant dense<{{\[}}{{\[}}0, 1], [2, 3]]> : tensor<2x2xi32>
-// OPT-SIMPLE: arith.constant 1.000000e+00 : f32
-// OPT-SIMPLE: arith.constant dense<{{.*}}3.000490e-01, 6.000980e-01, 8.999020e-01, {{.*}}> : tensor<4x8xf16>
-
-// OPT-CONT-LABEL: @_entry
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 3.125000e-02, 6.250000e-02, {{.*}}> : tensor<2x16xf32>
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 3.125000e-02, 6.250000e-02, {{.*}}> : tensor<2x16xf64>
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 1.562500e-02, 3.125000e-02,  {{.*}}> : tensor<4x16xf32>
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 6.250000e-02, 1.250000e-01,  {{.*}}> : tensor<4x4xf32>
-// OPT-CONT: arith.constant dense<0.000000e+00> : tensor<4x8xf32>
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 1.000000e+00], [2.000000e+00, 3.000000e+00{{.*}}>
-// OPT-CONT-NOT: arith.constant dense<1> : tensor<4x2xi8>
-// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 15{{.*}}> : tensor<4x2xi8>
-// OPT-CONT: arith.constant dense<0> : tensor<4x8xi32>
-// OPT-CONT-NOT: arith.constant dense<1> : tensor<4x8xi32>
-// OPT-CONT-NOT: arith.constant dense<1> : tensor<4x8xi64>
-// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 7, 15, 23, 31{{.*}}> : tensor<4x8xi32>
-// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 7, 15, 23, 31{{.*}}> : tensor<4x8xi32>
-// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 7, 15, 23, 31{{.*}}> : tensor<4x8xi64>
-// OPT-CONT: arith.constant dense<{{\[}}{{\[}}0, 1], [2, 3]]> : tensor<2x2xi32>
-// OPT-CONT: arith.constant 1.000000e+00 : f32
-// OPT-CONT: arith.constant dense<{{.*}}0.000000e+00, 3.125000e-02, 6.250000e-02, {{.*}}> : tensor<4x8xf16>
 
 // OPT-RANDOM-LABEL: @_entry
 // OPT-RANDOM: arith.constant dense<{{.*}}9.62642952E-4, 0.179147944, 0.939454615, {{.*}}> : tensor<2x16xf32>

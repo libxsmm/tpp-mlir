@@ -113,7 +113,7 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     return module.emitError("No seed for random init");
 
   // Only replace attribute if it's a dense splat
-  auto replaceSplat = [&](ShapedType shape, Attribute attr) -> Attribute {
+  auto replaceSplat = [&](ShapedType shape, Attribute attr) -> FailureOr<Attribute> {
     // We only change dense attributes that are splat
     auto value = dyn_cast<DenseElementsAttr>(attr);
     if (!value || !value.isSplat())
@@ -145,7 +145,9 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     if (!global)
       continue;
     auto newAttr = replaceSplat(global.getType(), global.getInitialValueAttr());
-    global.setInitialValueAttr(newAttr);
+    if (failed(newAttr))
+      return failure();
+    global.setInitialValueAttr(newAttr.value());
   }
 
   // Tensors are arith.constant values
@@ -157,7 +159,9 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     if (!cstType)
       continue;
     auto newAttr = replaceSplat(cstType, constant.getValueAttr());
-    constant.setValueAttr(cast<TypedAttr>(newAttr));
+    if (failed(newAttr))
+      return failure();
+    constant.setValueAttr(cast<TypedAttr>(newAttr.value()));
   }
 
   return success();

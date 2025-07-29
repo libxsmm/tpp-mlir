@@ -79,32 +79,9 @@ struct ConstantTensorInitInt : TensorInitInt {
   ConstantTensorInitInt(DataType type) : TensorInitInt(type) {}
 
   // Return a dense<1> repeated throughout the shape.
-  mlir::DenseElementsAttr get(mlir::ShapedType shape) override;
+  mlir::FailureOr<mlir::DenseElementsAttr> get(mlir::ShapedType shape) override;
 
   void fillData() override;
-};
-
-// Simple init (basic example, not useful).
-struct SimpleTensorInitInt : TensorInitInt {
-  SimpleTensorInitInt(DataType type) : TensorInitInt(type) {}
-
-  // Return a dense<0, 1, 2> repeated throughout the shape.
-  void fillData() override;
-};
-
-// Continuous init (quantized normalized affine range).
-struct ContinuousTensorInitInt : TensorInitInt {
-  ContinuousTensorInitInt(DataType type)
-      : TensorInitInt(type), upperBound(255) {
-    if (type == DataType::I8)
-      upperBound = 127;
-  }
-
-  // Return a dense<0 ... upperBound> throughout the shape.
-  void fillData() override;
-
-  // Upper bound for quantization.
-  int upperBound;
 };
 
 // Random init (uniform).
@@ -150,6 +127,26 @@ private:
   std::default_random_engine generator;
   // Random distribution.
   std::binomial_distribution<uint64_t> distribution;
+};
+
+// Identity init.
+struct IdentityTensorInitInt : TensorInitInt {
+  IdentityTensorInitInt(DataType type)
+      : TensorInitInt(type) {}
+
+  // Makes sure the shape is "square"
+  bool checkShape(mlir::ShapedType shape) override {
+    if (!TensorInit::checkShape(shape))
+      return false;
+    // Now the fields are set, compare all dims to be equal, 2D only for now
+    return dims.size() == 2 && dims[0] == dims[1];
+  }
+
+  // Should not be called.
+  float next() { assert(false && "Should not be called"); }
+
+  // Return a diagonal of <1.0>s throughout the shape.
+  void fillData() override;
 };
 
 #endif // TPP_TRANSFORMS_UTILS_TENSORINITINT_H
