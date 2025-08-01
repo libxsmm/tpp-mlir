@@ -56,7 +56,7 @@ struct TppRunnerWrapper
     }
 
     // Benchmark object.
-    MLIRBenchConfig config(seed, tensorInitType, backend, offloadToDevice);
+    MLIRBenchConfig config(seed, tensorInitType, identity, backend, offloadToDevice);
     MLIRBench bench(module, config);
 
     // Can only either print or run benchmarks, make this clear before we try to

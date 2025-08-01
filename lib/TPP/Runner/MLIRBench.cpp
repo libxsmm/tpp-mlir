@@ -56,6 +56,7 @@ using namespace mlir;
 MLIRBench::MLIRBench(mlir::Operation *op, const MLIRBenchConfig &config)
     : builder(op->getContext()), unkLoc(builder.getUnknownLoc()) {
   seed = config.seed;
+  identity = config.identity;
   backend = config.backend;
   initType = config.initType;
   offloadToDevice = config.offloadToDevice;
@@ -216,34 +217,48 @@ LogicalResult MLIRBench::createKernelArgs() {
   auto &mainBody = getMainBlock();
   builder.setInsertionPointToStart(&mainBody);
 
+  int argNum = 0;
   for (auto &ty : kernel.getArgumentTypes()) {
-    auto arg = TypeSwitch<Type, std::optional<Value>>(ty)
-                   .Case<MemRefType>([&](auto memRefTy) {
-                     // Create a memref global
-                     Value data = createDenseMemref(builder, module, initType,
-                                                    memRefTy, seed);
-                     data = registerOnGpu(data, memRefTy);
-                     return data;
-                   })
-                   .Case<TensorType>([&](auto tensorTy) {
-                     // Create a memref global and cast it to a tensor
-                     // to ensure that the buffer is writable and
-                     // bufferization does not insert extra
-                     // allocations + copies
-                     auto memrefType = MemRefType::get(
-                         tensorTy.getShape(), tensorTy.getElementType());
-                     auto data = createDenseMemref(builder, module, initType,
-                                                   memrefType, seed);
-                     data = registerOnGpu(data, memrefType);
-                     return builder.create<bufferization::ToTensorOp>(
-                         unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
-                   })
-                   .Default([&](auto t) { return std::nullopt; });
+    auto argInitType = initType;
+    // Requested an argument to be identity, must be 2D square
+    if (argNum == identity) {
+      ShapedType shape = dyn_cast<ShapedType>(ty);
+      if (shape && shape.getRank() == 2 &&
+          shape.getDimSize(0) == shape.getDimSize(1)) {
+        argInitType = TensorInitType::Identity;
+      } else {
+        return failure();
+      }
+    }
+    auto arg =
+        TypeSwitch<Type, std::optional<Value>>(ty)
+            .Case<MemRefType>([&](auto memRefTy) {
+              // Create a memref global
+              Value data = createDenseMemref(builder, module, argInitType,
+                                             memRefTy, seed);
+              data = registerOnGpu(data, memRefTy);
+              return data;
+            })
+            .Case<TensorType>([&](auto tensorTy) {
+              // Create a memref global and cast it to a tensor
+              // to ensure that the buffer is writable and
+              // bufferization does not insert extra
+              // allocations + copies
+              auto memrefType = MemRefType::get(tensorTy.getShape(),
+                                                tensorTy.getElementType());
+              auto data = createDenseMemref(builder, module, argInitType,
+                                            memrefType, seed);
+              data = registerOnGpu(data, memrefType);
+              return builder.create<bufferization::ToTensorOp>(
+                  unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
+            })
+            .Default([&](auto t) { return std::nullopt; });
 
     if (!arg)
       return failure();
 
     kernelArgs.push_back(*arg);
+    argNum++;
   }
 
   return success();
