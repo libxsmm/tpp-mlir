@@ -577,6 +577,9 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
     Option<"initType", "init-type", "std::string",
             /*default=*/"",
            "Initializer type (const, simple, cont, rand, normal).">,
+    Option<"identity", "identity", "std::string",
+            /*default=*/"",
+           "Identity square argument (a, b).">,
   ];
 }
 
