@@ -64,10 +64,6 @@ FailureOr<DenseElementsAttr> ConstantTensorInitFloat::get(ShapedType shape) {
   return mlir::DenseElementsAttr::get(tensorType, floatValue);
 }
 
-void ConstantTensorInitFloat::fillData() {
-  assert(false && "Should not be called");
-}
-
 void RandomTensorInitFloat::fillData() {
   assert(buffer.size() == 0 && "Buffer not empty");
   for (size_t i = 0; i < size; i++)

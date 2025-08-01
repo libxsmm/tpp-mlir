@@ -85,14 +85,14 @@ protected:
   virtual void fillData() override = 0;
 };
 
-// Constant init (all-ones, do not use!).
+// Constant init (all-ones).
 struct ConstantTensorInitFloat : TensorInitFloat {
   ConstantTensorInitFloat(DataType type) : TensorInitFloat(type) {}
 
   // Return a dense<1.0> repeated throughout the shape.
   mlir::FailureOr<mlir::DenseElementsAttr> get(mlir::ShapedType shape) override;
 
-  void fillData() override;
+  void fillData() override { assert(false && "Should not be called"); }
 };
 
 // Random init (uniform).
