@@ -57,6 +57,9 @@ class MLIRGenerator {
   /// Random seed
   int seed;
 
+  /// Identity weights
+  bool identity;
+
   /// Generated model's flops
   int64_t flops;
 
@@ -226,7 +229,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef,
-                int, bool, bool, bool, bool, int);
+                int, bool, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }
 

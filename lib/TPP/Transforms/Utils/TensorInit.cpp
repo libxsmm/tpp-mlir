@@ -140,3 +140,14 @@ TensorInitPtr getTensorInit(StringRef type, mlir::Type elmType, int seed) {
   auto initType = parseTensorInitType(type);
   return getTensorInit(initType, elmType, seed);
 }
+
+FailureOr<int> getIdentityOption(StringRef identity) {
+  int option = StringSwitch<int>(identity)
+                   .Case("", -1)
+                   .CaseLower("a", 0)
+                   .CaseLower("b", 1)
+                   .Default(-2);
+  if (option == -2)
+    return failure();
+  return option;
+}

@@ -66,13 +66,13 @@ static SmallVector<bool> getBroadcastDims(ArrayRef<int64_t> sourceShape,
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              unsigned batch, StringRef layersStr,
                              StringRef tilesStr, StringRef targetType, int seed,
-                             bool enableBias, bool enableRelu,
+                             bool identity, bool enableBias, bool enableRelu,
                              bool enableSoftmax, bool keepGenericMatmul,
                              int vnniBlockingFactor)
     : builder(&context), loc(builder.getUnknownLoc()), batch(batch), seed(seed),
-      flops(0), enableBias(enableBias), enableRelu(enableRelu),
-      enableSoftmax(enableSoftmax), keepGenericMatmul(keepGenericMatmul),
-      vnniFactor(vnniBlockingFactor) {
+      identity(identity), flops(0), enableBias(enableBias),
+      enableRelu(enableRelu), enableSoftmax(enableSoftmax),
+      keepGenericMatmul(keepGenericMatmul), vnniFactor(vnniBlockingFactor) {
 
   // Register all necessary dialects
   context
@@ -266,11 +266,21 @@ void MLIRGenerator::createKernel() {
         arg.bias.value = func.getArgument(argPos++);
       arg.output.value = func.getArgument(argPos++);
     } else { // Model
-      arg.weight.value =
-          createDenseTensor(builder, initType, arg.weight.type, getRand());
-      if (enableBias)
-        arg.bias.value =
-            createDenseTensor(builder, initType, arg.bias.type, getRand());
+      if (identity) {
+        // Identity weights / constant bias to test operations keeping the input
+        // (A) predictable for testing.
+        arg.weight.value = createDenseTensor(builder, TensorInitType::Identity,
+                                             arg.weight.type, /* seed = */ 0);
+        if (enableBias)
+          arg.bias.value = createDenseTensor(builder, TensorInitType::Constant,
+                                             arg.bias.type, /* seed = */ 0);
+      } else {
+        arg.weight.value =
+            createDenseTensor(builder, initType, arg.weight.type, getRand());
+        if (enableBias)
+          arg.bias.value =
+              createDenseTensor(builder, initType, arg.bias.type, getRand());
+      }
       arg.output.value = getZeroInitTensor(arg.output.type);
     }
 

@@ -7,6 +7,9 @@
 // MLP without softmax
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void
 
+// MLP with identity
+// RUN: mlir-gen --kernel=const --identity --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=IDENTITY 
+
 // Matmul only
 // RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
 // RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 --output=generic | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
@@ -30,6 +33,8 @@
 // Packed versions
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
+
+// IDENTITY:( 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 )
 
 // MATMUL:( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 )
 

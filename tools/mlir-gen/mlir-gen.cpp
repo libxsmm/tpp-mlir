@@ -75,6 +75,14 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
                         llvm::cl::value_desc("int"), llvm::cl::init(0));
 
+// Identity matrix
+// Replace single square argument with identity matrix
+// Note: Must have two arguments and the selected must be square
+llvm::cl::opt<bool> identity("identity",
+                             llvm::cl::desc("Identity matrix on weight (bias 1s)"),
+                             llvm::cl::value_desc("bool"),
+                             llvm::cl::init(false));
+
 // Output filename
 llvm::cl::opt<std::string> filename("o", llvm::cl::desc("Output filename"),
                                     llvm::cl::value_desc("stdout"),
@@ -112,7 +120,7 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, floatType, seed,
-                    enableBias, enableRelu, enableSoftmax, keepGenericMatmul,
-                    vnni);
+                    identity, enableBias, enableRelu, enableSoftmax,
+                    keepGenericMatmul, vnni);
   return gen.generate(filename);
 }

@@ -168,17 +168,6 @@ TargetMachineOptions getTargetMachineOptions(StringRef option) {
       .Default({defaultTriple, defaultCpu, defaultFeature});
 }
 
-FailureOr<int> getIdentityOption() {
-  int option = StringSwitch<int>(identity)
-                   .Case("", -1)
-                   .CaseLower("a", 0)
-                   .CaseLower("b", 1)
-                   .Default(-2);
-  if (option == -2)
-    return failure();
-  return option;
-}
-
 // This function will be called by the pass manager after parsing,
 // so we can modify the IR with the needed wrappers
 static LogicalResult prepareMLIRKernel(Operation *op,
@@ -194,7 +183,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   if (failed(applyPassManagerCLOptions(passManager)))
     return failure();
 
-  auto id = getIdentityOption();
+  auto id = getIdentityOption(identity);
   if (failed(id))
     return failure();
 

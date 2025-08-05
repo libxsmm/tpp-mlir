@@ -120,4 +120,8 @@ TensorInitPtr getTensorInit(TensorInitType type, mlir::Type elmType,
 TensorInitPtr getTensorInit(llvm::StringRef type, mlir::Type elmType,
                             int seed = 0);
 
+// Return the numeric ID of the identity argument
+// -1 for none, 0 for A, 1 for B
+llvm::FailureOr<int> getIdentityOption(llvm::StringRef identity);
+
 #endif // TPP_TRANSFORMS_UTILS_TENSORINIT_H
