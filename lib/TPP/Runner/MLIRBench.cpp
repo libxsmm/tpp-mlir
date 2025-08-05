@@ -227,7 +227,7 @@ LogicalResult MLIRBench::createKernelArgs() {
           shape.getDimSize(0) == shape.getDimSize(1)) {
         argInitType = TensorInitType::Identity;
       } else {
-        return failure();
+        return module.emitError("Invalid shape for identity init");
       }
     }
     auto arg =
@@ -255,7 +255,7 @@ LogicalResult MLIRBench::createKernelArgs() {
             .Default([&](auto t) { return std::nullopt; });
 
     if (!arg)
-      return failure();
+      return module.emitError("Cannot create kernel argument");
 
     kernelArgs.push_back(*arg);
     argNum++;

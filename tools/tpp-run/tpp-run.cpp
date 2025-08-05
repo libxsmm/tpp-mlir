@@ -95,10 +95,10 @@ llvm::cl::opt<std::string> initType(
 // Identity matrix
 // Replace single square argument with identity matrix
 // Note: Must have two arguments and the selected must be square
-llvm::cl::opt<std::string> identity(
+llvm::cl::opt<int> identity(
     "identity",
-    llvm::cl::desc("Identity matrix on one argument (a, b)"),
-    llvm::cl::init(""));
+    llvm::cl::desc("Identity matrix on one argument (-1=none, 0=a, 1=b, ...)"),
+    llvm::cl::init(-1));
 
 // Speed optimization level
 llvm::cl::opt<unsigned>
@@ -183,10 +183,6 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   if (failed(applyPassManagerCLOptions(passManager)))
     return failure();
 
-  auto id = getIdentityOption(identity);
-  if (failed(id))
-    return failure();
-
   tpp::TppRunnerWrapperOptions wrapperOpts;
   wrapperOpts.kernelName = options.mainFuncName;
   wrapperOpts.kernelType = options.mainFuncType;
@@ -200,7 +196,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   wrapperOpts.randomSplat = splatRandom;
   wrapperOpts.seed = seed;
   wrapperOpts.initType = initType;
-  wrapperOpts.identity = id.value();
+  wrapperOpts.identity = identity;
   passManager.addPass(tpp::createTppRunnerWrapper(wrapperOpts));
 
   tpp::DefaultPipelineOptions defPipelineOpts{defGpuBackend,

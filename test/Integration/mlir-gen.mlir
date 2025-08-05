@@ -8,7 +8,8 @@
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void
 
 // MLP with identity
-// RUN: mlir-gen --kernel=const --identity --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=IDENTITY 
+// RUN: mlir-gen --kernel=const --identity --seed=0 --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=IDENTITY_CONST
+// RUN: mlir-gen --kernel=args --seed=0 --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print -identity=1 | FileCheck %s --check-prefix=IDENTITY_ARGS
 
 // Matmul only
 // RUN: mlir-gen --kernel=const --batch=10 --layers=10,10 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=MATMUL
@@ -34,7 +35,11 @@
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 --tiles=2,2,2 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
 
-// IDENTITY:( 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 )
+// Implements C = A*B, with A=1, B=ID
+// IDENTITY_CONST:( 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 )
+
+// Implements C += A*B, with A=1, B=ID, C=1
+// IDENTITY_ARGS:( 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 )
 
 // MATMUL:( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 )
 
