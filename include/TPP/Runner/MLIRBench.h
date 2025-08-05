@@ -47,7 +47,7 @@ struct MLIRBenchConfig {
 
   int seed = 0;
   TensorInitType initType = TensorInitType::Auto;
-  int identity = 0;
+  int identity = -1;
   std::string backend = "cpu";
   bool offloadToDevice = true;
 };
