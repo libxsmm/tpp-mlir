@@ -578,7 +578,7 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
             /*default=*/"",
            "Initializer type (const, simple, cont, rand, normal).">,
     Option<"identity", "identity", "int64_t",
-            /*default=*/"0",
+            /*default=*/"-1",
            "Identity square argument (-1=none, 0=a, 1=b).">,
   ];
 }
