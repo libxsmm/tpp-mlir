@@ -23,22 +23,28 @@ namespace mlir {
 namespace vnni {
 namespace utils {
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AMX instructions.
 bool hasAMX() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SPR) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AVX2 instructions.
 bool hasAVX2() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX2) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns True if the current architecture supports AVX512 instructions.
 bool hasAVX512() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SKX) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
+// Returns true if the current architecture is not x86.
+bool isNotX86() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_AARCH64_V81) &&
+         (libxsmm_get_target_archid() <= LIBXSMM_RV64_ALLFEAT);
 }
 
 // Returns the current target architecture name

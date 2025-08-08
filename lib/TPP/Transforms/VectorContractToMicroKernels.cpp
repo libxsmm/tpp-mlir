@@ -354,16 +354,27 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
     int64_t sizeFactor = avx512 ? 16 : avx2 ? 8 : 0;
 
-    if (sizeFactor == 0)
-      return rewriter.notifyMatchFailure(
-          contractOp, "AVX512 or AVX2 required for this pass");
-
     bool isF32 = elementType.isF32();
     bool isF16 = elementType.isF16();
     bool isBF16 = elementType.isBF16();
     bool isI8 = elementType.isSignlessInteger(8);
 
     bool isPackedType = isF16 || isBF16 || isI8;
+
+    if (vnni::utils::isNotX86()) {
+      sizeFactor = 8;
+
+      if (isPackedType)
+        return rewriter.notifyMatchFailure(
+            contractOp,
+            "only FP32 type lowering is supported for non x86 machines.");
+    }
+
+    if (sizeFactor == 0)
+      return rewriter.notifyMatchFailure(
+          contractOp, "AVX512 or AVX2 instruction set is not available or "
+                      "lowering is not available for this target machine.");
+
     int64_t vnniFactor = (isBF16 || isF16) ? 2 : isI8 ? 4 : 1;
     bool isSplat = false;
 

@@ -36,14 +36,18 @@ enum class VnniOperandRank {
   BRGEMM_INS = 4,
   BRGEMM_OUTS = 3
 };
-// Returns True if the current architecture supports AVX2 instructions.
+
+// Returns true if the current architecture supports AVX2 instructions.
 bool hasAVX2();
 
-// Returns True if the current architecture supports AVX512 instructions.
+// Returns true if the current architecture supports AVX512 instructions.
 bool hasAVX512();
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AMX instructions.
 bool hasAMX();
+
+// Returns true if the current architecture is not x86.
+bool isNotX86();
 
 // Returns the current target architecture name
 std::string getTargetArchName();
