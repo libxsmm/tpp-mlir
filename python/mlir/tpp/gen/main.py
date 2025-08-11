@@ -5,6 +5,8 @@ from argparse import ArgumentParser
 from typing import Sequence, Dict, Any, Optional
 from collections import namedtuple
 
+import numpy as np
+
 from mlir import ir
 from mlir.dialects import func
 
@@ -269,6 +271,7 @@ def main(args: Sequence[str]) -> ir.Module:
         if config["seed"] != -1:
             random.seed(config["seed"])
             gen_utils.CONSTANT_INIT_KIND = gen_utils.CONSTANT_INIT_KIND.random
+            gen_utils.RNG = np.random.default_rng(config["seed"])
 
     batch_size = config["batch"]
     num_inputs = config["layers"][0]

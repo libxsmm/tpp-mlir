@@ -18,6 +18,7 @@ class ConstantInitKind(Enum):
 
 CONSTANT_INIT_KIND = ConstantInitKind.ones
 GAUSSIAN_SAMPLING = True
+RNG = None
 
 splat_value = 0.3
 
@@ -31,37 +32,28 @@ reduction = linalg.IteratorType.reduction
 
 
 def floats(shape: abc.Sequence[int], elementType: ir.Type) -> np.ndarray:
-    def gen_bf16_uniform():
-        value = random.random()
-        element = struct.pack("f", value)[:2]
-        return np.frombuffer(element, np.uint16)[0]
-
-    def gen_bf16_gaussian():
-        value = random.gauss(0.0, 0.2)
-        clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
-        element = struct.pack("f", clamped)[:2]
-        return np.frombuffer(element, np.uint16)[0]
-
-    def gen_f32_uniform():
-        value = random.random()
-        element = struct.pack("f", value)
-        return np.frombuffer(element, np.float32)
-
-    def gen_f32_gaussian():
-        value = random.gauss(0.0, 0.2)
-        clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
-        element = struct.pack("f", clamped)
-        return np.frombuffer(element, np.float32)
+    if GAUSSIAN_SAMPLING:
+        random_tensor = RNG.normal(0.0, 0.2, shape)
+    else:
+        if isinstance(elementType, ir.F32Type):
+            random_tensor = RNG.random(shape, dtype=np.float32)
+            return random_tensor
+        random_tensor = RNG.random(shape, dtype=np.float32)
 
     if isinstance(elementType, ir.BF16Type):
-        gen_elt = gen_bf16_gaussian if GAUSSIAN_SAMPLING else gen_bf16_uniform
+        def to_bf16(value):
+            clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
+            element = struct.pack("f", clamped)[:2]
+            return np.frombuffer(element, np.uint16)[0]
+        return np.vectorize(to_bf16)(random_tensor).reshape(shape)
     elif isinstance(elementType, ir.F32Type):
-        gen_elt = gen_f32_gaussian if GAUSSIAN_SAMPLING else gen_f32_uniform
+        def to_f32(value):
+            clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
+            element = struct.pack("f", clamped)
+            return np.frombuffer(element, np.float32)
+        return np.vectorize(to_f32)(random_tensor).reshape(shape)
     else:
         assert False
-
-    size_iteration_space = reduce(mul, (shape))
-    return np.array([gen_elt() for _ in range(size_iteration_space)]).reshape(*shape)
 
 
 def gen_tensor_cst(tensor_type: ir.RankedTensorType) -> ir.Value:
@@ -74,9 +66,8 @@ def gen_tensor_cst(tensor_type: ir.RankedTensorType) -> ir.Value:
         splat_value += 0.01
         value = ir.DenseElementsAttr.get_splat(tensor_type, splat_attr)
     elif CONSTANT_INIT_KIND == CONSTANT_INIT_KIND.random:
-        value = ir.DenseElementsAttr.get(
-            floats(tensor_type.shape, tensor_type.element_type), type=tensor_type
-        )
+        random_tensor = floats(tensor_type.shape, tensor_type.element_type)
+        value = ir.DenseElementsAttr.get(random_tensor, type=tensor_type)
     else:
         assert False, "unreachable"
     return arith.constant(tensor_type, value)
