@@ -1,9 +1,6 @@
 import struct
-import random
 from enum import Enum, auto
 from collections import abc
-from functools import reduce
-from operator import mul
 from typing import Union
 
 import numpy as np
@@ -11,10 +8,13 @@ import numpy as np
 from mlir import ir
 from mlir.dialects import arith, linalg, tensor
 
+
 class ConstantInitKind(Enum):
     ones = auto()
     distinct = auto()
     random = auto()
+    identity = auto()
+
 
 CONSTANT_INIT_KIND = ConstantInitKind.ones
 GAUSSIAN_SAMPLING = True
@@ -41,16 +41,20 @@ def floats(shape: abc.Sequence[int], elementType: ir.Type) -> np.ndarray:
         random_tensor = RNG.random(shape, dtype=np.float32)
 
     if isinstance(elementType, ir.BF16Type):
+
         def to_bf16(value):
             clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
             element = struct.pack("f", clamped)[:2]
             return np.frombuffer(element, np.uint16)[0]
+
         return np.vectorize(to_bf16)(random_tensor).reshape(shape)
     elif isinstance(elementType, ir.F32Type):
+
         def to_f32(value):
             clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
             element = struct.pack("f", clamped)
             return np.frombuffer(element, np.float32)
+
         return np.vectorize(to_f32)(random_tensor).reshape(shape)
     else:
         assert False
@@ -68,6 +72,20 @@ def gen_tensor_cst(tensor_type: ir.RankedTensorType) -> ir.Value:
     elif CONSTANT_INIT_KIND == CONSTANT_INIT_KIND.random:
         random_tensor = floats(tensor_type.shape, tensor_type.element_type)
         value = ir.DenseElementsAttr.get(random_tensor, type=tensor_type)
+    elif CONSTANT_INIT_KIND == CONSTANT_INIT_KIND.identity:
+        if tensor_type.rank == 1:
+            # FIXME(rolf): do not detect bias case through tensor shape.
+            splat_attr = ir.FloatAttr.get(tensor_type.element_type, 1.0)
+            value = ir.DenseElementsAttr.get_splat(tensor_type, splat_attr)
+        else:
+            shape = tensor_type.shape
+            assert len(shape) == 2 and shape[0] == shape[1]
+            dtype = {
+                ir.F32Type.get(): np.float32,
+                ir.BF16Type.get(): np.uint16,
+            }[tensor_type.element_type]
+            ident_matrix = np.identity(tensor_type.shape[0], dtype)
+            value = ir.DenseElementsAttr.get(ident_matrix, type=tensor_type)
     else:
         assert False, "unreachable"
     return arith.constant(tensor_type, value)

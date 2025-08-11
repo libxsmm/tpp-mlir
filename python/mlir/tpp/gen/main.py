@@ -40,6 +40,11 @@ def config_from_args(args: Sequence[str]) -> Dict[str, Any]:
         default="ones",
         help="in absence of --seed, the kind of constants to generate",
     )
+    parser.add_argument(
+        "--identity",
+        action="store_true",
+        help="whether to use a generic op for matmul instead of another linalg op",
+    )
 
     parser.add_argument(
         "--output",
@@ -267,6 +272,9 @@ def main(args: Sequence[str]) -> ir.Module:
             "ones": gen_utils.CONSTANT_INIT_KIND.ones,
             "distinct": gen_utils.CONSTANT_INIT_KIND.distinct,
         }[config["constants"]]
+        # TODO: does it make sense to allow constants to be an independent cmd flag?
+        if config["identity"]:
+            gen_utils.CONSTANT_INIT_KIND = gen_utils.CONSTANT_INIT_KIND.identity
 
         if config["seed"] != -1:
             random.seed(config["seed"])
