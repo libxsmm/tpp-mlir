@@ -347,12 +347,14 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     // We get target architecture and decide on uKernel lowering using flags
     bool avx512 = vnni::utils::hasAVX512();
     bool avx2 = vnni::utils::hasAVX2();
+    bool sve256 = vnni::utils::hasSVE256();
+    bool sve512 = vnni::utils::hasSVE512();
 
     // disable avx512, if target feature is avx2
     if (options.targetFeature == "avx2")
       avx512 = false;
 
-    int64_t sizeFactor = avx512 ? 16 : avx2 ? 8 : 0;
+    int64_t sizeFactor = (avx512 || sve512) ? 16 : (avx2 || sve256) ? 8 : 0;
 
     bool isF32 = elementType.isF32();
     bool isF16 = elementType.isF16();
@@ -361,19 +363,15 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
     bool isPackedType = isF16 || isBF16 || isI8;
 
-    if (vnni::utils::isNotX86()) {
-      sizeFactor = 8;
-
-      if (isPackedType)
-        return rewriter.notifyMatchFailure(
-            contractOp,
-            "only FP32 type lowering is supported for non x86 machines.");
-    }
-
     if (sizeFactor == 0)
       return rewriter.notifyMatchFailure(
-          contractOp, "AVX512 or AVX2 instruction set is not available or "
+          contractOp, "AVX512 or AVX2 or SVE512/256 instruction set is not available or "
                       "lowering is not available for this target machine.");
+
+    if ((sve256 || sve512) && isPackedType)
+      return rewriter.notifyMatchFailure(
+            contractOp,
+            "only FP32 type lowering is supported for AARCH64(ARM) machines.");
 
     int64_t vnniFactor = (isBF16 || isF16) ? 2 : isI8 ? 4 : 1;
     bool isSplat = false;

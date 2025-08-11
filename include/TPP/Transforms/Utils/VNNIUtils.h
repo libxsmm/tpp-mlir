@@ -46,8 +46,11 @@ bool hasAVX512();
 // Returns true if the current architecture supports AMX instructions.
 bool hasAMX();
 
-// Returns true if the current architecture is not x86.
-bool isNotX86();
+// Returns true if the current architecture supports SVE-256 instructions.
+bool hasSVE256();
+
+// Returns true if the current architecture supports SVE-512 instructions.
+bool hasSVE512();
 
 // Returns the current target architecture name
 std::string getTargetArchName();
