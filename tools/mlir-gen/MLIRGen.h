@@ -52,10 +52,13 @@ class MLIRGenerator {
   SmallVector<int64_t> tiles;
 
   /// Data type (element type of all tensors)
-  Type dataType;
+  SmallVector<Type> dataTypes;
 
   /// Random seed
   int seed;
+
+  /// Identity weights
+  bool identity;
 
   /// Generated model's flops
   int64_t flops;
@@ -91,6 +94,12 @@ class MLIRGenerator {
   /// Type of kernel to be generated
   KernelType kernelType;
 
+  /// List of supported quantization ops types that can be generated
+  enum class QuantizationType { None, Quant, Dequant, QuantDequant };
+
+  /// Type of quantization ops to be generated
+  QuantizationType quantType;
+
   /// VNNI packing factor (0, 2, 4)
   int vnniFactor;
 
@@ -102,8 +111,15 @@ class MLIRGenerator {
   /// Return current random seed, update next
   int getRand();
 
-  /// Type of packing (NxC, KxC, NxK)
-  enum PackingType { PACK_INPUT, PACK_WEIGHT, PACK_OUTPUT };
+  /// Type of packing (NxC, KxC, NxK). Extended to include scales.
+  enum PackingType {
+    PACK_INPUT,
+    PACK_WEIGHT,
+    PACK_OUTPUT,
+    PACK_INTERMEDIATE,
+    INPUT_SCALE,
+    WEIGHT_SCALE
+  };
 
   /// Return shaped type (packed if requested)
   TensorType getShape(ArrayRef<int64_t>, PackingType);
@@ -130,6 +146,28 @@ class MLIRGenerator {
     MAP_MATMUL // Alias for iterator type
   };
 
+  /// Types are created first, values are created from the types if inside the
+  /// function, or populated later from function arguments if external.
+  struct Arg {
+    Value value;
+    TensorType type;
+  };
+
+  /// There could be multiple layers, each with its own weights and biases
+  /// Input of one layer is the output of the previous
+  /// Input of the model is the input of the first layer
+  /// Output of the model is the output of the last layer
+  struct LayerArgs {
+    unsigned index;
+    Arg input;
+    Arg inputScale;
+    Arg weight;
+    Arg weightScale;
+    Arg bias;
+    Arg intermediate; // For quantdequant validation
+    Arg output;
+  };
+
   /// Return affine map (packed if requested)
   /// If order is not empty, re-order the dims in that order
   /// If dims is passed, force number of dims, otherwise, take from tensor
@@ -146,9 +184,10 @@ class MLIRGenerator {
   // the ReLU, also making it in-place, and returning the first alloc.
 
   /// Creates a matmul in the current function
-  /// Args: A, B, C
+  /// Args: Contains A, B, C
+  /// Boolean indicates if mixed type (quantization) is used.
   /// Returns the chain value to be used in the next op
-  Value lowerMatmul(Value, Value, Value);
+  Value lowerMatmul(LayerArgs &args, bool);
 
   /// Creates linalg generic matmul
   Value lowerGenericMatmul(Value, Value, Value);
@@ -158,6 +197,18 @@ class MLIRGenerator {
 
   /// Creates linalg contract
   Value lowerContract(Value, Value, Value);
+
+  /// Computes scaling factor for the given input. Returns the scaling factor of
+  /// same shape as input.
+  SmallVector<Value> computeScalingFactor(Value input);
+
+  /// Creates a matmul quantization kernel
+  Value quantizeGemm(LayerArgs &args, Value chain, Value scale);
+
+  /// Creates a matmul dequantization kernel
+  Value dequantizeGemm(LayerArgs &args, Value chain);
+
+  Value testQuantDequant(LayerArgs &args, Value input);
 
   /// Creates a bias add in the current function
   /// Args: Input, Output (same for in-place)
@@ -188,51 +239,36 @@ class MLIRGenerator {
   /// Creates metadata string containing run command, flops info etc.
   std::string createMetadata();
 
-  /// Types are created first, values are created from the types if inside the
-  /// function, or populated later from function arguments if external.
-  struct Arg {
-    Value value;
-    TensorType type;
-  };
-
-  /// There could be multiple layers, each with its own weights and biases
-  /// Input of one layer is the output of the previous
-  /// Input of the model is the input of the first layer
-  /// Output of the model is the output of the last layer
-  struct LayerArgs {
-    unsigned index;
-    Arg input;
-    Arg weight;
-    Arg bias;
-    Arg output;
-  };
-
   /// Some arguments are optional, so we use this struct to simplify the
   /// argument handling in createLayer.
   typedef SmallVector<LayerArgs, 3> KernelArgs;
 
-  /// Creates the kernel types from layer definitions and options
+  /// Creates the kernel types from layer definitions and options. Boolean
+  /// indicates if mixed type (quantization) is used.
   void getKernelTypes(KernelArgs &);
 
-  /// Creates a layer function, to be called by the kernel
-  Value createLayer(LayerArgs &);
+  /// Creates a layer function, to be called by the kernel. Boolean indicates
+  /// if mixed type (quantization) is used.
+  Value createLayer(LayerArgs &, bool hasMixedType = false);
 
   /// Creates a kernel (N * {GEMM + AddBias + ReLU} + Softmax)
-  /// AddBias, ReLU and Softmax are optional
-  void createKernel();
+  /// AddBias, ReLU and Softmax are optional. Boolean indicates if mixed type
+  /// (quantization) is used.
+  void createKernel(bool hasMixedType = false);
 
 public:
   /// Creates a specific module. Different configurations need different modules
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef,
-                int, bool, bool, bool, bool, int);
+                StringRef, StringRef, int, bool, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }
 
   /// Generates the whole IR and write to file
-  /// Return 0 on success, 1 on failure
-  int generate(StringRef filename);
+  /// Return 0 on success, 1 on failure. 'hasMixedType' indicates simple mixed
+  /// type without quant.
+  int generate(StringRef filename, bool hasMixedType = false);
 };
 
 } // namespace mlir

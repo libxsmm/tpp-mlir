@@ -85,30 +85,14 @@ protected:
   virtual void fillData() override = 0;
 };
 
-// Constant init (all-ones, do not use!).
+// Constant init (all-ones).
 struct ConstantTensorInitFloat : TensorInitFloat {
   ConstantTensorInitFloat(DataType type) : TensorInitFloat(type) {}
 
   // Return a dense<1.0> repeated throughout the shape.
-  mlir::DenseElementsAttr get(mlir::ShapedType shape) override;
+  mlir::FailureOr<mlir::DenseElementsAttr> get(mlir::ShapedType shape) override;
 
-  void fillData() override;
-};
-
-// Simple init (basic example, not useful).
-struct SimpleTensorInitFloat : TensorInitFloat {
-  SimpleTensorInitFloat(DataType type) : TensorInitFloat(type) {}
-
-  // Return a dense<0.3, 0.6, 0.9> repeated throughout the shape.
-  void fillData() override;
-};
-
-// Continuous init (normalized affine range).
-struct ContinuousTensorInitFloat : TensorInitFloat {
-  ContinuousTensorInitFloat(DataType type) : TensorInitFloat(type) {}
-
-  // Return a dense<0.0 ... 1.0> throughout the shape.
-  void fillData() override;
+  void fillData() override { assert(false && "Should not be called"); }
 };
 
 // Random init (uniform).
@@ -149,6 +133,26 @@ private:
   std::default_random_engine generator;
   // Random distribution.
   std::normal_distribution<float> distribution;
+};
+
+// Identity init.
+struct IdentityTensorInitFloat : TensorInitFloat {
+  IdentityTensorInitFloat(DataType type)
+      : TensorInitFloat(type) {}
+
+  // Makes sure the shape is "square"
+  bool checkShape(mlir::ShapedType shape) override {
+    if (!TensorInit::checkShape(shape))
+      return false;
+    // Now the fields are set, compare all dims to be equal, 2D only for now
+    return dims.size() == 2 && dims[0] == dims[1];
+  }
+
+  // Should not be called.
+  float next() { assert(false && "Should not be called"); }
+
+  // Return a diagonal of <1.0>s throughout the shape.
+  void fillData() override;
 };
 
 #endif // TPP_TRANSFORMS_UTILS_TENSORINITFLOAT_H

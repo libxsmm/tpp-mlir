@@ -56,6 +56,7 @@ using namespace mlir;
 MLIRBench::MLIRBench(mlir::Operation *op, const MLIRBenchConfig &config)
     : builder(op->getContext()), unkLoc(builder.getUnknownLoc()) {
   seed = config.seed;
+  identity = config.identity;
   backend = config.backend;
   initType = config.initType;
   offloadToDevice = config.offloadToDevice;
@@ -113,7 +114,7 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     return module.emitError("No seed for random init");
 
   // Only replace attribute if it's a dense splat
-  auto replaceSplat = [&](ShapedType shape, Attribute attr) -> Attribute {
+  auto replaceSplat = [&](ShapedType shape, Attribute attr) -> FailureOr<Attribute> {
     // We only change dense attributes that are splat
     auto value = dyn_cast<DenseElementsAttr>(attr);
     if (!value || !value.isSplat())
@@ -145,7 +146,9 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     if (!global)
       continue;
     auto newAttr = replaceSplat(global.getType(), global.getInitialValueAttr());
-    global.setInitialValueAttr(newAttr);
+    if (failed(newAttr))
+      return failure();
+    global.setInitialValueAttr(newAttr.value());
   }
 
   // Tensors are arith.constant values
@@ -157,7 +160,9 @@ LogicalResult MLIRBench::replaceSplatWithRandom() {
     if (!cstType)
       continue;
     auto newAttr = replaceSplat(cstType, constant.getValueAttr());
-    constant.setValueAttr(cast<TypedAttr>(newAttr));
+    if (failed(newAttr))
+      return failure();
+    constant.setValueAttr(cast<TypedAttr>(newAttr.value()));
   }
 
   return success();
@@ -190,13 +195,13 @@ Value MLIRBench::registerOnGpu(Value buf, MemRefType memRefTy) {
   if (backend == "intel") {
     memcpy = builder.create<memref::CopyOp>(unkLoc, buf, gpuBuf);
   } else {
-    memcpy = builder.create<gpu::MemcpyOp>(unkLoc, /*asyncToken=*/std::nullopt,
+    memcpy = builder.create<gpu::MemcpyOp>(unkLoc, /*asyncToken=*/ValueRange{},
                                            ValueRange{}, gpuBuf, buf);
   }
 
   // Dealloc the arg buffer at the end of program
   builder.setInsertionPointToEnd(&getMainBlock());
-  builder.create<gpu::DeallocOp>(unkLoc, /*asyncToken=*/std::nullopt, gpuBuf);
+  builder.create<gpu::DeallocOp>(unkLoc, /*asyncToken=*/ValueRange{}, gpuBuf);
 
   // Continue inserting ops after the created kernel arg
   builder.setInsertionPointAfter(memcpy);
@@ -212,34 +217,48 @@ LogicalResult MLIRBench::createKernelArgs() {
   auto &mainBody = getMainBlock();
   builder.setInsertionPointToStart(&mainBody);
 
+  int argNum = 0;
   for (auto &ty : kernel.getArgumentTypes()) {
-    auto arg = TypeSwitch<Type, std::optional<Value>>(ty)
-                   .Case<MemRefType>([&](auto memRefTy) {
-                     // Create a memref global
-                     Value data = createDenseMemref(builder, module, initType,
-                                                    memRefTy, seed);
-                     data = registerOnGpu(data, memRefTy);
-                     return data;
-                   })
-                   .Case<TensorType>([&](auto tensorTy) {
-                     // Create a memref global and cast it to a tensor
-                     // to ensure that the buffer is writable and
-                     // bufferization does not insert extra
-                     // allocations + copies
-                     auto memrefType = MemRefType::get(
-                         tensorTy.getShape(), tensorTy.getElementType());
-                     auto data = createDenseMemref(builder, module, initType,
-                                                   memrefType, seed);
-                     data = registerOnGpu(data, memrefType);
-                     return builder.create<bufferization::ToTensorOp>(
-                         unkLoc, data, /*restrict=*/true, /*writable=*/true);
-                   })
-                   .Default([&](auto t) { return std::nullopt; });
+    auto argInitType = initType;
+    // Requested an argument to be identity, must be 2D square
+    if (argNum == identity) {
+      ShapedType shape = dyn_cast<ShapedType>(ty);
+      if (shape && shape.getRank() == 2 &&
+          shape.getDimSize(0) == shape.getDimSize(1)) {
+        argInitType = TensorInitType::Identity;
+      } else {
+        return module.emitError("Invalid shape for identity init");
+      }
+    }
+    auto arg =
+        TypeSwitch<Type, std::optional<Value>>(ty)
+            .Case<MemRefType>([&](auto memRefTy) {
+              // Create a memref global
+              Value data = createDenseMemref(builder, module, argInitType,
+                                             memRefTy, seed);
+              data = registerOnGpu(data, memRefTy);
+              return data;
+            })
+            .Case<TensorType>([&](auto tensorTy) {
+              // Create a memref global and cast it to a tensor
+              // to ensure that the buffer is writable and
+              // bufferization does not insert extra
+              // allocations + copies
+              auto memrefType = MemRefType::get(tensorTy.getShape(),
+                                                tensorTy.getElementType());
+              auto data = createDenseMemref(builder, module, argInitType,
+                                            memrefType, seed);
+              data = registerOnGpu(data, memrefType);
+              return builder.create<bufferization::ToTensorOp>(
+                  unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
+            })
+            .Default([&](auto t) { return std::nullopt; });
 
     if (!arg)
-      return failure();
+      return module.emitError("Cannot create kernel argument");
 
     kernelArgs.push_back(*arg);
+    argNum++;
   }
 
   return success();
@@ -267,7 +286,7 @@ Value MLIRBench::createTimerLoop(unsigned iters) {
   auto count = getConstInt(builder, iters, 64);
 
   // Create perf benchmarking region, set insertion to inside the body
-  auto bench = builder.create<perf::BenchOp>(unkLoc, count);
+  auto bench = builder.create<perf::BenchOp>(unkLoc, count, ValueRange{});
   builder.setInsertionPointToStart(bench.getBody());
 
   // Call the kernel, ignore output
@@ -305,7 +324,7 @@ void MLIRBench::printVector(Value vector) {
   if (vectorValue.getElementType().isBF16()) {
     VectorType vecType =
         VectorType::get(vectorValue.getShape(), builder.getF32Type());
-    op = builder.create<arith::ExtFOp>(unkLoc, vecType, vector, std::nullopt);
+    op = builder.create<arith::ExtFOp>(unkLoc, vecType, vector, arith::FastMathFlagsAttr{});
   }
   builder.create<vector::PrintOp>(unkLoc, op);
 }
@@ -398,7 +417,7 @@ LogicalResult MLIRBench::printResult(Operation *kernelCall) {
       memcpy = builder.create<memref::CopyOp>(unkLoc, result, outBuf);
     } else {
       memcpy = builder.create<gpu::MemcpyOp>(
-          unkLoc, /*asyncToken=*/std::nullopt, ValueRange{}, outBuf, result);
+          unkLoc, /*asyncToken=*/ValueRange{}, ValueRange{}, outBuf, result);
     }
 
     // Dealloc the output buffer at the end of program.

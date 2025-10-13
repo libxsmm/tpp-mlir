@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "TPP/PassBundles.h"
-
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
@@ -15,15 +13,25 @@
 #include "mlir/Pass/PassManager.h"
 #include "llvm/Support/CommandLine.h"
 
+#include "mlir/Conversion/Passes.h"
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Dialect/Arith/Transforms/Passes.h"
+#include "mlir/Dialect/GPU/Transforms/Passes.h"
+#include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/Async/Passes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Pass/PassOptions.h"
+#include "mlir/Transforms/Passes.h"
+
 #include "TPP/Dialect/Check/BufferizableOpInterfaceImpl.h"
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/BufferizableOpInterfaceImpl.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
 #include "TPP/Dialect/Perf/PerfOps.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
+#include "TPP/PassBundles.h"
 #include "TPP/PassUtils.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
-#include "mlir/Transforms/Passes.h"
 
 #include <string>
 
@@ -67,6 +75,9 @@ llvm::cl::opt<bool> lowerPackUnpackWithoutTranspose(
     llvm::cl::desc("Lower packs and unpacks reverting any dim permutations"),
     llvm::cl::init(false));
 
+llvm::cl::opt<bool> disableVnniPacking("disable-vnni-packing",
+                                   llvm::cl::desc("Disables VNNI packing for packed types"),
+                                   llvm::cl::init(false));
 
 llvm::cl::list<unsigned>
     registerBlocking("registerBlocking", llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
@@ -156,6 +167,7 @@ private:
       tppDefaultOptions.linalgToVector = linalgToVector;
       tppDefaultOptions.vectorToXSMM = vectorToXSMM;
       tppDefaultOptions.lowerPackUnpackWithoutTranspose = lowerPackUnpackWithoutTranspose;
+      tppDefaultOptions.disableVnniPacking = disableVnniPacking;
       tppDefaultOptions.registerBlocking =
           SmallVector<unsigned>{registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;

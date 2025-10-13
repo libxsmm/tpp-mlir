@@ -268,9 +268,13 @@ isContraction(linalg::LinalgOp linalgOp) {
       .operation(NumDpsInits(EqualsTo(1)))
       .operation(NumDpsInputs(EqualsTo(2)))
       .operation(NumAffineMaps(EqualsTo(3)))
-      .region(MatchOne(0),
-            WithOpChain<arith::MulFOp,
-                        arith::AddFOp>(/*captures=*/nullptr));
+      .region(MatchOne(0), [&](Region *region, Operation *op) {
+        return WithOpChain<KindMul, KindAdd>(/*captures=*/nullptr)(region, op) ||
+               WithOpChain<arith::ExtFOp,
+                arith::ExtFOp, KindMul, KindAdd>(nullptr)(region, op) ||
+               WithOpChain<arith::ExtSIOp,
+                arith::ExtSIOp, KindMul, KindAdd>(nullptr)(region, op);
+      });
   // clang-format on
   if (!maybeContraction.match(linalgOp))
     return failure();

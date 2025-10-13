@@ -20,6 +20,7 @@
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
+#include "mlir/Dialect/XeGPU/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"

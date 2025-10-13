@@ -74,44 +74,28 @@ protected:
   virtual void fillData() override = 0;
 };
 
-// Constant init (all-ones, do not use!).
+// Constant init (all-ones).
 struct ConstantTensorInitInt : TensorInitInt {
   ConstantTensorInitInt(DataType type) : TensorInitInt(type) {}
 
   // Return a dense<1> repeated throughout the shape.
-  mlir::DenseElementsAttr get(mlir::ShapedType shape) override;
+  mlir::FailureOr<mlir::DenseElementsAttr> get(mlir::ShapedType shape) override;
 
-  void fillData() override;
-};
-
-// Simple init (basic example, not useful).
-struct SimpleTensorInitInt : TensorInitInt {
-  SimpleTensorInitInt(DataType type) : TensorInitInt(type) {}
-
-  // Return a dense<0, 1, 2> repeated throughout the shape.
-  void fillData() override;
-};
-
-// Continuous init (quantized normalized affine range).
-struct ContinuousTensorInitInt : TensorInitInt {
-  ContinuousTensorInitInt(DataType type) : TensorInitInt(type) {}
-
-  // Return a dense<0 ... upperBound> throughout the shape.
-  void fillData() override;
-
-  // Upper bound for quantization.
-  int upperBound = 255;
+  void fillData() override { assert(false && "Should not be called"); }
 };
 
 // Random init (uniform).
 struct RandomTensorInitInt : TensorInitInt {
   RandomTensorInitInt(DataType type, int seed)
-      : TensorInitInt(type), generator(seed), distribution(0, 255) {}
+      : TensorInitInt(type), generator(seed), distribution(0, 255) {
+    if (type == DataType::I8)
+      distribution = std::uniform_int_distribution<uint64_t>(0, 127);
+  }
 
   // Next random uniform number.
   float next() { return distribution(generator); }
 
-  // Return a dense<uniform(0, 255)> throughout the shape.
+  // Return a dense<uniform(0, distribution)> throughout the shape.
   void fillData() override;
 
 private:
@@ -124,7 +108,10 @@ private:
 // Random init (normal).
 struct NormalTensorInitInt : TensorInitInt {
   NormalTensorInitInt(DataType type, int seed)
-      : TensorInitInt(type), generator(seed), distribution(255, 0.5) {}
+      : TensorInitInt(type), generator(seed), distribution(255) {
+    if (type == DataType::I8)
+      distribution = std::binomial_distribution<uint64_t>(127);
+  }
 
   // Next random number.
   float next() {
@@ -132,7 +119,7 @@ struct NormalTensorInitInt : TensorInitInt {
     return value;
   }
 
-  // Return a dense<normal(0, 255)> throughout the shape.
+  // Return a dense<normal(0, distribution)> throughout the shape.
   void fillData() override;
 
 private:
@@ -140,6 +127,26 @@ private:
   std::default_random_engine generator;
   // Random distribution.
   std::binomial_distribution<uint64_t> distribution;
+};
+
+// Identity init.
+struct IdentityTensorInitInt : TensorInitInt {
+  IdentityTensorInitInt(DataType type)
+      : TensorInitInt(type) {}
+
+  // Makes sure the shape is "square"
+  bool checkShape(mlir::ShapedType shape) override {
+    if (!TensorInit::checkShape(shape))
+      return false;
+    // Now the fields are set, compare all dims to be equal, 2D only for now
+    return dims.size() == 2 && dims[0] == dims[1];
+  }
+
+  // Should not be called.
+  float next() { assert(false && "Should not be called"); }
+
+  // Return a diagonal of <1.0>s throughout the shape.
+  void fillData() override;
 };
 
 #endif // TPP_TRANSFORMS_UTILS_TENSORINITINT_H

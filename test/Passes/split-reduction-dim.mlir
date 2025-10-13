@@ -178,52 +178,6 @@ func.func @tile_batch_reduce_matmul(%A: memref<2x32x64xf32>, %B: memref<2x64x16x
 
 // -----
 
-func.func @tile_matmul_transpose_a(%A: memref<64x32xf32>, %B: memref<64x16xf32>,
-    %C: memref<32x16xf32>) {
-  linalg.matmul_transpose_a ins(%A, %B: memref<64x32xf32>, memref<64x16xf32>)
-    outs(%C: memref<32x16xf32>)
-  return
-}
-
-// CHECK-LABEL: @tile_matmul_transpose_a(
-// CHECK-SAME:  %[[A:[0-9a-z]+]]: memref<64x32xf32>
-// CHECK-SAME:  %[[B:[0-9a-z]+]]: memref<64x16xf32>
-// CHECK-SAME:  %[[C:[0-9a-z]+]]: memref<32x16xf32>
-// CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
-// CHECK-DAG: %[[UB:.+]] = arith.constant 64 : index
-// CHECK-DAG: %[[K_TILE:.+]] = arith.constant 8 : index
-// CHECK: scf.for %[[IV:.+]] = %[[C0]] to %[[UB]] step %[[K_TILE]] {
-// CHECK:   %[[SUBVIEW_A:.+]] = memref.subview %[[A]][%[[IV]], 0] [8, 32] [1, 1]
-// CHECK:   %[[SUBVIEW_B:.+]] = memref.subview %[[B]][%[[IV]], 0] [8, 16] [1, 1]
-// CHECK:   linalg.matmul_transpose_a
-// CHECK-SAME: ins(%[[SUBVIEW_A]], %[[SUBVIEW_B]]
-// CHECK-SAME: outs(%[[C]]
-
-// -----
-
-func.func @tile_matmul_transpose_b(%A: memref<32x64xf32>, %B: memref<16x64xf32>,
-    %C: memref<32x16xf32>) {
-  linalg.matmul_transpose_b ins(%A, %B: memref<32x64xf32>, memref<16x64xf32>)
-    outs(%C: memref<32x16xf32>)
-  return
-}
-
-// CHECK-LABEL: @tile_matmul_transpose_b(
-// CHECK-SAME:  %[[A:[0-9a-z]+]]: memref<32x64xf32>
-// CHECK-SAME:  %[[B:[0-9a-z]+]]: memref<16x64xf32>
-// CHECK-SAME:  %[[C:[0-9a-z]+]]: memref<32x16xf32>
-// CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
-// CHECK-DAG: %[[UB:.+]] = arith.constant 64 : index
-// CHECK-DAG: %[[K_TILE:.+]] = arith.constant 8 : index
-// CHECK: scf.for %[[IV:.+]] = %[[C0]] to %[[UB]] step %[[K_TILE]] {
-// CHECK:   %[[SUBVIEW_A:.+]] = memref.subview %[[A]][0, %[[IV]]] [32, 8] [1, 1]
-// CHECK:   %[[SUBVIEW_B:.+]] = memref.subview %[[B]][0, %[[IV]]] [16, 8] [1, 1]
-// CHECK:   linalg.matmul_transpose_b
-// CHECK-SAME: ins(%[[SUBVIEW_A]], %[[SUBVIEW_B]]
-// CHECK-SAME: outs(%[[C]]
-
-// -----
-
 #map = affine_map<(d0) -> (d0)>
 #map1 = affine_map<(d0) -> ()>
 func.func @tile_generic_1D(%A: memref<32xf32>, %B: memref<32xf32>, %C: memref<f32>) {

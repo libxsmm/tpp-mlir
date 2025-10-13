@@ -459,14 +459,15 @@ namespace {
 static SmallVector<int64_t>
 getDefaultBlockingFactors(linalg::LinalgOp linalgOp) {
   assert(linalgOp && "expect a valid linalgOp");
-  if (isa<linalg::Conv2DNchwFchwOp>(linalgOp) ||
-      isa<linalg::Conv2DNhwcHwcfOp>(linalgOp)) {
+  auto *op = linalgOp.getOperation();
+  if (isa<linalg::Conv2DNchwFchwOp>(op) ||
+      isa<linalg::Conv2DNhwcHwcfOp>(op)) {
     return {32, 32};
   }
-  assert(isa<linalg::MatmulOp>(linalgOp) ||
-         isa<linalg::BatchMatmulOp>(linalgOp) ||
-         isa<linalg::MatmulTransposeAOp>(linalgOp) ||
-         isa<linalg::MatmulTransposeBOp>(linalgOp));
+  assert(isa<linalg::MatmulOp>(op) ||
+         isa<linalg::BatchMatmulOp>(op) ||
+         isa<linalg::MatmulTransposeAOp>(op) ||
+         isa<linalg::MatmulTransposeBOp>(op));
   return {32, 32, 32};
 }
 
@@ -492,12 +493,13 @@ struct PackMatmul : public tpp::impl::PackMatmulBase<PackMatmul> {
     auto packControlFn = [&](linalg::LinalgOp linalgOp)
         -> std::optional<linalg::BlockPackMatmulOptions> {
       linalg::BlockPackMatmulOptions options;
+      auto *op = linalgOp.getOperation();
 
       // Pack only these named matmul variants.
-      if (!(isa<linalg::MatmulOp>(linalgOp) ||
-            isa<linalg::MatmulTransposeAOp>(linalgOp) ||
-            isa<linalg::MatmulTransposeBOp>(linalgOp) ||
-            isa<linalg::BatchMatmulOp>(linalgOp))) {
+      if (!(isa<linalg::MatmulOp>(op) ||
+            isa<linalg::MatmulTransposeAOp>(op) ||
+            isa<linalg::MatmulTransposeBOp>(op) ||
+            isa<linalg::BatchMatmulOp>(op))) {
         return std::nullopt;
       }
 

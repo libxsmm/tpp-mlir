@@ -65,14 +65,39 @@ llvm::cl::opt<std::string>
           llvm::cl::desc("Comma-separated values of size of each tile (N,K,C)"),
           llvm::cl::value_desc("32,32,32"), llvm::cl::init(""));
 
-// Float type
+// Float type flag to indicate input data type. It is being extended to further
+// indicate mixed precision types, source and destination types in case of
+// quantization using 'mx-' prefix. This may be changed further with clarity on
+// quantization ops.
 llvm::cl::opt<std::string>
     floatType("float-type", llvm::cl::desc("Float type and its bitsize"),
-              llvm::cl::value_desc("f32|f16|bf16"), llvm::cl::init("f32"));
+              llvm::cl::value_desc(
+                  "f32|f16|bf16|mx-bf16|mx-f16|mx-i8|mx-i8-f32|mx-f32-i8"),
+              llvm::cl::init("f32"));
+
+// Scale type flag to chose data type of scaling factor.For now it is kind of a
+// place holder.
+llvm::cl::opt<std::string>
+    scaleType("scale-type", llvm::cl::desc("Data type of scaling factor"),
+              llvm::cl::value_desc("f32|i32"), llvm::cl::init(""));
+
+// Quantization type to specify the quantization kernel to be generated.
+llvm::cl::opt<std::string>
+    quantizationType("quant-type", llvm::cl::desc("Specify quantization type"),
+                     llvm::cl::value_desc("quantize|dequantize"),
+                     llvm::cl::init(""));
 
 // Random seed
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
                         llvm::cl::value_desc("int"), llvm::cl::init(0));
+
+// Identity matrix
+// Replace single square argument with identity matrix
+// Note: Must have two arguments and the selected must be square
+llvm::cl::opt<bool> identity("identity",
+                             llvm::cl::desc("Identity matrix on weight (bias 1s)"),
+                             llvm::cl::value_desc("bool"),
+                             llvm::cl::init(false));
 
 // Output filename
 llvm::cl::opt<std::string> filename("o", llvm::cl::desc("Output filename"),
@@ -110,8 +135,8 @@ int main(int argc, char **argv) {
 
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
 
-  MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, floatType, seed,
-                    enableBias, enableRelu, enableSoftmax, keepGenericMatmul,
-                    vnni);
-  return gen.generate(filename);
+  MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, floatType,
+                    scaleType, quantizationType, seed, identity, enableBias,
+                    enableRelu, enableSoftmax, keepGenericMatmul, vnni);
+  return gen.generate(filename, floatType.getValue().find("mx-", 0) == 0);
 }

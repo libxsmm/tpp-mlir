@@ -8,10 +8,17 @@ if(USE_OneDNN)
   set(ONEDNN_LIBS "tpp_dnnl_runner_utils")
 endif()
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties(
+    tpp-opt.cpp
+    PROPERTIES COMPILE_FLAGS "-Wno-error=subobject-linkage")
+endif()
+
+
 set(LIBS
-        ${dialect_libs}
-        ${conversion_libs}
-        ${extension_libs}
+        MLIRRegisterAllExtensions
+        MLIRRegisterAllDialects
+        MLIRRegisterAllPasses
         MLIRToLLVMIRTranslationRegistration
         MLIROptLib
         TPPPipeline

@@ -24,52 +24,6 @@ func.func @matmul(%arg0: tensor<2048x2048xbf16>, %arg1: tensor<2048x2048xbf16>, 
 
 // -----
 
-func.func @matmul_transpose_a(%arg0: tensor<2048x2048xbf16>, %arg1: tensor<2048x2048xbf16>, %arg2: tensor<2048x2048xbf16>)
-    -> tensor<2048x2048xbf16> {
-  %0 = linalg.matmul_transpose_a ins(%arg0, %arg1: tensor<2048x2048xbf16>, tensor<2048x2048xbf16>)
-                                 outs(%arg2: tensor<2048x2048xbf16>)
-    -> tensor<2048x2048xbf16>
-  return %0 : tensor<2048x2048xbf16>
-}
-
-// CHECK-LABEL: @matmul_transpose_a(
-// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>,
-// CHECK-SAME: %[[ARG1:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>,
-// CHECK-SAME: %[[ARG2:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>
-// CHECK: memref.subview %[[ARG0]]
-// CHECK: linalg.transpose
-// CHECK: memref.subview %[[ARG1]]
-// CHECK: call @xsmm_unary_invoke
-// CHECK: memref.subview %[[ARG2]]
-// CHECK: call @xsmm_intel_amx_tile_config_invoke
-// CHECK: call @xsmm_brgemm_invoke
-// CHECK: call @xsmm_intel_amx_tile_config_invoke
-
-// -----
-
-func.func @matmul_transpose_b(%arg0: tensor<2048x2048xbf16>, %arg1: tensor<2048x2048xbf16>, %arg2: tensor<2048x2048xbf16>)
-    -> tensor<2048x2048xbf16> {
-  %0 = linalg.matmul_transpose_b ins(%arg0, %arg1: tensor<2048x2048xbf16>, tensor<2048x2048xbf16>)
-                                 outs(%arg2: tensor<2048x2048xbf16>)
-    -> tensor<2048x2048xbf16>
-  return %0 : tensor<2048x2048xbf16>
-}
-
-// CHECK-LABEL: @matmul_transpose_b(
-// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>,
-// CHECK-SAME: %[[ARG1:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>,
-// CHECK-SAME: %[[ARG2:[a-zA-Z0-9]+]]: memref<2048x2048xbf16>
-// CHECK: memref.subview %[[ARG0]]
-// CHECK: call @xsmm_unary_invoke
-// CHECK: memref.subview %[[ARG1]]
-// CHECK: linalg.transpose
-// CHECK: memref.subview %[[ARG2]]
-// CHECK: call @xsmm_intel_amx_tile_config_invoke
-// CHECK: call @xsmm_brgemm_invoke
-// CHECK: call @xsmm_intel_amx_tile_config_invoke
-
-// -----
-
 func.func @batch_matmul(%arg0: tensor<8x2048x2048xbf16>, %arg1: tensor<8x2048x2048xbf16>, %arg2: tensor<8x2048x2048xbf16>)
     -> tensor<8x2048x2048xbf16> {
   %0 = linalg.batch_matmul ins(%arg0, %arg1: tensor<8x2048x2048xbf16>, tensor<8x2048x2048xbf16>)

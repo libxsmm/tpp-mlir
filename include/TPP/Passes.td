@@ -145,7 +145,6 @@ def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
    let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86vector::X86VectorDialect" ];
 }
 
-
 def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
    let summary = "Perform  lowering of vector contraction operation";
    let description = [{Add commentMore actions
@@ -155,6 +154,24 @@ def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
 			     "scf::SCFDialect", 
 			     "arith::ArithDialect",
 			     "x86vector::X86VectorDialect" ];
+  let options = [
+         Option<"targetFeature", "target-feature", "std::string", "",
+                "Target feature for a given architecture">,
+  ];
+}
+
+def MicroKernelsAMX : Pass<"vector-contract-to-micro-kernels-amx"> {
+   let summary = "Perform AMX target lowering of vector contraction operation";
+   let description = [{
+     Perform  flat layout AMX target micro kernel lowering of vector contraction operation.
+   }];
+   let dependentDialects = [ "vector::VectorDialect",
+                             "memref::MemRefDialect",
+                             "linalg::LinalgDialect",
+                             "scf::SCFDialect",
+                             "arith::ArithDialect",
+                             "amx::AMXDialect",
+                             "x86vector::X86VectorDialect" ];
 }
 
 def ConvertXsmmToFunc : Pass<"convert-xsmm-to-func", "ModuleOp"> {
@@ -564,6 +581,9 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
     Option<"printResult", "print", "bool",
             /*default=*/"false",
            "Print kernel results.">,
+    Option<"printInput", "print-input", "bool",
+            /*default=*/"false",
+           "Print kernel inputs">,
     Option<"randomSplat", "random-splat", "bool",
             /*default=*/"false",
            "Replace splat dense tensors with random values.">,
@@ -573,6 +593,9 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
     Option<"initType", "init-type", "std::string",
             /*default=*/"",
            "Initializer type (const, simple, cont, rand, normal).">,
+    Option<"identity", "identity", "int64_t",
+            /*default=*/"-1",
+           "Identity square argument (-1=none, 0=a, 1=b, ...).">,
   ];
 }
 
@@ -679,6 +702,33 @@ def LinalgVectorize : Pass<"linalg-vectorize"> {
 def VectorDropUnitDims : Pass<"vector-drop-unit-dims"> {
   let summary = "Drop unit dims from vector ops.";
   let dependentDialects = ["vector::VectorDialect"];
+}
+
+def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
+  let summary = "Convert vector ops to x86 sequences.";
+  let description = [{
+    Lowers generic vector ops into specialized x86
+    sequences of operations.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "x86vector::X86VectorDialect",
+                           "amx::AMXDialect",
+                           "arith::ArithDialect"];
+}
+
+def RegisterUnroll : Pass<"register-unroll"> {
+  let summary = "Unroll ops for register sizes.";
+  let description = [{
+    Unroll vector ops to bring them to hardware-compatible shapes.
+  }];
+  let dependentDialects = ["vector::VectorDialect",
+                           "arith::ArithDialect",
+                           "math::MathDialect",
+                           "affine::AffineDialect"];
+  let options = [
+    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
+               "Unroll shape sizes for the innermost dims: [M, N, K]">
+  ];
 }
 
 #endif // TPP_DIALECT_TPP_PASSES

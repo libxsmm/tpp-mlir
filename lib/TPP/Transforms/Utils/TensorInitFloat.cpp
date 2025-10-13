@@ -51,7 +51,7 @@ void TensorInitFloat::convertType(llvm::APFloat &value) {
   }
 }
 
-DenseElementsAttr ConstantTensorInitFloat::get(ShapedType shape) {
+FailureOr<DenseElementsAttr> ConstantTensorInitFloat::get(ShapedType shape) {
   auto floatValue = APFloat(1.0F);
   if (!isTypeSupported(shape.getElementType()))
     assert(false && "Element type not supported");
@@ -64,24 +64,6 @@ DenseElementsAttr ConstantTensorInitFloat::get(ShapedType shape) {
   return mlir::DenseElementsAttr::get(tensorType, floatValue);
 }
 
-void ConstantTensorInitFloat::fillData() {
-  assert(false && "Should not be called");
-}
-
-void SimpleTensorInitFloat::fillData() {
-  assert(buffer.size() == 0 && "Buffer not empty");
-  float data[3] = {0.3f, 0.6f, 0.9f};
-  for (size_t i = 0; i < size; i++)
-    push(data[i % 3]);
-}
-
-void ContinuousTensorInitFloat::fillData() {
-  assert(buffer.size() == 0 && "Buffer not empty");
-  float normFactor = static_cast<float>(size);
-  for (size_t i = 0; i < size; i++)
-    push(static_cast<float>(i) / normFactor);
-}
-
 void RandomTensorInitFloat::fillData() {
   assert(buffer.size() == 0 && "Buffer not empty");
   for (size_t i = 0; i < size; i++)
@@ -92,4 +74,18 @@ void NormalTensorInitFloat::fillData() {
   assert(buffer.size() == 0 && "Buffer not empty");
   for (size_t i = 0; i < size; i++)
     push(next());
+}
+
+void IdentityTensorInitFloat::fillData() {
+  assert(buffer.size() == 0 && "Buffer not empty");
+  APFloat zero = APFloat(0.0);
+  convertType(zero);
+  buffer.resize(size, zero);
+  size_t ld = dims[0];
+
+  // Shape is guaranteed to be "2D square" by `checkShape()`
+  for (size_t i=0; i < ld; i++) {
+    size_t offset = i*ld + i;
+    insert(offset, APFloat(1.0));
+  }
 }

@@ -62,7 +62,7 @@ void TensorInitInt::convertType(llvm::APInt &value) {
   assert(value.getBitWidth() == bitWidth && "Invalid element size");
 }
 
-DenseElementsAttr ConstantTensorInitInt::get(ShapedType shape) {
+FailureOr<DenseElementsAttr> ConstantTensorInitInt::get(ShapedType shape) {
   auto value = APInt(bitWidth, 1, isSigned);
   if (!isTypeSupported(shape.getElementType()))
     assert(false && "Element type not supported");
@@ -75,25 +75,6 @@ DenseElementsAttr ConstantTensorInitInt::get(ShapedType shape) {
   return mlir::DenseElementsAttr::get(tensorType, value);
 }
 
-void ConstantTensorInitInt::fillData() {
-  assert(false && "Should not be called");
-}
-
-void SimpleTensorInitInt::fillData() {
-  assert(buffer.size() == 0 && "Buffer not empty");
-  uint64_t data[3] = {0, 1, 2};
-  for (size_t i = 0; i < size; i++)
-    push(data[i % 3]);
-}
-
-void ContinuousTensorInitInt::fillData() {
-  assert(buffer.size() == 0 && "Buffer not empty");
-  float normFactor = static_cast<float>(size);
-  for (size_t i = 0; i < size; i++)
-    push(static_cast<uint64_t>((static_cast<float>(i) / normFactor) *
-                               upperBound));
-}
-
 void RandomTensorInitInt::fillData() {
   assert(buffer.size() == 0 && "Buffer not empty");
   for (size_t i = 0; i < size; i++)
@@ -104,4 +85,18 @@ void NormalTensorInitInt::fillData() {
   assert(buffer.size() == 0 && "Buffer not empty");
   for (size_t i = 0; i < size; i++)
     push(next());
+}
+
+void IdentityTensorInitInt::fillData() {
+  assert(buffer.size() == 0 && "Buffer not empty");
+  APInt zero = APInt(bitWidth, 0, isSigned);
+  convertType(zero);
+  buffer.resize(size, zero);
+  size_t ld = dims[0];
+
+  // Shape is guaranteed to be "2D square" by `checkShape()`
+  for (size_t i=0; i < ld; i++) {
+    size_t offset = i*ld + i;
+    insert(offset, APInt(bitWidth, 1, isSigned));
+  }
 }

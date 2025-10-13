@@ -32,10 +32,6 @@ echo "--- ENVIRONMENT"
 if [ ! "${COMPILER}" ]; then
   COMPILER=clang
 fi
-if [ "${COMPILER}" == "gcc" ]; then
-  echo "Hard-coding GCC to a known stable version (12.3)"
-  source /swtools/gcc/gcc-12.3.0/gcc_vars.sh
-fi
 if [ "${SANITIZERS}" ]; then
   SANITIZERS="-S"
 fi

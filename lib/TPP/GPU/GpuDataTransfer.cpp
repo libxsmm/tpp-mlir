@@ -146,19 +146,19 @@ static FailureOr<Value> transferMemref(RewriterBase &rewriter,
       return failure();
     gpuBuffer = *newBuffer;
   }
-  rewriter.create<gpu::MemcpyOp>(loc, std::nullopt, ValueRange{}, gpuBuffer,
+  rewriter.create<gpu::MemcpyOp>(loc, ValueRange{}, ValueRange{}, gpuBuffer,
                                  hostBuffer);
 
   // If requested, copy data back to the host.
   if (copyDataBack) {
     rewriter.setInsertionPointAfter(launchFuncOp);
-    rewriter.create<gpu::MemcpyOp>(loc, std::nullopt, ValueRange{}, hostBuffer,
+    rewriter.create<gpu::MemcpyOp>(loc, ValueRange{}, ValueRange{}, hostBuffer,
                                    gpuBuffer);
   }
 
   // Cleanup device buffer.
   rewriter.setInsertionPoint(block.getTerminator());
-  rewriter.create<gpu::DeallocOp>(loc, std::nullopt, gpuAlloc.getMemref());
+  rewriter.create<gpu::DeallocOp>(loc, ValueRange{}, gpuAlloc.getMemref());
 
   return gpuBuffer;
 }

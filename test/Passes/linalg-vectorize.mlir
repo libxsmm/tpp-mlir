@@ -54,7 +54,7 @@ func.func @vectorize_contract_mixed_precision_float(
 // CHECK-NOT: vector.transpose
 // CHECK: vector.transfer_read{{.*}}: tensor<128x256x2xbf16>, vector<128x256x2xbf16>
 // CHECK: vector.transfer_read{{.*}}: tensor<256x256xf32>, vector<256x256xf32>
-// CHECK-COUNT-2: arith.extf
+// CHECK-NOT: arith.extf
 // CHECK: vector.contract
 // CHECK: vector.transfer_write
 
@@ -92,7 +92,7 @@ module {
 // CHECK-NOT: vector.transpose
 // CHECK: vector.transfer_read{{.*}}: tensor<2x2x8x32x4xi8>, vector<2x2x8x32x4xi8>
 // CHECK: vector.transfer_read{{.*}}: tensor<1x2x32x32xi32>, vector<1x2x32x32xi32>
-// CHECK-COUNT-2: arith.extsi
+// CHECK-NOT: arith.extsi
 // CHECK: vector.contract
 // CHECK: vector.transfer_write
 

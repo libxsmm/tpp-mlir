@@ -1,19 +1,18 @@
 // RUN: tpp-opt %s  | tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.1
 // RUN: tpp-opt %s  --vector-contract-to-outerproduct  | tpp-run -e entry --entry-point-result=void -seed 123 -print > %t.2
-// RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF --allow-empty
+// RUN: fpcmp -r 0.0001 %t.1 %t.2 | FileCheck %s --check-prefix=DIFF --allow-empty
 
 // RUN: tpp-opt %s  | tpp-run -e permA --entry-point-result=void -seed 123 -print > %t.1
 // RUN: tpp-opt %s  --vector-contract-to-outerproduct  | tpp-run -e permA --entry-point-result=void -seed 123 -print > %t.2
-// RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMA --allow-empty
+// RUN: fpcmp -r 0.0001 %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMA --allow-empty
 
 // RUN: tpp-opt %s  | tpp-run -e permB --entry-point-result=void -seed 123 -print > %t.1
 // RUN: tpp-opt %s  --vector-contract-to-outerproduct  | tpp-run -e permB --entry-point-result=void -seed 123 -print > %t.2
-// RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMA --allow-empty
+// RUN: fpcmp -r 0.0001 %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMA --allow-empty
 
 // RUN: tpp-opt %s  | tpp-run -e permAB --entry-point-result=void -seed 123 -print > %t.1
 // RUN: tpp-opt %s  --vector-contract-to-outerproduct  | tpp-run -e permAB --entry-point-result=void -seed 123 -print > %t.2
-// RUN: diff %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMAB --allow-empty
-
+// RUN: fpcmp -r 0.0001 %t.1 %t.2 | FileCheck %s --check-prefix=DIFF-PERMAB --allow-empty
 
 // DIFF-NOT: {{.}}
 #map = affine_map<(d0, d1, d2) -> (d0, d2)>

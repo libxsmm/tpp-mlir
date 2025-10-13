@@ -11,8 +11,8 @@ on:
         description: "Run on Zen5"
         type: boolean
         default: true
-      RUN_CLX_BENCH:
-        description: "Run on CLX"
+      RUN_ARL_BENCH:
+        description: "Run on ARL"
         type: boolean
         default: true
   push:
@@ -96,32 +96,32 @@ jobs:
                ${{ github.workspace }}/scripts/github/benchmark.sh -o"
           ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
 
-  TPP-MLIR-CLX-BASE:
+  TPP-MLIR-ARL-BASE:
     runs-on: pcl-tiergarten
     if: |
-      (github.event_name == 'push') || 
-      (github.event_name == 'workflow_dispatch' && inputs.RUN_CLX_BENCH) ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.RUN_ARL_BENCH) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
-      - name: CLX Base
+      - name: ARL Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
                 ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
-          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+          ${{ env.SRUN }} --partition=arl --time=0:30:00 -- $CMD
 
-  TPP-MLIR-CLX-OMP:
+  TPP-MLIR-ARL-OMP:
     runs-on: pcl-tiergarten
     if: |
-      (github.event_name == 'push') || 
-      (github.event_name == 'workflow_dispatch' && inputs.RUN_CLX_BENCH) ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.RUN_ARL_BENCH) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
-      - name: CLX OpenMP
+      - name: ARL OpenMP
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
                 ${{ github.workspace }}/scripts/github/benchmark.sh -o"
-          ${{ env.SRUN }} --partition=clxap --time=0:30:00 -- $CMD
+          ${{ env.SRUN }} --partition=arl --time=0:30:00 -- $CMD

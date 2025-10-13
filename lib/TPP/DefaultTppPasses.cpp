@@ -117,7 +117,8 @@ private:
       pm.addPass(createRewriteBatchMatmulToMatmul());
 
       // Applies a set of passes at the linalg level to fuse and pack.
-      TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose};
+      TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose, 
+	        disableVnniPacking};
       pm.addPass(createTppMapping(tppMappingOptions));
 
       // Generalize linalg.pack and linalg.unpack.

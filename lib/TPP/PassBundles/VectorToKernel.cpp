@@ -52,18 +52,13 @@ struct VectorToKernel : public tpp::impl::VectorToKernelBase<VectorToKernel>,
 
 private:
   void constructPipeline() override {
-    // TODO: Pass ordering based on target architecture starting from AMX ->
-    // avx512 -> avx2 to subset needs to be improved by moving out some logic of
-    // Bf16DotProduct related to iterarg creation and let hoistvectorTransfer
-    // pass address it.
-    pm.addNestedPass<func::FuncOp>(createBF16DotProduct());
     pm.addNestedPass<func::FuncOp>(createHoistVectorTransfers());
     if (vnni::utils::hasAMX())
       pm.addNestedPass<func::FuncOp>(createVectorContractToAMX());
-    pm.addNestedPass<func::FuncOp>(createMicroKernels());
-    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-    VectorContractToFMAOptions options;
+    MicroKernelsOptions options;
     options.targetFeature = vecBundleCpuTargetFeature;
-    pm.addNestedPass<func::FuncOp>(createVectorContractToFMA(options));
+    pm.addNestedPass<func::FuncOp>(createMicroKernels(options));
+    pm.addNestedPass<func::FuncOp>(createMicroKernelsAMX());
+    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   }
 };

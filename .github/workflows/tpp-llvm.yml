@@ -27,6 +27,6 @@ jobs:
       - name: LLVM CUDA
         run: |-
               GPU=cuda scripts/github/check_llvm.sh || \
-              ${{ env.SRUN }} --partition=a100,v100 --time=0:30:00 -- \
+              ${{ env.SRUN }} --partition=a100 --time=0:30:00 -- \
               'KIND=RelWithDebInfo COMPILER=clang GPU=cuda \
               ${{ github.workspace }}/scripts/github/build_llvm.sh'

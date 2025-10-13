@@ -10,9 +10,9 @@ if(USE_OneDNN)
 endif()
 
 set(LIBS
-        ${dialect_libs}
-        ${conversion_libs}
-        ${extension_libs}
+        MLIRRegisterAllExtensions
+        MLIRRegisterAllDialects
+        MLIRRegisterAllPasses
         MLIRAnalysis
         MLIRExecutionEngine
         MLIRIR

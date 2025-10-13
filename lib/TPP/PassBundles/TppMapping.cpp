@@ -62,7 +62,10 @@ private:
     pm.addPass(createPackConv2DNchwFchw());
     pm.addPass(createRewriteConvToMatmulOrBrgemm());
     pm.addPass(createPackMatmul());
-    pm.addPass(createPackVNNI());
+
+    if (!disableVnniPacking) {
+      pm.addPass(createPackVNNI());
+    }
 
     if (lowerPackUnpackWithoutTranspose) {
       pm.addPass(createLowerPacksAndUnpacksWithoutTranspose());

@@ -10,6 +10,7 @@
 #define TPP_TRANSFORMS_UTILS_VNNIUTILS_H
 
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/ArrayRef.h"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -35,14 +36,21 @@ enum class VnniOperandRank {
   BRGEMM_INS = 4,
   BRGEMM_OUTS = 3
 };
-// Returns True if the current architecture supports AVX2 instructions.
+
+// Returns true if the current architecture supports AVX2 instructions.
 bool hasAVX2();
 
-// Returns True if the current architecture supports AVX512 instructions.
+// Returns true if the current architecture supports AVX512 instructions.
 bool hasAVX512();
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AMX instructions.
 bool hasAMX();
+
+// Returns true if the current architecture supports SVE-256 instructions.
+bool hasSVE256();
+
+// Returns true if the current architecture supports SVE-512 instructions.
+bool hasSVE512();
 
 // Returns the current target architecture name
 std::string getTargetArchName();
@@ -65,6 +73,11 @@ bool isInVnniLayout(int64_t expectedRank, ShapedType shape,
 // Return true if the linalg operation is in VNNI layout.
 // Optionally, the check can be constrained to a specific VNNI blocking factor.
 bool isInVnniLayout(linalg::LinalgOp linalgOp,
+                    std::optional<unsigned> blockingFactor = std::nullopt);
+
+// Return true if the operation is in VNNI layout.
+// Optionally, the check can be constrained to a specific VNNI blocking factor.
+bool isInVnniLayout(Operation *op, llvm::ArrayRef<AffineMap> indexingMaps,
                     std::optional<unsigned> blockingFactor = std::nullopt);
 
 } // namespace utils

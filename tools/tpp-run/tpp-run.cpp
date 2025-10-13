@@ -51,11 +51,12 @@
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Target/LLVMIR/ModuleTranslation.h"
+#include "mlir/Dialect/Transform/TuneExtension/TuneExtensionOps.h"
+#include "mlir/Dialect/Transform/TuneExtension/TuneExtension.h"
 
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
-#include "TPP/Dialect/Tune/TuneTransformOps.h"
 #include "TPP/GPU/Utils.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
@@ -74,6 +75,11 @@ llvm::cl::opt<bool> printKernelResult("print",
                                       llvm::cl::desc("Print kernel result"),
                                       llvm::cl::init(false));
 
+// Print input args
+llvm::cl::opt<bool> printKernelInput("print-input",
+                                     llvm::cl::desc("Print kernel inputs"),
+                                     llvm::cl::init(false));
+
 // Replace dense splat tensors with random dense
 llvm::cl::opt<bool>
     splatRandom("splat-to-random",
@@ -85,17 +91,25 @@ llvm::cl::opt<int> seed("seed",
                         llvm::cl::desc("Random seed, default 0 (no random)"),
                         llvm::cl::value_desc("int"), llvm::cl::init(0));
 
-// Speed optimization level
-llvm::cl::opt<unsigned>
-    optLevel("O", llvm::cl::desc("Speed optimization level (O0, O1, O2, O3)"),
-             llvm::cl::value_desc("0-3"), llvm::cl::init(2));
-
 // Initializer type
 // Default const if seed == 0, and normal otherwise
 llvm::cl::opt<std::string> initType(
     "init-type",
-    llvm::cl::desc("Initializer type (const, simple, cont, rand, normal)"),
+    llvm::cl::desc("Initializer type (const, rand, normal)"),
     llvm::cl::init(""));
+
+// Identity matrix
+// Replace single square argument with identity matrix
+// Note: Must have two arguments and the selected must be square
+llvm::cl::opt<int> identity(
+    "identity",
+    llvm::cl::desc("Identity matrix on one argument (-1=none, 0=a, 1=b, ...)"),
+    llvm::cl::init(-1));
+
+// Speed optimization level
+llvm::cl::opt<unsigned>
+    optLevel("O", llvm::cl::desc("Speed optimization level (O0, O1, O2, O3)"),
+             llvm::cl::value_desc("0-3"), llvm::cl::init(2));
 
 // Print LLVM IR before lowering
 llvm::cl::opt<bool> printLLVM("print-llvm",
@@ -190,9 +204,11 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   // Warmup on GPUs are currently breaking buffer allocation on GPUs
   wrapperOpts.benchWarmup = defGpuBackend.empty();
   wrapperOpts.printResult = printKernelResult;
+  wrapperOpts.printInput = printKernelInput;
   wrapperOpts.randomSplat = splatRandom;
   wrapperOpts.seed = seed;
   wrapperOpts.initType = initType;
+  wrapperOpts.identity = identity;
   passManager.addPass(tpp::createTppRunnerWrapper(wrapperOpts));
 
   tpp::DefaultPipelineOptions defPipelineOpts{defGpuBackend,
@@ -316,7 +332,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::xsmm::XsmmDialect>();
   registry.insert<mlir::check::CheckDialect>();
   registry.insert<mlir::perf::PerfDialect>();
-  mlir::tune::registerTransformDialectExtension(registry);
+  mlir::transform::registerTuneExtension(registry);
   registerAllDialects(registry);
   registerAllExtensions(registry);
   registerAllToLLVMIRTranslations(registry);

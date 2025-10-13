@@ -62,6 +62,7 @@ import argparse
 import json
 import shlex
 import shutil
+import subprocess
 
 sys.path.append("harness")
 
@@ -459,6 +460,12 @@ class BenchmarkDriver(object):
                     else:
                         # List of possible supported (ex. avx512 OR sve2)
                         for ext in run["extensions"]:
+                            if ext == "arl":
+                                env = os.environ.copy()
+                                compile_result = subprocess.run([self.args.build + "/bin/check-cpuid"], env=env, capture_output=True, text=True)
+                                if compile_result.returncode == 1:
+                                    supported = True
+                                    break
                             if self.exts.hasFlag(ext):
                                 self.logger.debug(
                                     f"{key} extension {ext} supported"
@@ -515,7 +522,6 @@ class BenchmarkDriver(object):
             print("")
 
         return True
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="TPP-MLIR Benchmark Harness")

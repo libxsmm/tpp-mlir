@@ -40,13 +40,14 @@ class FuncOp;
 // pipeline.
 struct MLIRBenchConfig {
   MLIRBenchConfig() = default;
-  MLIRBenchConfig(int seed, TensorInitType initType, std::string backend,
+  MLIRBenchConfig(int seed, TensorInitType initType, int identity, std::string backend,
                   bool offloadToDevice)
-      : seed(seed), initType(initType), backend(backend),
+      : seed(seed), initType(initType), identity(identity), backend(backend),
         offloadToDevice(offloadToDevice) {}
 
   int seed = 0;
   TensorInitType initType = TensorInitType::Auto;
+  int identity = -1;
   std::string backend = "cpu";
   bool offloadToDevice = true;
 };
@@ -85,6 +86,9 @@ class MLIRBench {
   /// Seed for the random tensor filling
   int seed;
 
+  /// Which argument is the identity, if any
+  int identity;
+
   /// Tensor init type
   TensorInitType initType;
 
@@ -105,6 +109,8 @@ class MLIRBench {
   Value registerOnGpu(Value buf, MemRefType memRefTy);
 
 public:
+  /// Return kernelArgs
+  llvm::SmallVector<Value> getKernelArgs() { return kernelArgs; }
   /// Creates context, builder
   MLIRBench(Operation *op, const MLIRBenchConfig &config);
 

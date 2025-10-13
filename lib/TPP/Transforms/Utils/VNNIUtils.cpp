@@ -23,22 +23,34 @@ namespace mlir {
 namespace vnni {
 namespace utils {
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AMX instructions.
 bool hasAMX() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SPR) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns true if the current architecture supports AVX2 instructions.
 bool hasAVX2() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX2) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
 }
 
-// Returns True if the current architecture supports AMX instructions.
+// Returns True if the current architecture supports AVX512 instructions.
 bool hasAVX512() {
   return (libxsmm_get_target_archid() >= LIBXSMM_X86_AVX512_SKX) &&
          (libxsmm_get_target_archid() < LIBXSMM_X86_ALLFEAT);
+}
+
+// Returns true if the current architecture supports SVE-256 instructions.
+bool hasSVE256() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_AARCH64_NEOV2) &&
+         (libxsmm_get_target_archid() <= LIBXSMM_AARCH64_NEOV1);
+}
+
+// Returns true if the current architecture supports SVE-512 instructions.
+bool hasSVE512() {
+  return (libxsmm_get_target_archid() >= LIBXSMM_AARCH64_SVE512) &&
+         (libxsmm_get_target_archid() <= LIBXSMM_AARCH64_A64FX);
 }
 
 // Returns the current target architecture name
@@ -57,14 +69,17 @@ unsigned getVnniBlockingFactor(Type type, Operation *op) {
   unsigned blockingFactor = 0;
 
   auto elementType = getElementTypeOrSelf(type);
-  if (elementType.isBF16()) {
+  if (elementType.isBF16() || elementType.isInteger(8)) {
     // Check if a VNNI factor hint is associated to the IR via DLTI.
     auto vnniValue = dlti::utils::query(op, {"CPU", "vnni"});
     if (succeeded(vnniValue)) {
       if (auto intAttr = llvm::dyn_cast<IntegerAttr>(*vnniValue))
         blockingFactor = intAttr.getInt();
     } else {
-      blockingFactor = libxsmm_cpuid_dot_pack_factor(LIBXSMM_DATATYPE_BF16);
+      blockingFactor =
+          elementType.isBF16()
+              ? libxsmm_cpuid_dot_pack_factor(LIBXSMM_DATATYPE_BF16)
+              : libxsmm_cpuid_dot_pack_factor(LIBXSMM_DATATYPE_I8);
     }
   }
 
@@ -77,23 +92,42 @@ unsigned getVnniBlockingFactor(Type type, Operation *op) {
 
 bool isInVnniLayout(linalg::LinalgOp linalgOp,
                     std::optional<unsigned> blockingFactor) {
+  return isInVnniLayout(linalgOp.getOperation(),
+                        linalgOp.getIndexingMapsArray(), blockingFactor);
+}
+
+/// Infer the iterator types from the init affine map. This looks at which dims
+/// are present in the map results, and returns an iterator types array with
+/// parallel types for dims that are present, and reduction types for dims that
+/// are not present.
+static FailureOr<SmallVector<mlir::utils::IteratorType>>
+inferIteratorsFromOutMap(AffineMap map) {
+  if (!map.isProjectedPermutation())
+    return failure();
+  SmallVector<mlir::utils::IteratorType> iterators(
+      map.getNumDims(), mlir::utils::IteratorType::reduction);
+  for (auto expr : map.getResults())
+    if (auto dim = dyn_cast<AffineDimExpr>(expr))
+      iterators[dim.getPosition()] = mlir::utils::IteratorType::parallel;
+  return iterators;
+}
+
+bool isInVnniLayout(Operation *op, ArrayRef<AffineMap> indexingMaps,
+                    std::optional<unsigned> blockingFactor) {
   // Narrow down type operations - VNNI only applies to contractions.
-  if (!linalg::isaContractionOpInterface(linalgOp))
+  FailureOr<linalg::ContractionDimensions> dims =
+      linalg::inferContractionDims(indexingMaps);
+  if (failed(dims))
     return false;
 
-  auto matA = linalgOp->getOperand(0);
-  auto matB = linalgOp->getOperand(1);
+  auto matA = op->getOperand(0);
+  auto matB = op->getOperand(1);
   auto typeA = dyn_cast<ShapedType>(matA.getType());
   auto typeB = dyn_cast<ShapedType>(matB.getType());
   unsigned rankA = typeA.getRank();
   unsigned rankB = typeB.getRank();
   // VNNI format requires at least 1 parallel and 2 reduction dimensions.
   if (rankA < 3 || rankB < 3)
-    return false;
-
-  FailureOr<linalg::ContractionDimensions> dims =
-      linalg::inferContractionDims(linalgOp);
-  if (failed(dims))
     return false;
 
   // At least two reduction dimensions are expected:
@@ -106,10 +140,12 @@ bool isInVnniLayout(linalg::LinalgOp linalgOp,
   // The input matrix dimensions layout must match the following:
   //   - matrix A - [...][K/vnniFactor][vnniFactor]
   //   - matrix B - [...][K/vnniFactor][N][vnniFactor]
-  SmallVector<mlir::utils::IteratorType> iteratorTypes =
-      linalgOp.getIteratorTypesArray();
-  AffineMap mapA = linalgOp.getMatchingIndexingMap(&linalgOp->getOpOperand(0));
-  AffineMap mapB = linalgOp.getMatchingIndexingMap(&linalgOp->getOpOperand(1));
+  auto maybeIters = inferIteratorsFromOutMap(indexingMaps[2]);
+  if (failed(maybeIters))
+    return false;
+  SmallVector<mlir::utils::IteratorType> iteratorTypes = *maybeIters;
+  AffineMap mapA = indexingMaps[0];
+  AffineMap mapB = indexingMaps[1];
 
   auto vnniDimA = dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 1));
   auto vnniDimB = dyn_cast<AffineDimExpr>(mapB.getResult(rankB - 1));
@@ -156,7 +192,8 @@ bool isInVnniLayout(VnniOperandRank expectedRank, ShapedType shape,
 
 bool isInVnniLayout(int64_t expectedRank, ShapedType shape,
                     std::optional<unsigned> blockingFactor) {
-  if (shape.getRank() != expectedRank || !shape.getElementType().isBF16())
+  if (shape.getRank() != expectedRank ||
+      !(shape.getElementType().isBF16() || shape.getElementType().isInteger(8)))
     return false;
 
   auto vnniDim = shape.getShape().back();

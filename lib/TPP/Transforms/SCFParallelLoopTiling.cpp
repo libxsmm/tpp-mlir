@@ -157,7 +157,7 @@ void tileParallelLoop(ParallelOp op, ArrayRef<unsigned> tileSizes,
     b.setInsertionPointToStart(innerLoop.getBody());
     // Insert in-bound check
     Value inbound =
-        b.create<arith::ConstantIntOp>(op.getLoc(), 1, b.getIntegerType(1));
+        b.create<arith::ConstantIntOp>(op.getLoc(), 1, 1);
     for (auto [outerUpperBound, outerIV, innerIV, innerStep] :
          llvm::zip(outerLoop.getUpperBound(), outerLoop.getInductionVars(),
                    innerLoop.getInductionVars(), innerLoop.getStep())) {

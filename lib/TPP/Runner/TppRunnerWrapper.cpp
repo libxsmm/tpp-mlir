@@ -56,7 +56,7 @@ struct TppRunnerWrapper
     }
 
     // Benchmark object.
-    MLIRBenchConfig config(seed, tensorInitType, backend, offloadToDevice);
+    MLIRBenchConfig config(seed, tensorInitType, identity, backend, offloadToDevice);
     MLIRBench bench(module, config);
 
     // Can only either print or run benchmarks, make this clear before we try to
@@ -109,6 +109,19 @@ struct TppRunnerWrapper
     if (failed(bench.createKernelArgs())) {
       (void)bench.emitError("Cannot create kernel inputs");
       return;
+    }
+
+    // Print the kernel's input arguments by iterating through kernelArgs
+    if (printInput) {
+      for (auto arg : bench.getKernelArgs()) {
+        if (auto shapedType = dyn_cast<ShapedType>(arg.getType())) {
+          if (shapedType.getRank() == 1)
+            continue;
+          if (shapedType.hasStaticShape())
+            if (failed(bench.printShapedType(arg)))
+              return;
+        }
+      }
     }
 
     // Either run once or run benchmarks

@@ -3,7 +3,6 @@ add_mlir_public_c_api_library(TPPCAPI
   LINK_LIBS PUBLIC
   TPPCheckDialect
   TPPPerfDialect
-  TPPTuneDialect
   TPPXsmmDialect
   TPPTransforms
   TPPPipeline

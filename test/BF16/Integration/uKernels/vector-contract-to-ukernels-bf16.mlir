@@ -102,3 +102,40 @@ func.func @optimal_register_blocking(%arg0: memref<2x24x16x2xbf16>) -> memref<24
     }
   return %alloc : memref<24x128xbf16>
 }
+
+// RUN: tpp-run -e gemm_splat --entry-point-result=void --disable-vnni-packing -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
+// RUN: tpp-opt --tile-brgemm-linalg="registerBlocking=9,48,2"  --loop-invariant-code-motion --vectorization-pass --hoist-vector-transfer -vector-contract-to-micro-kernels | tpp-run -e gemm_splat --entry-point-result=void -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: fpcmp -r 0.01 %t.1 %t.2
+func.func @gemm_splat(%arg0: memref<1x9x32xbf16>, %arg1: memref<1x32x48xbf16>, %arg2: memref<9x48xbf16>) -> memref<9x48xbf16> {
+      linalg.batch_reduce_matmul ins(%arg0, %arg1 : memref<1x9x32xbf16>, memref<1x32x48xbf16>) outs(%arg2 : memref<9x48xbf16>)
+      return %arg2 : memref<9x48xbf16>
+}
+
+// RUN: tpp-run -e mlp_splat --entry-point-result=void --disable-vnni-packing -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
+// RUN: tpp-run -e mlp_splat --entry-point-result=void -print --disable-vnni-packing --vector-to-kernels --registerBlocking=2,32,2  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: fpcmp -r 0.01 %t.1 %t.2
+#map_splat = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+#map_splat1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+#map_splat2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+#map_splat3 = affine_map<(d0, d1, d2, d3) -> (d1, d3)>
+#map_splat4 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2, d3)>
+func.func @mlp_splat(%arg0: tensor<8x32x32x32xbf16>, %arg1: tensor<32x32x32x32xbf16>, %arg2: tensor<32x32xbf16>, %arg3: tensor<8x32x32x32xbf16>) -> tensor<8x32x32x32xbf16> {
+  %0 = linalg.generic {indexing_maps = [#map_splat, #map_splat1, #map_splat2], iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]} ins(%arg0, %arg1 : tensor<8x32x32x32xbf16>, tensor<32x32x32x32xbf16>) outs(%arg3 : tensor<8x32x32x32xbf16>) {
+  ^bb0(%in: bf16, %in_0: bf16, %out: bf16):
+    %3 = arith.mulf %in, %in_0 : bf16
+    %4 = arith.addf %out, %3 : bf16
+    linalg.yield %4 : bf16
+  } -> tensor<8x32x32x32xbf16>
+  %1 = linalg.generic {indexing_maps = [#map_splat3, #map_splat4], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%arg2 : tensor<32x32xbf16>) outs(%0 : tensor<8x32x32x32xbf16>) {
+  ^bb0(%in: bf16, %out: bf16):
+    %3 = arith.addf %in, %out : bf16
+    linalg.yield %3 : bf16
+  } -> tensor<8x32x32x32xbf16>
+  %cst = arith.constant 0.000000e+00 : bf16
+  %2 = linalg.generic {indexing_maps = [#map_splat4], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} outs(%1 : tensor<8x32x32x32xbf16>) {
+  ^bb0(%out: bf16):
+    %3 = arith.maximumf %out, %cst : bf16
+    linalg.yield %3 : bf16
+  } -> tensor<8x32x32x32xbf16>
+  return %2 : tensor<8x32x32x32xbf16>
+}
