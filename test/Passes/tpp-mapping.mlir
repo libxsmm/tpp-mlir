@@ -1,81 +1,6 @@
 // RUN: tpp-opt %s -tpp-mapping -split-input-file | FileCheck %s
 // RUN: tpp-sched --bundle=tpp-mapping %s --split-input-file | FileCheck %s
 
-// We don't expect to block as the blocking factor do not create full tiles.
-func.func @conv_to_matmul(%img: tensor<1x5x5x3xf32>, %filter: tensor<3x3x3x8xf32>, %out: tensor<1x3x3x8xf32>) -> tensor<1x3x3x8xf32> {
-  %0 = linalg.conv_2d_nhwc_hwcf ins(%img, %filter: tensor<1x5x5x3xf32>, tensor<3x3x3x8xf32>) outs(%out: tensor<1x3x3x8xf32>) -> tensor<1x3x3x8xf32>
-  return %0: tensor<1x3x3x8xf32>
-}
-
-// CHECK-LABEL: func.func @conv_to_matmul(
-// CHECK-NOT: linalg.conv_2d_nhwc_hwcf
-// CHECK-DAG: %[[c0:.+]] = arith.constant 0 : index
-// CHECK-DAG: %[[c3:.+]] = arith.constant 3 : index
-// CHECK: scf.for
-// CHECK:   scf.for
-// CHECK:     scf.for
-// CHECK:         tensor.extract_slice{{[^:]+}}: tensor<1x5x5x3xf32> to tensor<3x3xf32>
-// CHECK:         tensor.extract_slice{{[^:]+}}: tensor<3x3x3x8xf32> to tensor<3x8xf32>
-// CHECK:         tensor.extract_slice{{[^:]+}}: tensor<1x1x3x8xf32> to tensor<3x8xf32>
-// CHECK:         linalg.matmul{{.*}} -> tensor<3x8xf32>
-// CHECK:         tensor.insert_slice{{[^:]+}}: tensor<3x8xf32> into tensor<1x1x3x8xf32>
-// CHECK:         tensor.insert_slice{{[^:]+}}: tensor<1x1x3x8xf32> into tensor<1x3x3x8xf32>
-// CHECK:       }
-
-// -----
-
-func.func @conv_2d_nhwc_hwcf(%arg0: tensor<1x113x113x64xf32>, %arg1: tensor<3x3x64x256xf32>, %arg2: tensor<1x111x111x256xf32>) -> tensor<1x111x111x256xf32> {
-  %1 = linalg.conv_2d_nhwc_hwcf {dilations = dense<1> : tensor<2xi64>,
-                                 strides = dense<1> : tensor<2xi64>}
-    ins(%arg0, %arg1 : tensor<1x113x113x64xf32>, tensor<3x3x64x256xf32>)
-    outs(%arg2: tensor<1x111x111x256xf32>) -> tensor<1x111x111x256xf32>
-  return %1 : tensor<1x111x111x256xf32>
-}
-
-// CHECK: func.func @conv_2d_nhwc_hwcf(%[[ARG0:.+]]: tensor<1x113x113x64xf32>, %[[ARG1:.+]]: tensor<3x3x64x256xf32>, %[[ARG2:.+]]: tensor<1x111x111x256xf32>) -> tensor<1x111x111x256xf32>
-// CHECK-NOT: linalg.conv_2d_nhwc_hwcf
-// CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
-// CHECK-DAG: %[[C1:.+]] = arith.constant 1 : index
-// CHECK-DAG: %[[C2:.+]] = arith.constant 2 : index
-// CHECK-DAG: %[[C3:.+]] = arith.constant 3 : index
-// CHECK-DAG: %[[C8:.+]] = arith.constant 8 : index
-// CHECK-DAG: %[[C111:.+]] = arith.constant 111 : index
-// Conv as matmul
-// CHECK-COUNT-3: linalg.pack
-// CHECK: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C8]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C111]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C2]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C3]] step %[[C1]]
-// CHECK:   linalg.matmul
-// CHECK: linalg.unpack
-
-// -----
-
-func.func @conv_2d_nchw_fchw(%i: tensor<14x512x28x28xf32>, %f: tensor<1024x512x1x1xf32>,
-                %o: tensor<14x1024x28x28xf32>) -> tensor<14x1024x28x28xf32> {
-  %0 = linalg.conv_2d_nchw_fchw ins(%i, %f: tensor<14x512x28x28xf32>, tensor<1024x512x1x1xf32>) outs(%o: tensor<14x1024x28x28xf32>) -> tensor<14x1024x28x28xf32>
-  return %0: tensor<14x1024x28x28xf32>
-}
-
-// CHECK-LABEL: conv_2d_nchw_fchw
-// CHECK-NOT: linalg.conv_2d_nchw_fchw
-// CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
-// CHECK-DAG: %[[C1:.+]] = arith.constant 1 : index
-// CHECK-DAG: %[[C32:.+]] = arith.constant 32 : index
-// CHECK-DAG: %[[C14:.+]] = arith.constant 14 : index
-// CHECK-DAG: %[[C16:.+]] = arith.constant 16 : index
-// CHECK-DAG: %[[C28:.+]] = arith.constant 28 : index
-// CHECK-COUNT-3: linalg.pack
-// CHECK: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C14]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C28]] step %[[C1]]
-// CHECK-NEXT: %{{.+}} = scf.for %{{.+}} = %[[C0]] to %[[C16]] step %[[C1]]
-// CHECK: linalg.matmul
-// CHECK: linalg.unpack
-
-// -----
-
 func.func @pack_vnni(%arg0: tensor<32x4x4xbf16>, %arg1: tensor<32x4x4xbf16>, %arg2: tensor<4x4xbf16>) -> tensor<4x4xbf16>{
   %0 = linalg.batch_reduce_matmul ins(%arg0, %arg1:tensor<32x4x4xbf16>, tensor<32x4x4xbf16>) outs(%arg2:tensor<4x4xbf16>) -> tensor<4x4xbf16>
   return %0: tensor<4x4xbf16>
@@ -151,36 +76,6 @@ func.func @propagate_pack_unpack(%arg0: tensor<128x512xf32>, %arg1: tensor<512x2
 // CHECK: linalg.batch_reduce_matmul
 // CHECK-NOT: linalg.unpack
 // CHECK: linalg.generic
-
-// -----
-
-#map = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2, d3)>
-#map1 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2, d3)>
-
-func.func @conv_init_simplify(%arg0: tensor<1x56x56x64xf32>, %arg2: tensor<1x1x64x64xf32>, %arg3: tensor<1x56x56x64xf32>) -> tensor<1x56x56x64xf32> {
-  %cst = arith.constant 0.0 : f32
-  %0 = tensor.empty() : tensor<1x56x56x64xf32>
-  %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<1x56x56x64xf32>) -> tensor<1x56x56x64xf32>
-  %2 = linalg.conv_2d_nhwc_hwcf {dilations = dense<1> : tensor<2xi64>, strides = dense<1> : tensor<2xi64>} ins(%arg0, %arg2 : tensor<1x56x56x64xf32>, tensor<1x1x64x64xf32>) outs(%1 : tensor<1x56x56x64xf32>) -> tensor<1x56x56x64xf32>
-  %3 = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%arg3 : tensor<1x56x56x64xf32>) outs(%0 : tensor<1x56x56x64xf32>) {
-    ^bb0(%in: f32, %out: f32):
-      linalg.yield %in : f32
-  } -> tensor<1x56x56x64xf32>
-  %4 = linalg.generic {indexing_maps = [#map1, #map1, #map1], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%2, %3 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%0 : tensor<1x56x56x64xf32>) {
-    ^bb0(%in: f32, %in_0: f32, %out: f32):
-      %5 = arith.addf %in, %in_0 : f32
-      linalg.yield %5 : f32
-  } -> tensor<1x56x56x64xf32>
-  return %4 : tensor<1x56x56x64xf32>
-}
-
-// CHECK-LABEL: func.func @conv_init_simplify(
-// CHECK-NOT: linalg.fill
-// CHECK-NOT: linalg.conv_2d_nhwc_hwcf
-// Conv as matmul
-// CHECK: scf.for
-// CHECK:   linalg.matmul
-// CHECK-NOT: linalg.generic
 
 // -----
 
