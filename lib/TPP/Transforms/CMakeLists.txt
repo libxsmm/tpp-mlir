@@ -9,8 +9,6 @@ add_mlir_library(TPPTransforms
   LowerPacksAndUnpacks.cpp
   LowerPacksAndUnpacksWithoutTranspose.cpp
   RewriteBatchMatmulToMatmul.cpp
-  RewriteConvsToMatmulOrBrgemm.cpp
-  RewriteConvToMatmulImpl.cpp
   RewriteToBatchReduceGemm.cpp
   TileConsumerAndFuseProducers.cpp
   ToBlockLayoutAndBack.cpp
