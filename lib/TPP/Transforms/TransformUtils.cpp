@@ -230,34 +230,6 @@ FailureOr<SmallVector<Range>> getLoopsToMaterialize(RewriterBase &rewriter,
   return loopRanges;
 }
 
-bool isBlockedConvolution(Operation *op) {
-  // clang-format off
-  using namespace structured_match;
-  
-  auto isBlockedConv =
-    StructuredOpMatcher::make<linalg::LinalgOp>()
-      .operation(NumDpsInits(EqualsTo(1)))
-      .operation(NumDpsInputs(EqualsTo(2)))
-      .operation(NumAffineMaps(EqualsTo(3)))
-      .operation(NumOfLoops(EqualsTo(9)))
-      .operation(VerifyOpProperty(
-            mlir::linalg::detail::verifyConvolutionInterface))
-      .dim(MatchRange(/*lowerBound=*/0, /*upperBound=*/8),
-          {mlir::utils::IteratorType::reduction, 
-           mlir::utils::IteratorType::reduction,
-           mlir::utils::IteratorType::reduction, 
-           mlir::utils::IteratorType::reduction,
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel,
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel})
-      .region(MatchOne(0),
-            WithOpChain<KindMul, KindAdd>(/*captures=*/nullptr));
-  // clang-format on
-  return isBlockedConv.match(op);
-}
-
 FailureOr<linalg::ContractionDimensions>
 isContraction(linalg::LinalgOp linalgOp) {
   using namespace structured_match;

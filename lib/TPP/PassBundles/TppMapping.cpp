@@ -53,7 +53,7 @@ struct TppMapping : public tpp::impl::TppMappingBase<TppMapping>,
 
 private:
   void constructPipeline() override {
-    // Preprocess convolutions.
+    // Canonicalize.
     pm.addPass(createCleanup());
 
     // Convert ops to packed layouts.

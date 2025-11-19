@@ -91,45 +91,6 @@ func.func @blocked_matmul(%arg0: tensor<4x16x32x32xf32>, %arg1: tensor<8x16x32x3
 
 // -----
 
-#map = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8) -> (d0, d5, d2 + d6, d3 + d7, d8)>
-#map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8) -> (d1, d5, d6, d7, d8, d4)>
-#map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8) -> (d0, d1, d2, d3, d4)>
-#map3 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2, d3, d4)>
-
-// CHECK-LABEL: func.func @blocked_convolutions
-func.func @blocked_convolutions(%arg0: tensor<14x16x28x28x32xf32>, %arg1: tensor<32x16x1x1x32x32xf32>, %arg2: tensor<14x32x28x28x32xf32>) -> tensor<14x32x28x28x32xf32> {
-  // CHECK-DAG: %[[C28:.+]] = arith.constant 28 : index
-  // CHECK-DAG: %[[C32:.+]] = arith.constant 32 : index
-  // CHECK-DAG: %[[C14:.+]] = arith.constant 14 : index
-  // CHECK-DAG: %[[C0:.+]] = arith.constant 0 : index
-  // CHECK-DAG: %[[C1:.+]] = arith.constant 1 : index
-  // CHECK: scf.for %[[I:.+]] = %[[C0]] to %[[C14]] step %[[C1]]
-  // CHECK-NEXT: scf.for %[[J:.+]] = %[[C0]] to %[[C32]] step %[[C1]]
-  // CHECK-NEXT: scf.for %[[K:.+]] = %[[C0]] to %[[C28]] step %[[C1]]
-  %0 = linalg.generic {
-    indexing_maps = [#map, #map1, #map2],
-    iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel",
-                      "reduction", "reduction", "reduction", "reduction"]}
-    ins(%arg0, %arg1 : tensor<14x16x28x28x32xf32>, tensor<32x16x1x1x32x32xf32>)
-    outs(%arg2 : tensor<14x32x28x28x32xf32>) {
-    ^bb0(%in: f32, %in_2: f32, %out: f32):
-      %4 = arith.mulf %in, %in_2 : f32
-      %5 = arith.addf %out, %4 : f32
-      linalg.yield %5 : f32
-  } -> tensor<14x32x28x28x32xf32>
-  %c0 = arith.constant 0.0 : f32
-  %1 = linalg.generic {indexing_maps = [#map3],
-                       iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel"]}
-    outs(%0: tensor<14x32x28x28x32xf32>) {
-      ^bb0(%out: f32):
-        %2 = arith.maximumf %out, %c0 : f32
-        linalg.yield %2 : f32
-  } -> tensor<14x32x28x28x32xf32>
-  return %1 : tensor<14x32x28x28x32xf32>
-}
-
-// -----
-
 #map0 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
 #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
 #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>

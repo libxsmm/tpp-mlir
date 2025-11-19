@@ -242,11 +242,11 @@ def TileConsumerAndFuseProducers : Pass<"tile-consumer-and-fuse-producers",
   let description = [{
     The pass uses `TileConsumerAndFuseProducersUsingSCFForOp` to tile the
     consumer and fuse the consumer with the producers. The fusion anchor to matmul
-    or conv-like patterns allows two additional options to control how many
+    or matmul-like patterns allows two additional options to control how many
     producers fuse together with the latched operation and how many consumers.
     Precisely, `max-depth` controls how many producers should be considered, while
     `start-from-last-consumer` allows to move the anchor point to the last fusable
-    consumer of the conv or matmul-like pattern.
+    consumer of the matmul-like pattern.
   }];
   let options = [
     ListOption<"tileSizes", "tile-sizes", "int64_t", "Tile sizes">,

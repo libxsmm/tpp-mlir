@@ -58,8 +58,6 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
 FailureOr<SmallVector<Range>> getLoopsToMaterialize(RewriterBase &rewriter,
                                                     linalg::LinalgOp linalgOp,
                                                     unsigned upTo);
-// Return true if `op` is a blocked convolution.
-bool isBlockedConvolution(Operation *op);
 
 // Return true if `op` is a blocked matmul.
 bool isBlockedMatmul(Operation *op);

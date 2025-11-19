@@ -25,7 +25,7 @@ __all__.append(cleanup.__name__)
 def tpp_mapping(mod, lower_pack_unpack_without_transpose: bool = False, **_config):
     "High-level transforms that map operations to TPP-compatible forms."
 
-    # Preprocess convolutions.
+    # Canonicalize.
     func = match(mod, ops={"func.func"})
     mod = cleanup(mod)
     # Convert ops to packed layouts.

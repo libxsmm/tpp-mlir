@@ -79,12 +79,6 @@ struct ReplaceIterArgs : public OpRewritePattern<scf::ForOp> {
   }
 };
 
-static bool isConvolutionLike(Operation *op) {
-  if (isa_and_nonnull<linalg::GenericOp>(op))
-    return linalgx::utils::isBlockedConvolution(op);
-  return false;
-}
-
 // Return true if `op` can be tiled using `tileSizes`. Require to statically
 // know the range and the tile factor. The tile must be full.
 static bool canBeTiledWithCurrentSpec(Operation *op,
@@ -536,11 +530,6 @@ getDefaultTileSizes(linalg::LinalgOp linalgOp,
       userTiles[tile.index()] = tile.value();
     return userTiles;
   }
-  // Blocked convolutions are tiled and fused along the three outermost parallel
-  // loops to expose a BRGEMM.
-  // TODO: this should merge with `getDefaultTileSizesForMatmulLikeOp`.
-  if (linalgx::utils::isBlockedConvolution(linalgOp))
-    return SmallVector<int64_t>{1, 1, 1, 0, 0, 0, 0, 0, 0};
   return getDefaultTileSizesForMatmulLikeOp(linalgOp);
 }
 
@@ -651,8 +640,7 @@ static void doFusion(RewriterBase &rewriter, func::FuncOp func,
   SmallVector<linalg::LinalgOp> linalgContractionOperations;
   // Walk postorder to increase fusion boundaries.
   func->walk<WalkOrder::PostOrder>([&](linalg::LinalgOp linalgOp) {
-    if ((isConvolutionLike(linalgOp) ||
-         succeeded(linalgx::utils::isContraction(linalgOp))) &&
+    if ((succeeded(linalgx::utils::isContraction(linalgOp))) &&
         linalgOp.hasPureTensorSemantics())
       linalgContractionOperations.push_back(linalgOp);
   });
