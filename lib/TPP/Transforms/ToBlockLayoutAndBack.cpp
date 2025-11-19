@@ -592,54 +592,6 @@ private:
   mutable SmallVector<int64_t> blockingFactors;
 };
 
-struct PackConv2DNchwFchw
-    : public tpp::impl::PackConv2DNchwFchwBase<PackConv2DNchwFchw> {
-  using PackConv2DNchwFchwBase::PackConv2DNchwFchwBase;
-
-  void runOnOperation() override {
-    MLIRContext *ctx = getOperation().getContext();
-    RewritePatternSet patterns(ctx);
-    patterns.add<DoItOnConv2DNchwFchw>(ctx, blockingFactors);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
-  }
-};
-
-struct DoItOnConv2DNhwcHwcf
-    : public OpRewritePattern<linalg::Conv2DNhwcHwcfOp> {
-  DoItOnConv2DNhwcHwcf(MLIRContext *context, ArrayRef<int64_t> blockingFactors,
-                       PatternBenefit benefit = 1)
-      : OpRewritePattern<linalg::Conv2DNhwcHwcfOp>(context, benefit),
-        blockingFactors(blockingFactors) {}
-
-  LogicalResult matchAndRewrite(linalg::Conv2DNhwcHwcfOp linalgOp,
-                                PatternRewriter &rewriter) const override {
-    if (blockingFactors.empty())
-      blockingFactors = getDefaultBlockingFactors(linalgOp);
-    FailureOr<linalg::GenericOp> maybeGeneric =
-        mlir::linalgx::packConv2DNhwcHwcfOp(
-            rewriter, linalgOp,
-            getAsOpFoldResult(rewriter.getI64ArrayAttr(blockingFactors)));
-    if (failed(maybeGeneric))
-      return failure();
-    return success();
-  }
-
-private:
-  mutable SmallVector<int64_t> blockingFactors;
-};
-
-struct PackConv2DNhwcHwcf
-    : tpp::impl::PackConv2DNhwcHwcfBase<PackConv2DNhwcHwcf> {
-  using PackConv2DNhwcHwcfBase::PackConv2DNhwcHwcfBase;
-
-  void runOnOperation() override {
-    MLIRContext *ctx = getOperation().getContext();
-    RewritePatternSet patterns(ctx);
-    patterns.add<DoItOnConv2DNhwcHwcf>(ctx, blockingFactors);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
-  }
-};
-
 // Pack MatmulOp to VNNI.
 struct VNNIOnMatmul : public OpRewritePattern<linalg::GenericOp> {
   VNNIOnMatmul(MLIRContext *context, PatternBenefit benefit = 1)

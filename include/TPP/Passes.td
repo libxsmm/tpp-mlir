@@ -236,36 +236,6 @@ def PackMatmul : Pass<"pack-matmul", "func::FuncOp"> {
   ];
 }
 
-def PackConv2DNchwFchw : Pass<"pack-conv2DNchwFchw", "func::FuncOp"> {
-  let summary = "Convert Conv2DNchwFchw to block layout and back";
-  let description = [{
-    Block Conv2DNchwFchw as: [N][BK][P][Q][bk] += [N][BC][H][W][bc] * [BK][BC][R][S][bk][bc]
-                             output            += image             * filter
-    Pack the image's channel with a block factor BC.
-    Pack the filter's channels C and K with a block factor of BC and BK.
-    Pack the output's channel K with a block factor BK.
-  }];
-  let options = [
-    ListOption<"blockingFactors", "block-factors", "int64_t",
-               "Blocking factor for relayout">
-  ];
-}
-
-def PackConv2DNhwcHwcf : Pass<"pack-conv2DNhwcHwcf", "func::FuncOp"> {
-  let summary = "Pack and unpack Conv2DNhwcHwcf";
-  let description = [{
-    Pack Conv2DNhwcHwcf as [N][K'][P][Q][k] += [N][C'][H][W][c] * [K'][C'][R][S][c][k]
-                           output           += image            * filter
-    Pack the image and block the image's channel with a factor k.
-    Pack the filter and block the filter's channels with k and c.
-    Pack the output and block the output's channel with k.
-  }];
-  let options = [
-    ListOption<"blockingFactors", "block-factors", "int64_t",
-               "Blocking factor for pack and unpack operation">
-  ];
-}
-
 def TileConsumerAndFuseProducers : Pass<"tile-consumer-and-fuse-producers",
                                         "func::FuncOp"> {
   let summary = "Tile consumers and fuse producers";
@@ -301,19 +271,6 @@ def LowerPacksAndUnpacksWithoutTranspose : Pass<"lower-packs-unpacks-without-tra
    "ModuleOp"> {
   let dependentDialects = ["linalg::LinalgDialect",
                            "tensor::TensorDialect"];
-}
-
-def RewriteConvToMatmulOrBrgemm : Pass<"rewrite-conv-to-matmul-or-brgemm",
-                                       "func::FuncOp"> {
-  let summary = "Rewrite Conv2DNhwcHwcfOp/Conv2DNchwFchwOp to Matmul or Brgemm.";
-  let description = [{
-    Rewrite a convolution to a matmul or brgemm operation.
-  }];
-  let options = [
-    Option<"enableBrgemm", "enable-brgemm", "bool", "false",
-           "Rewrite convolution to BRGEMM if possible">
-  ];
-  let dependentDialects = ["scf::SCFDialect", "linalg::LinalgDialect"];
 }
 
 def RewriteBatchMatmulToMatmul : Pass<"rewrite-batch-matmul-to-matmul",
@@ -372,15 +329,6 @@ def FoldAddIntoDest : Pass<"fold-add-into-dest", "ModuleOp"> {
 
 def ElementWiseFusion : Pass<"element-wise-fusion", "func::FuncOp"> {
   let summary = "Run linalg element-wise fusion";
-}
-
-def ConvInitSimplify : Pass<"conv-init-simplify", "func::FuncOp"> {
-  let summary = "Simplify initialization for convolution";
-  let description = [{
-    Perform a graph-rewrite to simplify initialization for a Conv2DNhwcHwcfOp
-    operation. Specifically, instead of initializing the output of a convolution
-    with zero and then adding the bias, initialize the output with the bias.
-  }];
 }
 
 def Bufferize : Pass<"bufferize", "ModuleOp"> {
