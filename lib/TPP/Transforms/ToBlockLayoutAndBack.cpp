@@ -107,7 +107,7 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
                                 linalg::GenericOp matmulOp) {
   if (matmulOp.getInputs().size() > 0) {
     auto elementType = getElementTypeOrSelf(matmulOp.getInputs()[0].getType());
-    if (!elementType.isBF16())
+    if (!elementType.isBF16() && !elementType.isInteger(8))
       return rewriter.notifyMatchFailure(matmulOp, "require bf16 type");
   }
 
