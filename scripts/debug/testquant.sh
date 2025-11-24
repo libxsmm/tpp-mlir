@@ -1,5 +1,5 @@
 #!/bin/env bash
-set -euo pipefail
+set -exuo pipefail
 
 # Base check: output is "correct" with base pass
 for test in 3 8 16 32 64; do
@@ -14,36 +14,25 @@ for test in 3 8 16 32 64; do
   echo "Direct & Quantize have compatible results up to 0.002"
 done
 
-# IR check: Default pipeline
-for test in 3 8 16 32 64; do
-  direct=direct-$test
-  quantized=quant-$test
-  echo "Default: $direct and $quantized..."
-  ./bin/tpp-opt --default-tpp-passes $direct.mlir -o $direct-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
-  ./bin/tpp-opt --default-tpp-passes $quantized.mlir -o $quantized-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized-opt.mlir > $quantized-opt.out
-done
-
-# IR check: full LOOPS pipeline
+# IR check: LOOPS pipeline
 for test in 3 8 16 32 64; do
   direct=direct-$test
   quantized=quant-$test
   echo "Linalg To Loops: $direct and $quantized..."
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-loops" $direct.mlir -o $direct-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-loops" $quantized.mlir -o $quantized-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized-opt.mlir > $quantized-opt.out
+  ./bin/tpp-run -linalg-to-loops -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct.mlir > $direct-loop.out
+  diff -q $direct.out $direct-loop.out
+  ./bin/tpp-run -linalg-to-loops -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized.mlir > $quantized-loop.out
+  diff -q $quantized.out $quantized-loop.out
 done
 
-# IR check: full VECTOR pipeline
+# IR check: VECTOR pipeline
 for test in 3 8 16 32 64; do
   direct=direct-$test
   quantized=quant-$test
   echo "Linalg To Vector: $direct and $quantized..."
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $direct.mlir -o $direct-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $quantized.mlir -o $quantized-opt.mlir
-  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized-opt.mlir > $quantized-opt.out
+  ./bin/tpp-run -linalg-to-vector -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct.mlir > $direct-vector.out
+  diff -q $direct.out $direct-vector.out
+  ./bin/tpp-run -linalg-to-vector -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized.mlir > $quantized-vector.out
+  diff -q $quantized.out $quantized-vector.out
 done
 
