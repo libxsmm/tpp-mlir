@@ -1,6 +1,8 @@
 #!/bin/env bash
 set -exuo pipefail
 
+rm -f *.mlir *.out
+
 # Base check: output is "correct" with base pass
 for test in 3 8 16 32 64; do
   direct=direct-$test
