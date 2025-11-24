@@ -14,25 +14,33 @@ for test in 3 8 16 32 64; do
   echo "Direct & Quantize have compatible results up to 0.002"
 done
 
-# IR check: full pipeline
+# IR check: Default pipeline
 for test in 3 8 16 32 64; do
   direct=direct-$test
   quantized=quant-$test
-  echo "Optimizing $direct and $quantized..."
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $direct.mlir -o $direct-opt.mlir
+  echo "Default: $direct and $quantized..."
+  ./bin/tpp-opt --default-tpp-passes $direct.mlir -o $direct-opt.mlir
   ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
-  ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $quantized.mlir -o $quantized-opt.mlir
+  ./bin/tpp-opt --default-tpp-passes $quantized.mlir -o $quantized-opt.mlir
   ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized-opt.mlir > $quantized-opt.out
 done
 
-
-
-# IR check: full pipeline
-# loc("direct-3-opt.mlir":114:5): error: memory free side-effect on MemRef value not supported!
+# IR check: full LOOPS pipeline
 for test in 3 8 16 32 64; do
   direct=direct-$test
   quantized=quant-$test
-  echo "Optimizing $direct and $quantized..."
+  echo "Linalg To Loops: $direct and $quantized..."
+  ./bin/tpp-opt --default-tpp-passes="linalg-to-loops" $direct.mlir -o $direct-opt.mlir
+  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
+  ./bin/tpp-opt --default-tpp-passes="linalg-to-loops" $quantized.mlir -o $quantized-opt.mlir
+  ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized-opt.mlir > $quantized-opt.out
+done
+
+# IR check: full VECTOR pipeline
+for test in 3 8 16 32 64; do
+  direct=direct-$test
+  quantized=quant-$test
+  echo "Linalg To Vector: $direct and $quantized..."
   ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $direct.mlir -o $direct-opt.mlir
   ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct-opt.mlir > $direct-opt.out
   ./bin/tpp-opt --default-tpp-passes="linalg-to-vector" $quantized.mlir -o $quantized-opt.mlir
