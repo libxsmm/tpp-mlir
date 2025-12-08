@@ -55,6 +55,7 @@ elif [ -z "${TMP_DIR}" ]; then
 fi
 DUMP_FILE=${TMP_DIR}/dump.mlir
 SRC_FILE=${TMP_DIR}/source.mlir
+OPT_FILE=${TMP_DIR}/optimized.mlir
 
 ## Get the input file
 if [ "${INPUT_FILE}" ]; then
@@ -70,7 +71,7 @@ ${TPP_OPT} \
   --default-tpp-passes \
   --mlir-print-ir-after-all \
   "${SRC_FILE}" \
-  > /dev/null 2> ${DUMP_FILE}
+  > ${OPT_FILE} 2> ${DUMP_FILE}
 
 ## Split dump
 echo "Splitting the file into multiple outputs"
