@@ -3,16 +3,13 @@
 SCRIPT_DIR=$(realpath $(dirname $0)/..)
 source ${SCRIPT_DIR}/ci/common.sh
 
-TMP_DIR=$(mktemp -d)
-DUMP_FILE=${TMP_DIR}/dump.mlir
-SRC_FILE=${TMP_DIR}/src.mlir
 SPLIT=${SCRIPT_DIR}/debug/split.py
 DIFF=${SCRIPT_DIR}/debug/diff.py
 
 ROOT_DIR=$(git_root)
 DIFF_TOOL=diff
 BIN_DIR=$ROOT_DIR/build/bin
-while getopts "b:d:m:o:i:" arg; do
+while getopts "b:d:m:o:i:t:" arg; do
   case ${arg} in
     b)
       BIN_DIR=$(realpath ${OPTARG})
@@ -38,6 +35,9 @@ while getopts "b:d:m:o:i:" arg; do
     o)
       TPP_OPT_FLAGS=${OPTARG}
       ;;
+    t)
+      TMP_DIR=${OPTARG}
+      ;;
     *)
       echo "Invalid option: ${OPTARG}"
       exit 1
@@ -45,6 +45,13 @@ while getopts "b:d:m:o:i:" arg; do
 done
 MLIR_GEN=${BIN_DIR}/mlir-gen
 TPP_OPT=${BIN_DIR}/tpp-opt
+if [ ! -z "${TMP_DIR}" ] && [ ! -d "${TMP_DIR}" ]; then
+  mkdir -p "${TMP_DIR}"
+elif [ -z "${TMP_DIR}" ]; then
+  TMP_DIR=$(mktemp -d)
+fi
+DUMP_FILE=${TMP_DIR}/dump.mlir
+SRC_FILE=${TMP_DIR}/source.mlir
 
 ## Get the input file
 if [ "${INPUT_FILE}" ]; then

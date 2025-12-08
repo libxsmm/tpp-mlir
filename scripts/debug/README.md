@@ -42,6 +42,7 @@ Options:
 * `-d tool`: Specifies a diff tool (default `diff`)
 * `-m "opt1 opt2 ..."`: `mlir-gen` options
 * `-o "opt1 opt2 ..."`: `tpp-opt` options
+* `-t "temp dir"`: Directory for the dump of pass results
 
 Examples:
 ```
@@ -69,3 +70,27 @@ Examples:
 `diff.py`: Looks through a list of `NNN.mlir` files and shows the diff of each
 pair of files when the IR changes (ex. `003.mlir -> 007.mlir`, `007.mlir -> 013.mlir`
 etc.).
+
+### Comparing two runs
+
+To compare two runs, create them separately with the `debug_all_passes.sh` script, then compare them with the `diff.py` tool.
+
+```
+./scripts/debug/debug_all_passes.sh \
+  -b ./build/bin \
+  -o "--default-tpp-passes='linalg-to-loops'" \
+  -i file.mlir \
+  -t baseline
+
+./scripts/debug/debug_all_passes.sh \
+  -b ./build/bin \
+  -o "--default-tpp-passes='linalg-to-vector'" \
+  -i file.mlir \
+  -t vector
+
+./scripts/debug/diff.py \
+  -p vector \
+  -b baseline \
+  -d vimdiff \
+  mlir
+```
