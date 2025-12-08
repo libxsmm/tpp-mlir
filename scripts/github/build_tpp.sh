@@ -14,9 +14,6 @@ if [ ! -d ${LLVMROOT} ]; then
   mkdir -p ${LLVMROOT}
 fi
 
-pip uninstall nanobind -y
-pip install --user "nanobind==2.9.2" pybind11
-
 # Find LLVM_VERSION
 echo "--- LLVM"
 LLVM_VERSION=$(llvm_version)

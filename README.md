@@ -57,6 +57,7 @@ cmake -G Ninja ../llvm \
    -DLLVM_ENABLE_ASSERTIONS=ON \
    -DCMAKE_C_COMPILER=clang \
    -DCMAKE_CXX_COMPILER=clang++ \
+   -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
    -DLLVM_USE_LINKER=lld
 
 # Build
