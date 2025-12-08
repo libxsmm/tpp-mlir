@@ -68,7 +68,6 @@ fi
 echo "Producing dump at ${TMP_DIR}"
 ${TPP_OPT} \
   ${TPP_OPT_FLAGS} \
-  --default-tpp-passes \
   --mlir-print-ir-after-all \
   "${SRC_FILE}" \
   > ${OPT_FILE} 2> ${DUMP_FILE}
