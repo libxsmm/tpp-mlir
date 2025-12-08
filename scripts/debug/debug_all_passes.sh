@@ -45,8 +45,11 @@ while getopts "b:d:m:o:i:t:" arg; do
 done
 MLIR_GEN=${BIN_DIR}/mlir-gen
 TPP_OPT=${BIN_DIR}/tpp-opt
-if [ ! -z "${TMP_DIR}" ] && [ ! -d "${TMP_DIR}" ]; then
-  mkdir -p "${TMP_DIR}"
+if [ ! -z "${TMP_DIR}" ]; then
+  TMP_DIR=$(realpath ${TMP_DIR})
+  if [ ! -d "${TMP_DIR}" ]; then
+    mkdir -p "${TMP_DIR}"
+  fi
 elif [ -z "${TMP_DIR}" ]; then
   TMP_DIR=$(mktemp -d)
 fi
