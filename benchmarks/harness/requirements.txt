@@ -1,2 +1,2 @@
 coloredlogs==15.0.1
-nanobind
+nanobind==2.9.2
