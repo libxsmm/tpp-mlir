@@ -122,10 +122,11 @@ def compareTwoFiles(file1: File, file2: File, diffTool: str):
 
     subprocess.run(cmd)
 
-def compareDifferentPipeline(path, baseline, ext, diffTool):
+def compareDifferentPipeline(path: str, baseline: str, ext: str, diffTool: str, read: int, skip: int):
     baseDir = Directory.get(baseline, ext)
     currDir = Directory.get(path, ext)
-    counter = 1
+    counter = skip
+    last = baseDir.numFiles() if read < 0 else (skip + read)
 
     while True:
         baseFile = baseDir.getFile(counter)
@@ -152,11 +153,15 @@ def compareDifferentPipeline(path, baseline, ext, diffTool):
             innerCounter += 1
             break
         counter += 1
+        if (counter >= last):
+            print(f"Reached read limit of {read} files\n")
+            break
 
 
-def compareSamePipeline(path, ext, diffTool):
+def compareSamePipeline(path: str, ext: str, diffTool: str, read: int, skip: int):
     dir = Directory.get(path, ext)
-    counter = 1
+    counter = skip
+    last = dir.numFiles() if read < 0 else (skip + read)
     curr = dir.getFile(counter)
     if curr is None:
         print(f"No numbered files found in {path} with extension {ext}\n")
@@ -170,13 +175,18 @@ def compareSamePipeline(path, ext, diffTool):
             break
         compareTwoFiles(curr, next, diffTool)
         curr = next
+        if (counter >= last):
+            print(f"Reached read limit of {read} files\n")
+            break
 
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
-    argParser.add_argument("-p", "--path")
-    argParser.add_argument("-d", "--diff")
-    argParser.add_argument("-b", "--baseline-path")
-    argParser.add_argument("ext")
+    argParser.add_argument("-p", "--path", help="directory with files to compare")
+    argParser.add_argument("-d", "--diff", help="diff tool to use")
+    argParser.add_argument("-b", "--base", help="baseline directory (to compare with --path)")
+    argParser.add_argument("-s", "--skip", type=int, help="number of initial passes to skip", default=1)
+    argParser.add_argument("-r", "--read", type=int, help="number of passes to read", default=-1)
+    argParser.add_argument("ext", nargs="?", help="file extension to look for")
     args = argParser.parse_args()
     if args.ext is None:
         syntax()
@@ -191,7 +201,7 @@ if __name__ == "__main__":
     if args.diff is None:
         args.diff = "diff"
 
-    if args.baseline_path is None:
-        compareSamePipeline(args.path, args.ext, args.diff)
+    if args.base is None:
+        compareSamePipeline(args.path, args.ext, args.diff, args.read, args.skip)
     else:
-        compareDifferentPipeline(args.path, args.baseline_path, args.ext, args.diff)
+        compareDifferentPipeline(args.path, args.base, args.ext, args.diff, args.read, args.skip)
