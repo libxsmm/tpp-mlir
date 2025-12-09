@@ -19,7 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 // StartTimerOp
 //===----------------------------------------------------------------------===//
 
-def Perf_StartTimerOp : Perf_Op<"start_timer", [Pure]> {
+def Perf_StartTimerOp : Perf_Op<"start_timer", []> {
   let summary = "Start a timer.";
   let description = [{
     The `perf.start_timer` operation creates a new unique timer
@@ -55,7 +55,7 @@ def Perf_StartTimerOp : Perf_Op<"start_timer", [Pure]> {
 // StopTimerOp
 //===----------------------------------------------------------------------===//
 
-def Perf_StopTimerOp : Perf_Op<"stop_timer", [Pure]> {
+def Perf_StopTimerOp : Perf_Op<"stop_timer", []> {
   let summary = "Stops a timer.";
   let description = [{
     The `perf.stop_timer` operation stops the specified
