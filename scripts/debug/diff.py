@@ -189,7 +189,7 @@ if __name__ == "__main__":
     argParser.add_argument("-b", "--base", help="baseline directory (to compare with --path)")
     argParser.add_argument("-s", "--skip", type=int, help="number of initial passes to skip", default=1)
     argParser.add_argument("-r", "--read", type=int, help="number of passes to read", default=-1)
-    argParser.add_argument("ext", nargs="?", help="file extension to look for")
+    argParser.add_argument("ext", nargs="?", help="file extension to look for", default="mlir")
     args = argParser.parse_args()
     if args.ext is None:
         syntax()
