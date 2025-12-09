@@ -80,6 +80,9 @@ class Directory():
         self.getAllFiles()
         return len(self.files) == 0
     
+    def numFiles(self) -> int:
+        return len(self.files)
+
     def getFile(self, counter: int) -> "File":
         if (counter < 0 or counter >= len(self.files)):
             return None
