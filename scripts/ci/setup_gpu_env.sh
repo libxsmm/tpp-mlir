@@ -14,3 +14,12 @@ if [[ ${GPU,,} =~ "cuda" ]]; then
   source /swtools/cuda/12.9.0/cuda_vars.sh
   check_program nvcc
 fi
+
+# Env Intel setup
+if [[ ${GPU,,} =~ "intel" ]]; then
+  echo "Setting up Intel XeGPU environment"
+  VERSION="25.44.36015.5"
+  echo "Using driver version ${VERSION}"
+  source /swtools/intel-gpu/$VERSION/intel_gpu_vars.sh
+  check_program iga64
+fi
