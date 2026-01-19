@@ -1,5 +1,4 @@
 // RUN: tpp-opt %s -tpp-mapping -split-input-file | FileCheck %s
-// RUN: tpp-sched --bundle=tpp-mapping %s --split-input-file | FileCheck %s
 
 func.func @pack_vnni(%arg0: tensor<32x4x4xbf16>, %arg1: tensor<32x4x4xbf16>, %arg2: tensor<4x4xbf16>) -> tensor<4x4xbf16>{
   %0 = linalg.batch_reduce_matmul ins(%arg0, %arg1:tensor<32x4x4xbf16>, tensor<32x4x4xbf16>) outs(%arg2:tensor<4x4xbf16>) -> tensor<4x4xbf16>

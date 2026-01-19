@@ -1,6 +1,5 @@
 // This should really be in the passes directory, not here
 // RUN: tpp-opt %s -default-tpp-passes | FileCheck -check-prefix=IR %s
-// RUN: tpp-sched --bundle=default-tpp-passes %s | FileCheck %s -check-prefix=IR
 
 // RUN: tpp-run %s -print \
 // RUN:  -e entry -entry-point-result=void | \

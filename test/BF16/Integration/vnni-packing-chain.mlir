@@ -1,9 +1,6 @@
 // RUN: tpp-opt %s -default-tpp-passes | \
 // RUN:   FileCheck %s -check-prefix=IR
 
-// RUN: tpp-sched --bundle=default-tpp-passes %s | \
-// RUN:   FileCheck %s -check-prefix=IR
-
 // RUN: tpp-run %s \
 // RUN:   -e entry -entry-point-result=void
 

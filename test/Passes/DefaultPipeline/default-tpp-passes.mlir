@@ -1,5 +1,4 @@
 // RUN: tpp-opt %s -default-tpp-passes -split-input-file | FileCheck %s
-// RUN: tpp-sched --bundle=default-tpp-passes %s --split-input-file | FileCheck %s
 
 // CHECK: func.func @matmul(
 // CHECK-SAME:  %[[ARG0:.+]]: memref<4x8xf32>,

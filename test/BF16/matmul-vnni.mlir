@@ -1,5 +1,4 @@
 // RUN: tpp-opt %s -tpp-mapping | FileCheck %s
-// RUN: tpp-sched --bundle=tpp-mapping %s | tpp-opt | FileCheck %s
 
 !A_tensor_t = tensor<256x512xbf16>
 !B_tensor_t = tensor<512x1024xbf16>

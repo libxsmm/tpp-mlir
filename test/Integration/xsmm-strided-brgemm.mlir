@@ -2,7 +2,6 @@
 // RUN: tpp-run %s -linalg-to-loops -e entry -entry-point-result=void | FileCheck %s
 
 // RUN: tpp-opt %s -default-tpp-passes | FileCheck %s -check-prefix=IR
-// RUN: tpp-sched --bundle=default-tpp-passes %s | FileCheck %s -check-prefix=IR
 
 !A_tensor_t = tensor<4x8xf32>
 !B_tensor_t = tensor<8x16xf32>

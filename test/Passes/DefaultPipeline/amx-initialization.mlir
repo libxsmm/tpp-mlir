@@ -1,6 +1,5 @@
 
 // RUN: LIBXSMM_TARGET=spr tpp-opt --default-pipeline %s | FileCheck %s --check-prefix=CHECK-AMX-BF16
-// RUN: LIBXSMM_TARGET=spr tpp-sched --bundles=default-pipeline %s | FileCheck %s --check-prefix=CHECK-AMX-BF16
 
 
 

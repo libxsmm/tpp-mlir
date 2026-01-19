@@ -1,5 +1,4 @@
 // RUN: tpp-opt --vector-to-xsmm  %s --split-input-file | FileCheck %s
-// RUN: tpp-sched --bundle=vector-to-xsmm %s --split-input-file | tpp-opt | FileCheck %s
 
 func.func @transpose_op_2d_f32(%arg0: memref<3x5xf32>, %arg1: memref<5x3xf32>) {
     %c0 = arith.constant 0 : index
