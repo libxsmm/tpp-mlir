@@ -121,7 +121,7 @@ if [ "${ARCH_NAME}" == "aarch64" ]; then
 elif [ "${ARCH_NAME}" == "x86_64" ]; then
    conda install -y gcc_linux-64 gxx_linux-64
 fi
-python -m pip install coloredlogs pybind11 nanobind
+python -m pip install coloredlogs
 ```
 
 Reloading the environment  after conda deactivate/logout/reboot:

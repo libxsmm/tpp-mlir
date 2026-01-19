@@ -1,7 +1,6 @@
 coloredlogs
 matplotlib
 pybind11
-nanobind==2.9.2
 requests
 black
 lit
