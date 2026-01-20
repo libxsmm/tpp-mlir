@@ -13,10 +13,11 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/TypeUtilities.h"
 
+using namespace mlir;
+
 #define GET_OP_CLASSES
 #include "TPP/Dialect/Xsmm/XsmmOps.cpp.inc"
 
-using namespace mlir;
 using namespace mlir::xsmm;
 
 namespace {

@@ -42,7 +42,8 @@ namespace {
 void lowerPackAndFoldTranspose(linalg::PackOp packOp,
                                linalg::GenericOp genericOp, uint operandIdx,
                                PatternRewriter &rewriter) {
-  auto packInversionPerm = linalg::getPackInverseDestPerm(packOp);
+  mlir::PackingMetadata metadata;
+  auto packInversionPerm = linalg::getPackInverseDestPerm(packOp, metadata);
 
   auto res = linalg::lowerPack(rewriter, packOp);
 

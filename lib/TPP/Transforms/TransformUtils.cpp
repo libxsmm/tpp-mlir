@@ -141,8 +141,8 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
   Type reducedType;
   if (linalgOp.hasPureTensorSemantics()) {
     reducedType = tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-        desiredResultRank, cast<RankedTensorType>(operandType), offsets, sizes,
-        strides);
+        desiredResultRank, cast<RankedTensorType>(operandType), sizes);
+        //strides);
   } else {
     reducedType = memref::SubViewOp::inferRankReducedResultType(
         getExpectedResultMemRefShape(sizes, desiredResultRank),

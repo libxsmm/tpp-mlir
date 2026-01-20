@@ -86,7 +86,7 @@ void BenchOp::build(OpBuilder &builder, OperationState &result, Value numIters,
   if (iterArgs.empty()) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&bodyBlock);
-    builder.create<perf::YieldOp>(result.location);
+    perf::YieldOp::create(builder, result.location);
   }
 }
 

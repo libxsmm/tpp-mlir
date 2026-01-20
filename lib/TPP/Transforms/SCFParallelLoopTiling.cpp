@@ -135,7 +135,7 @@ void tileParallelLoop(ParallelOp op, ArrayRef<unsigned> tileSizes,
     // Otherwise, we dynamically compute the bound for
     // each iteration of the outer loop.
     newBounds.push_back(
-        affine::AffineMinOp::create(op.getLoc(), b.getIndexType(), minMap,
+        affine::AffineMinOp::create(b, op.getLoc(), b.getIndexType(), minMap,
                                       ValueRange{newStep, upperBound, iv}));
   }
 
@@ -165,7 +165,7 @@ void tileParallelLoop(ParallelOp op, ArrayRef<unsigned> tileSizes,
       //             (%inner_iv * %inner_step + %outer_iv <
       //             %outer_upper_bound)
       Value index = arith::AddIOp::create(b, 
-          op.getLoc(), arith::MulIOp>(op.getLoc(), innerIV, innerStep),
+          op.getLoc(), arith::MulIOp::create(b, op.getLoc(), innerIV, innerStep),
           outerIV);
       Value dimInbound = arith::CmpIOp::create(b, 
           op.getLoc(), arith::CmpIPredicate::ult, index, outerUpperBound);
