@@ -187,21 +187,21 @@ Value MLIRBench::registerOnGpu(Value buf, MemRefType memRefTy) {
   // Use shared memory on Intel GPU and dedicated GPU allocation, otherwise
   bool isHostShared = backend == "intel";
   auto gpuAlloc =
-      builder.create<gpu::AllocOp>(unkLoc, memRefTy, ValueRange{}, ValueRange{},
+      gpu::AllocOp::create(builder, unkLoc, memRefTy, ValueRange{}, ValueRange{},
                                    ValueRange{}, /*hostShared=*/isHostShared);
   auto gpuBuf = gpuAlloc.getResult(0);
 
   Operation *memcpy;
   if (backend == "intel") {
-    memcpy = builder.create<memref::CopyOp>(unkLoc, buf, gpuBuf);
+    memcpy = memref::CopyOp::create(builder, unkLoc, buf, gpuBuf);
   } else {
-    memcpy = builder.create<gpu::MemcpyOp>(unkLoc, /*asyncToken=*/ValueRange{},
+    memcpy = gpu::MemcpyOp::create(builder, unkLoc, /*asyncToken=*/ValueRange{},
                                            ValueRange{}, gpuBuf, buf);
   }
 
   // Dealloc the arg buffer at the end of program
   builder.setInsertionPointToEnd(&getMainBlock());
-  builder.create<gpu::DeallocOp>(unkLoc, /*asyncToken=*/ValueRange{}, gpuBuf);
+  gpu::DeallocOp::create(builder, unkLoc, /*asyncToken=*/ValueRange{}, gpuBuf);
 
   // Continue inserting ops after the created kernel arg
   builder.setInsertionPointAfter(memcpy);
@@ -259,7 +259,7 @@ LogicalResult MLIRBench::createKernelArgs() {
               auto data = createDenseMemref(builder, module, argInitType,
                                             memrefType, seed);
               data = registerOnGpu(data, memrefType);
-              return builder.create<bufferization::ToTensorOp>(
+              return bufferization::ToTensorOp::create(builder,
                   unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
             })
             .Default([&](auto t) { return std::nullopt; });
@@ -288,7 +288,7 @@ LogicalResult MLIRBench::createMainWrapper() {
 
 Operation *MLIRBench::callKernel() {
   // Call the kernel
-  return builder.create<func::CallOp>(unkLoc, kernel, kernelArgs);
+  return func::CallOp::create(builder, unkLoc, kernel, kernelArgs);
 }
 
 Value MLIRBench::createTimerLoop(unsigned iters) {
@@ -296,7 +296,7 @@ Value MLIRBench::createTimerLoop(unsigned iters) {
   auto count = getConstInt(builder, iters, 64);
 
   // Create perf benchmarking region, set insertion to inside the body
-  auto bench = builder.create<perf::BenchOp>(unkLoc, count, ValueRange{});
+  auto bench = perf::BenchOp::create(builder, unkLoc, count, ValueRange{});
   builder.setInsertionPointToStart(bench.getBody());
 
   // Call the kernel, ignore output
@@ -318,14 +318,14 @@ Value MLIRBench::getTimerStats(Value deltas) {
 
   // Mean is deltas / iters
   auto fIters =
-      builder.create<arith::UIToFPOp>(unkLoc, builder.getF64Type(), iters);
-  auto div = builder.create<arith::DivFOp>(unkLoc, deltas, fIters);
+      arith::UIToFPOp::create(builder, unkLoc, builder.getF64Type(), iters);
+  auto div = arith::DivFOp::create(builder, unkLoc, deltas, fIters);
   return div.getResult();
 }
 
 void MLIRBench::printMean(Value mean) {
   assert(isa<mlir::Float64Type>(mean.getType()) && "Invalid mean type");
-  builder.create<vector::PrintOp>(unkLoc, mean);
+  vector::PrintOp::create(builder, unkLoc, mean);
 }
 
 void MLIRBench::printVector(Value vector) {
@@ -334,9 +334,9 @@ void MLIRBench::printVector(Value vector) {
   if (vectorValue.getElementType().isBF16()) {
     VectorType vecType =
         VectorType::get(vectorValue.getShape(), builder.getF32Type());
-    op = builder.create<arith::ExtFOp>(unkLoc, vecType, vector, arith::FastMathFlagsAttr{});
+    op = arith::ExtFOp::create(builder, unkLoc, vecType, vector, arith::FastMathFlagsAttr{});
   }
-  builder.create<vector::PrintOp>(unkLoc, op);
+  vector::PrintOp::create(builder, unkLoc, op);
 }
 
 LogicalResult MLIRBench::printShapedType(mlir::Value val) {
@@ -357,9 +357,9 @@ LogicalResult MLIRBench::printShapedType(mlir::Value val) {
 
     // Reshape output
     if (auto tensor = dyn_cast<RankedTensorType>(outputType))
-      val = builder.create<tensor::CollapseShapeOp>(unkLoc, val, assocIdx);
+      val = tensor::CollapseShapeOp::create(builder, unkLoc, val, assocIdx);
     else if (auto memref = dyn_cast<MemRefType>(outputType))
-      val = builder.create<memref::CollapseShapeOp>(unkLoc, val, assocIdx);
+      val = memref::CollapseShapeOp::create(builder, unkLoc, val, assocIdx);
     else
       llvm_unreachable("Unsupported output shaped type");
 
@@ -380,19 +380,19 @@ LogicalResult MLIRBench::printShapedType(mlir::Value val) {
     outerDim = outputType.getShape()[0];
 
   // Vector undefined value
-  Value undefLengthCst = builder.create<arith::ConstantOp>(
+  Value undefLengthCst = arith::ConstantOp::create(builder,
       unkLoc, getTypedAttr(builder, outElmType, 0.0));
 
   // Loop through the shaped type, transfer each dim to vector
   auto count = getConstIndex(builder, outerDim);
   auto zero = getConstIndex(builder, 0);
   auto one = getConstIndex(builder, 1);
-  auto loop = builder.create<scf::ForOp>(unkLoc, zero, count, one);
+  auto loop = scf::ForOp::create(builder, unkLoc, zero, count, one);
   builder.setInsertionPointToStart(loop.getBody());
 
   // Loop body
   auto beginIdx = loop.getInductionVar();
-  auto vector = builder.create<vector::TransferReadOp>(
+  auto vector = vector::TransferReadOp::create(builder,
       unkLoc, vecType, val,
       rank == 1 ? ValueRange{beginIdx} : ValueRange{beginIdx, zero},
       undefLengthCst);
@@ -419,23 +419,23 @@ LogicalResult MLIRBench::printResult(Operation *kernelCall) {
 
     if (isa<TensorType>(result.getType())) {
       result =
-          builder.create<bufferization::ToBufferOp>(unkLoc, memrefType, result);
+          bufferization::ToBufferOp::create(builder, unkLoc, memrefType, result);
     }
 
-    auto outBuf = builder.create<memref::AllocOp>(unkLoc, memrefType);
+    auto outBuf = memref::AllocOp::create(builder, unkLoc, memrefType);
 
     Operation *memcpy;
     if (isIntel) {
-      memcpy = builder.create<memref::CopyOp>(unkLoc, result, outBuf);
+      memcpy = memref::CopyOp::create(builder, unkLoc, result, outBuf);
     } else {
-      memcpy = builder.create<gpu::MemcpyOp>(
+      memcpy = gpu::MemcpyOp::create(builder,
           unkLoc, /*asyncToken=*/ValueRange{}, ValueRange{}, outBuf, result);
     }
 
     // Dealloc the output buffer at the end of program.
     // For now, automatic deallocation is disabled for GPUs.
     builder.setInsertionPointToEnd(&getMainBlock());
-    builder.create<memref::DeallocOp>(unkLoc, outBuf);
+    memref::DeallocOp::create(builder, unkLoc, outBuf);
 
     // Restore insertion point
     builder.setInsertionPointAfter(memcpy);
@@ -452,7 +452,7 @@ LogicalResult MLIRBench::terminate() {
   if (main) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&getMainBlock());
-    builder.create<func::ReturnOp>(unkLoc);
+    func::ReturnOp::create(builder, unkLoc);
   }
 
   return success();

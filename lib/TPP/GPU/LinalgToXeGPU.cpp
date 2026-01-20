@@ -186,29 +186,27 @@ static std::optional<Value> lowerGenericOp(linalg::GenericOp genericOp,
 
     if (isa<FloatType>(eltType)) {
       auto floatType = cast<FloatType>(eltType);
-      zeroConst = rewriter.create<arith::ConstantFloatOp>(
+      zeroConst = arith::ConstantFloatOp::create(rewriter, 
           loc, floatType, APFloat::getZero(floatType.getFloatSemantics()));
     } else if (isa<IntegerType>(eltType)) {
       auto intType = llvm::dyn_cast<mlir::IntegerType>(eltType);
-      zeroConst = rewriter.create<arith::ConstantIntOp>(loc, 0, intType.getWidth());
+      zeroConst = arith::ConstantIntOp::create(rewriter, loc, 0, intType.getWidth());
     } else {
       // Unhandled type. Bail out.
       return std::nullopt;
     }
 
     auto zeroVec =
-        rewriter.create<vector::BroadcastOp>(loc, resType, zeroConst);
+        vector::BroadcastOp::create(rewriter, loc, resType, zeroConst);
 
-    return rewriter
-        .create<arith::MaximumFOp>(loc, resType, operands[0], zeroVec)
+    return arith::MaximumFOp::create(rewriter, loc, resType, operands[0], zeroVec)
         .getResult();
   }
 
   if (structured_match::utils::isTwoDAddOp(genericOp, /*operands=*/nullptr)) {
     assert(operands.size() == 2 &&
            "Invalid number of operands for generic 2D add");
-    return rewriter
-        .create<arith::AddFOp>(loc, resType, operands[0], operands[1])
+    return arith::AddFOp::create(rewriter, loc, resType, operands[0], operands[1])
         .getResult();
   }
 
@@ -243,11 +241,11 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::AbsOp absOp) -> std::optional<Value> {
         assert(operands.size() == 1 && "Invalid number of operands for abs");
         if (isa<FloatType>(eltType)) {
-          return rewriter.create<math::AbsFOp>(loc, resType, operands[0])
+          return math::AbsFOp::create(rewriter, loc, resType, operands[0])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return rewriter.create<math::AbsIOp>(loc, resType, operands[0])
+          return math::AbsIOp::create(rewriter, loc, resType, operands[0])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -256,13 +254,11 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::AddOp addOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for add");
         if (isa<FloatType>(eltType)) {
-          return rewriter
-              .create<arith::AddFOp>(loc, resType, operands[0], operands[1])
+          return arith::AddFOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return rewriter
-              .create<arith::AddIOp>(loc, resType, operands[0], operands[1])
+          return arith::AddIOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -270,19 +266,17 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       })
       .Case([&](linalg::CeilOp ceilOp) -> std::optional<Value> {
         assert(operands.size() == 1 && "Invalid number of operands for ceil");
-        return rewriter.create<math::CeilOp>(loc, resType, operands[0])
+        return math::CeilOp::create(rewriter, loc, resType, operands[0])
             .getResult();
       })
       .Case([&](linalg::DivOp divOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for div");
         if (isa<FloatType>(eltType)) {
-          return rewriter
-              .create<arith::DivFOp>(loc, resType, operands[0], operands[1])
+          return arith::DivFOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return rewriter
-              .create<arith::DivSIOp>(loc, resType, operands[0], operands[1])
+          return arith::DivSIOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -292,8 +286,7 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
         assert(operands.size() == 2 &&
                "Invalid number of operands for unsigned div");
         if (isa<IntegerType>(eltType)) {
-          return rewriter
-              .create<arith::DivUIOp>(loc, resType, operands[0], operands[1])
+          return arith::DivUIOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -301,29 +294,26 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       })
       .Case([&](linalg::ExpOp expOp) -> std::optional<Value> {
         assert(operands.size() == 1 && "Invalid number of operands for exp");
-        return rewriter.create<math::ExpOp>(loc, resType, operands[0])
+        return math::ExpOp::create(rewriter, loc, resType, operands[0])
             .getResult();
       })
       .Case([&](linalg::FloorOp floorOp) -> std::optional<Value> {
         assert(operands.size() == 1 && "Invalid number of operands for floor");
-        return rewriter.create<math::FloorOp>(loc, resType, operands[0])
+        return math::FloorOp::create(rewriter, loc, resType, operands[0])
             .getResult();
       })
       .Case([&](linalg::MaxOp maxOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for max");
         if (isa<FloatType>(eltType)) {
-          return rewriter
-              .create<arith::MaximumFOp>(loc, resType, operands[0], operands[1])
+          return arith::MaximumFOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
           if (eltType.isUnsignedInteger()) {
-            return rewriter
-                .create<arith::MaxUIOp>(loc, resType, operands[0], operands[1])
+            return arith::MaxUIOp::create(rewriter, loc, resType, operands[0], operands[1])
                 .getResult();
           } else {
-            return rewriter
-                .create<arith::MaxSIOp>(loc, resType, operands[0], operands[1])
+            return arith::MaxSIOp::create(rewriter, loc, resType, operands[0], operands[1])
                 .getResult();
           }
         }
@@ -333,13 +323,11 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::MulOp mulOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for mul");
         if (isa<FloatType>(eltType)) {
-          return rewriter
-              .create<arith::MulFOp>(loc, resType, operands[0], operands[1])
+          return arith::MulFOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return rewriter
-              .create<arith::MulIOp>(loc, resType, operands[0], operands[1])
+          return arith::MulIOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -347,19 +335,17 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       })
       .Case([&](linalg::NegFOp negfOp) -> std::optional<Value> {
         assert(operands.size() == 1 && "Invalid number of operands for negf");
-        return rewriter.create<arith::NegFOp>(loc, resType, operands[0])
+        return arith::NegFOp::create(rewriter, loc, resType, operands[0])
             .getResult();
       })
       .Case([&](linalg::SubOp subOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for sub");
         if (isa<FloatType>(eltType)) {
-          return rewriter
-              .create<arith::SubFOp>(loc, resType, operands[0], operands[1])
+          return arith::SubFOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return rewriter
-              .create<arith::SubIOp>(loc, resType, operands[0], operands[1])
+          return arith::SubIOp::create(rewriter, loc, resType, operands[0], operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -446,17 +432,17 @@ static Value getGpuLinearThreadId(PatternRewriter &rewriter, Location loc) {
   SmallVector<Value, 3> blockDims;
 
   for (auto dim : {gpu::Dimension::x, gpu::Dimension::y, gpu::Dimension::z}) {
-    threadIds.push_back(rewriter.create<gpu::ThreadIdOp>(loc, dim));
-    blockDims.push_back(rewriter.create<gpu::BlockDimOp>(loc, dim));
+    threadIds.push_back(gpu::ThreadIdOp::create(rewriter, loc, dim));
+    blockDims.push_back(gpu::BlockDimOp::create(rewriter, loc, dim));
   }
 
   // The default GPU indexing is modeled after CUDA:
   // linear index = (z * sizeY + y) * sizeX + x
   Value threadId =
-      rewriter.create<arith::MulIOp>(loc, threadIds[2], blockDims[1]);
-  threadId = rewriter.create<arith::AddIOp>(loc, threadId, threadIds[1]);
-  threadId = rewriter.create<arith::MulIOp>(loc, threadId, blockDims[0]);
-  threadId = rewriter.create<arith::AddIOp>(loc, threadId, threadIds[0]);
+      arith::MulIOp::create(rewriter, loc, threadIds[2], blockDims[1]);
+  threadId = arith::AddIOp::create(rewriter, loc, threadId, threadIds[1]);
+  threadId = arith::MulIOp::create(rewriter, loc, threadId, blockDims[0]);
+  threadId = arith::AddIOp::create(rewriter, loc, threadId, threadIds[0]);
 
   return threadId;
 }
@@ -525,10 +511,10 @@ createGemmCoopPrefetchTile(PatternRewriter &rewriter, linalg::LinalgOp linalgOp,
   //
   // Add offset if there are multiple blocks in the current tile's non-reduction
   // dimension.
-  Value blockOffset = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  Value blockOffset = arith::ConstantIndexOp::create(rewriter, loc, 0);
   if (blockTile[inputPos] / threadTile[inputPos] > 1) {
     Value blockSize =
-        rewriter.create<arith::ConstantIndexOp>(loc, blockTile[inputPos]);
+        arith::ConstantIndexOp::create(rewriter, loc, blockTile[inputPos]);
 
     // For matrix B, pick correct block dimension.
     // Block min X has to be used if there is no thread tiling in the rows
@@ -537,40 +523,40 @@ createGemmCoopPrefetchTile(PatternRewriter &rewriter, linalg::LinalgOp linalgOp,
     if ((inputPos == 1) && (blockTile[0] / threadTile[0] > 1)) {
       gpuDim = gpu::Dimension::y;
     }
-    Value blockId = rewriter.create<gpu::BlockIdOp>(loc, gpuDim);
+    Value blockId = gpu::BlockIdOp::create(rewriter, loc, gpuDim);
 
-    blockOffset = rewriter.create<arith::MulIOp>(loc, blockId, blockSize);
+    blockOffset = arith::MulIOp::create(rewriter, loc, blockId, blockSize);
   }
 
   Value numColTiles =
-      rewriter.create<arith::ConstantIndexOp>(loc, tileStep / numCols);
+      arith::ConstantIndexOp::create(rewriter, loc, tileStep / numCols);
   if (inputPos == 1) {
     numColTiles =
-        rewriter.create<arith::ConstantIndexOp>(loc, blockTile[1] / numCols);
+        arith::ConstantIndexOp::create(rewriter, loc, blockTile[1] / numCols);
   }
   Value tileRowOffset =
-      rewriter.create<arith::DivUIOp>(loc, threadId, numColTiles);
+      arith::DivUIOp::create(rewriter, loc, threadId, numColTiles);
   Value tileColOffset =
-      rewriter.create<arith::RemUIOp>(loc, threadId, numColTiles);
+      arith::RemUIOp::create(rewriter, loc, threadId, numColTiles);
 
-  Value tileRowSize = rewriter.create<arith::ConstantIndexOp>(loc, numRows);
-  Value tileColSize = rewriter.create<arith::ConstantIndexOp>(loc, numCols);
+  Value tileRowSize = arith::ConstantIndexOp::create(rewriter, loc, numRows);
+  Value tileColSize = arith::ConstantIndexOp::create(rewriter, loc, numCols);
   Value eltRowOffset =
-      rewriter.create<arith::MulIOp>(loc, tileRowOffset, tileRowSize);
+      arith::MulIOp::create(rewriter, loc, tileRowOffset, tileRowSize);
   Value eltColOffset =
-      rewriter.create<arith::MulIOp>(loc, tileColOffset, tileColSize);
+      arith::MulIOp::create(rewriter, loc, tileColOffset, tileColSize);
 
   if (inputPos == 0) {
     eltRowOffset =
-        rewriter.create<arith::AddIOp>(loc, eltRowOffset, blockOffset);
+        arith::AddIOp::create(rewriter, loc, eltRowOffset, blockOffset);
   } else {
     eltColOffset =
-        rewriter.create<arith::AddIOp>(loc, eltColOffset, blockOffset);
+        arith::AddIOp::create(rewriter, loc, eltColOffset, blockOffset);
   }
 
   SmallVector<mlir::OpFoldResult> prefetchOffsets{eltRowOffset, eltColOffset};
 
-  return rewriter.create<xegpu::CreateNdDescOp>(
+  return xegpu::CreateNdDescOp::create(rewriter, 
       loc, prefetchType, dyn_cast<TypedValue<MemRefType>>(src),
       prefetchOffsets);
 }
@@ -581,7 +567,7 @@ static void prefetchTiles(PatternRewriter &rewriter, Location loc,
                           xegpu::CachePolicyAttr readCacheHint) {
   // Prefetch the next set of input tiles.
   for (auto tile : prefetchTiles) {
-    rewriter.create<xegpu::PrefetchNdOp>(loc, tile,
+    xegpu::PrefetchNdOp::create(rewriter, loc, tile,
                                          /*l1_hint=*/readCacheHint,
                                          /*l2_hint=*/readCacheHint,
                                          /*l3_hint=*/readCacheHint);
@@ -594,9 +580,7 @@ static SmallVector<Value> updateTilesOffsets(PatternRewriter &rewriter,
                                              ArrayRef<int64_t> offsets) {
   SmallVector<Value> updatedTiles;
   for (auto tile : tiles) {
-    auto updatedTile =
-        rewriter
-            .create<xegpu::UpdateNdOffsetOp>(loc, tile.getType(), tile,
+    auto updatedTile = xegpu::UpdateNdOffsetOp::create(rewriter, loc, tile.getType(), tile,
                                              /*offsets=*/ValueRange{}, offsets)
             .getResult();
     updatedTiles.push_back(updatedTile);
@@ -633,22 +617,19 @@ static SmallVector<Value> createDescriptorTiles(PatternRewriter &rewriter,
   // The original tile is split into contiguous sub-tiles so, the first tile
   // can be used as an anchor.
   Value rootOffsetRow =
-      rewriter.create<arith::ConstantIndexOp>(loc, loadOffsets[0]);
+      arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[0]);
   Value rootOffsetCol =
-      rewriter.create<arith::ConstantIndexOp>(loc, loadOffsets[1]);
+      arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[1]);
 
   mlir::SmallVector<mlir::OpFoldResult> offsets{rootOffsetRow, rootOffsetCol};
-  auto rootTile =
-      rewriter
-          .create<xegpu::CreateNdDescOp>(
+  auto rootTile = xegpu::CreateNdDescOp::create(rewriter, 
               loc, descType, dyn_cast<TypedValue<MemRefType>>(src), offsets)
           .getResult();
 
   SmallVector<Value> tiles;
   for (int i = 0; i < loadShape[0]; i += descTile[0]) {
     for (int j = 0; j < loadShape[1]; j += descTile[1] * arrayLength) {
-      auto tile = rewriter
-                      .create<xegpu::UpdateNdOffsetOp>(
+      auto tile = xegpu::UpdateNdOffsetOp::create(rewriter, 
                           loc, descType, rootTile,
                           /*offsets=*/ValueRange{}, SmallVector<int64_t>{i, j})
                       .getResult();
@@ -737,7 +718,7 @@ loadNdDescTiles(PatternRewriter &rewriter, Location loc, ValueRange loadTiles,
 
   SmallVector<Value> loadVec;
   for (auto tile : loadTiles) {
-    auto loadOp = rewriter.create<xegpu::LoadNdOp>(
+    auto loadOp = xegpu::LoadNdOp::create(rewriter, 
         loc, vecLoadType, tile, vnniPackedAttr, transpose,
         /*l1_hint=*/hint,
         /*l2_hint=*/hint, /*l3_hint=*/hint);
@@ -803,7 +784,7 @@ extractVecSubTiles(PatternRewriter &rewriter, Location loc,
       int loadIdx = m * totalTileCols + k;
       auto sgTotalTile = loadVecTiles[loadIdx];
       auto castFlat =
-          rewriter.create<vector::ShapeCastOp>(loc, loadVecFlat, sgTotalTile);
+          vector::ShapeCastOp::create(rewriter, loc, loadVecFlat, sgTotalTile);
 
       // Iterate over load tiles.
       // Each load tile contains one or more sub-tiles.
@@ -813,12 +794,12 @@ extractVecSubTiles(PatternRewriter &rewriter, Location loc,
           int dpasIdx = i * subTilePerLoadCol + j;
           int offset = dpasIdx * subTileSize;
 
-          auto slice = rewriter.create<vector::ExtractStridedSliceOp>(
+          auto slice = vector::ExtractStridedSliceOp::create(rewriter, 
               loc, castFlat, /*offsets=*/ArrayRef<int64_t>{offset},
               /*sizes=*/ArrayRef<int64_t>{subTileSize},
               /*strides=*/ArrayRef<int64_t>{1});
           auto castTile =
-              rewriter.create<vector::ShapeCastOp>(loc, vecSubTileType, slice);
+              vector::ShapeCastOp::create(rewriter, loc, vecSubTileType, slice);
 
           // Insert the sub-tiles in their position relative to the whole
           // subgroup tile.
@@ -865,7 +846,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
 
   bool isBrgemm = isa<linalg::BatchReduceMatmulOp>(linalgOp);
 
-  Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
 
   int dimM = typeC.getShape()[0];
   int dimN = typeC.getShape()[1];
@@ -892,7 +873,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   if (convOutPrecision) {
     for (size_t i = 0; i < loadVecC.size(); i++) {
       auto extOp =
-          rewriter.create<arith::ExtFOp>(loc, dpasResType, loadVecC[i]);
+          arith::ExtFOp::create(rewriter, loc, dpasResType, loadVecC[i]);
       loadVecC[i] = extOp.getOut();
     }
   }
@@ -900,11 +881,11 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   // Create a loop and step into it.
   auto startLoop = [&](int lb, int ub, int step,
                        ValueRange iterArgs) -> scf::ForOp {
-    Value lbCst = rewriter.create<arith::ConstantIndexOp>(loc, lb);
-    Value ubCst = rewriter.create<arith::ConstantIndexOp>(loc, ub);
-    Value stepCst = rewriter.create<arith::ConstantIndexOp>(loc, step);
+    Value lbCst = arith::ConstantIndexOp::create(rewriter, loc, lb);
+    Value ubCst = arith::ConstantIndexOp::create(rewriter, loc, ub);
+    Value stepCst = arith::ConstantIndexOp::create(rewriter, loc, step);
     scf::ForOp loopOp =
-        rewriter.create<scf::ForOp>(loc, lbCst, ubCst, stepCst, iterArgs);
+        scf::ForOp::create(rewriter, loc, lbCst, ubCst, stepCst, iterArgs);
     rewriter.setInsertionPointToStart(loopOp.getBody());
     return loopOp;
   };
@@ -1026,17 +1007,17 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   int syncFreq = 4;
   int maxSyncStep = 1024;
   int syncStep = std::min(std::max(dimK / syncFreq, maxSyncStep), maxSyncStep);
-  auto syncStepConst = rewriter.create<arith::ConstantIndexOp>(loc, syncStep);
-  auto loopStepMod = rewriter.create<arith::RemUIOp>(
+  auto syncStepConst = arith::ConstantIndexOp::create(rewriter, loc, syncStep);
+  auto loopStepMod = arith::RemUIOp::create(rewriter, 
       loc, kDimLoop.getInductionVar(), syncStepConst);
-  auto syncBlockCond = rewriter.create<arith::CmpIOp>(
+  auto syncBlockCond = arith::CmpIOp::create(rewriter, 
       loc, arith::CmpIPredicate::eq, loopStepMod, zero);
-  rewriter.create<scf::IfOp>(
+  scf::IfOp::create(rewriter, 
       loc, syncBlockCond,
       /*thenBuilder=*/
       [](OpBuilder &b, Location loc) {
-        b.create<gpu::BarrierOp>(loc);
-        b.create<scf::YieldOp>(loc);
+        gpu::BarrierOp::create(b, loc);
+        scf::YieldOp::create(b, loc);
       },
       /*elseBuilder=*/nullptr);
 
@@ -1103,9 +1084,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
       for (int n = 0; n < numTilesN; n++) {
         int cIdx = m * numTilesN + n;
 
-        Value result =
-            rewriter
-                .create<xegpu::DpasOp>(loc, TypeRange{dpasResType},
+        Value result = xegpu::DpasOp::create(rewriter, loc, TypeRange{dpasResType},
                                        ValueRange{dpasVecA.getTile(m, k),
                                                   dpasVecB.getTile(k, n),
                                                   dpasResults[cIdx]})
@@ -1120,7 +1099,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   // Create loop terminator and exit the loop.
   auto terminateLoop = [&](scf::ForOp loopOp, SmallVector<Value> resultValues) {
     rewriter.setInsertionPointToEnd(loopOp.getBody());
-    rewriter.create<scf::YieldOp>(loc, resultValues);
+    scf::YieldOp::create(rewriter, loc, resultValues);
     rewriter.setInsertionPointAfter(loopOp);
   };
 
@@ -1152,7 +1131,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
         VectorType::get(dpasTypeC.getShape(), typeC.getElementType());
     for (size_t i = 0; i < results.size(); i++) {
       auto truncOp =
-          rewriter.create<arith::TruncFOp>(loc, truncType, results[i]);
+          arith::TruncFOp::create(rewriter, loc, truncType, results[i]);
       results[i] = truncOp.getOut();
     }
   }
@@ -1161,7 +1140,7 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   SmallVector<xegpu::StoreNdOp> storeOps;
   for (size_t i = 0; i < tilesC.size(); i++) {
     auto storeOp =
-        rewriter.create<xegpu::StoreNdOp>(loc, results[i], tilesC[i],
+        xegpu::StoreNdOp::create(rewriter, loc, results[i], tilesC[i],
                                           /*l1_hint=*/writeCacheHint,
                                           /*l2_hint=*/writeCacheHint,
                                           /*l3_hint=*/writeCacheHint);
@@ -1240,7 +1219,7 @@ LogicalResult createEltwiseKernel(linalg::LinalgOp linalgOp,
   auto writeCacheHint =
       xegpu::CachePolicyAttr::get(ctx, xegpu::CachePolicy::WRITE_BACK);
   for (size_t i = 0; i < outputTiles.size(); i++) {
-    rewriter.create<xegpu::StoreNdOp>(loc, results[i], outputTiles[i],
+    xegpu::StoreNdOp::create(rewriter, loc, results[i], outputTiles[i],
                                       /*l1_hint=*/writeCacheHint,
                                       /*l2_hint=*/writeCacheHint,
                                       /*l3_hint=*/writeCacheHint);

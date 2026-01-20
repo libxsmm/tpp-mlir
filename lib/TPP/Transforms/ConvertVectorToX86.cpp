@@ -87,19 +87,19 @@ struct ContractionToFMA : OpRewritePattern<vector::ContractionOp> {
                                          "Unsupported accumulator shape");
 
     // Turn an outer product contraction into a broadcast+FMA sequence.
-    auto castLhs = rewriter.create<vector::ShapeCastOp>(
+    auto castLhs = vector::ShapeCastOp::create(rewriter, 
         loc, VectorType::get(1, lhsTy.getElementType()), contractOp.getLhs());
-    auto castRhs = rewriter.create<vector::ShapeCastOp>(
+    auto castRhs = vector::ShapeCastOp::create(rewriter, 
         loc, VectorType::get(rhsShape.back(), rhsTy.getElementType()),
         contractOp.getRhs());
-    auto castAcc = rewriter.create<vector::ShapeCastOp>(
+    auto castAcc = vector::ShapeCastOp::create(rewriter, 
         loc, VectorType::get(accShape.back(), accTy.getElementType()),
         contractOp.getAcc());
-    auto broadcastLhs = rewriter.create<vector::BroadcastOp>(
+    auto broadcastLhs = vector::BroadcastOp::create(rewriter, 
         loc, castRhs.getResult().getType(), castLhs);
     auto fma =
-        rewriter.create<vector::FMAOp>(loc, broadcastLhs, castRhs, castAcc);
-    auto castFma = rewriter.create<vector::ShapeCastOp>(loc, accTy, fma);
+        vector::FMAOp::create(rewriter, loc, broadcastLhs, castRhs, castAcc);
+    auto castFma = vector::ShapeCastOp::create(rewriter, loc, accTy, fma);
 
     rewriter.replaceOp(contractOp, castFma);
 

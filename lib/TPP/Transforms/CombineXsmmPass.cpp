@@ -101,7 +101,7 @@ struct CombineXsmmOp : public OpRewritePattern<xsmm::BrgemmOp> {
     }
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointAfter(fusedMatch.binaryOp);
-    Value dispatched = rewriter.create<xsmm::FusedBrgemmDispatchOp>(
+    Value dispatched = xsmm::FusedBrgemmDispatchOp::create(rewriter, 
         loc, integer64, dims,
         xsmm::BinaryKindAttr::get(rewriter.getContext(), fusedMatch.binaryKind),
         xsmm::UnaryKindAttr::get(rewriter.getContext(), fusedMatch.unaryKind),
@@ -112,7 +112,7 @@ struct CombineXsmmOp : public OpRewritePattern<xsmm::BrgemmOp> {
             xsmm::BinaryFlagsAttr::get(rewriter.getContext(), *binaryFlags)),
         dtype);
 
-    Value batchDim = rewriter.create<arith::ConstantOp>(
+    Value batchDim = arith::ConstantOp::create(rewriter, 
         loc, integer64, rewriter.getIntegerAttr(integer64, batchSize));
     SmallVector<Value, 6> invokeOperands;
     invokeOperands.push_back(dispatched);
@@ -125,7 +125,7 @@ struct CombineXsmmOp : public OpRewritePattern<xsmm::BrgemmOp> {
     invokeOperands.push_back(batchDim);
 
     // Replace and delete the old invokes and their dispatches
-    rewriter.create<xsmm::FusedBrgemmOp>(loc, dtype, invokeOperands);
+    xsmm::FusedBrgemmOp::create(rewriter, loc, dtype, invokeOperands);
     rewriter.eraseOp(brgemmOp);
     rewriter.eraseOp(brgemmOp.getOperand(0).getDefiningOp());
     if (fusedMatch.binaryOp) {

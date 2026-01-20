@@ -59,8 +59,8 @@ static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
   auto inputType = cast<RankedTensorType>(input.getType());
   ArrayRef<int64_t> shape = result.getShape();
   Value output =
-      builder.create<tensor::EmptyOp>(loc, shape, inputType.getElementType());
-  return builder.create<linalg::PackOp>(loc, input, output, innerDimsPos, tiles,
+      tensor::EmptyOp::create(builder, loc, shape, inputType.getElementType());
+  return linalg::PackOp::create(builder, loc, input, output, innerDimsPos, tiles,
                                         /*paddingValue=*/std::nullopt,
                                         outerDimsPerm);
 }
@@ -160,7 +160,7 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
   mapA = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p1, r1, p3, r2, r3}, ctx);
   mapB = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p2, r1, r2, p4, r3}, ctx);
   mapC = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p1, p2, p3, p4}, ctx);
-  auto replacementOp = rewriter.create<linalg::GenericOp>(
+  auto replacementOp = linalg::GenericOp::create(rewriter, 
       loc, matrixC.getType(), packedInputs, ValueRange{matrixC},
       ArrayRef<AffineMap>{mapA, mapB, mapC},
       ArrayRef<mlir::utils::IteratorType>{mlir::utils::IteratorType::parallel,
@@ -224,7 +224,7 @@ mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
   mapB = AffineMap::get(/*dims=*/5, /*symbols=*/0, {r1, r3, p2, r4}, ctx);
   mapC = AffineMap::get(/*dims=*/5, /*symbols=*/0, {p1, p2}, ctx);
 
-  auto replacementOp = rewriter.create<linalg::GenericOp>(
+  auto replacementOp = linalg::GenericOp::create(rewriter, 
       loc, brgemmOp.getOutputs()[0].getType(),
       ValueRange{packedMatrixA, packedMatrixB},
       ValueRange{brgemmOp.getOutputs()[0]},
@@ -457,7 +457,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
       return failure();
 
     newOuts.push_back(newLoopOperand);
-    auto newForallOp = rewriter.create<scf::ForallOp>(
+    auto newForallOp = scf::ForallOp::create(rewriter, 
         forallOp.getLoc(), forallOp.getMixedLowerBound(),
         forallOp.getMixedUpperBound(), forallOp.getMixedStep(), newOuts,
         forallOp.getMapping());
@@ -495,7 +495,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
         auto newMixedSizes = SmallVector<OpFoldResult>(
             mixedSizes.begin() + rank, mixedSizes.end());
 
-        auto newExtractSliceOp = rewriter.create<tensor::ExtractSliceOp>(
+        auto newExtractSliceOp = tensor::ExtractSliceOp::create(rewriter, 
             extractSliceOp.getLoc(), bbArgs.back(), newMixedOffsets,
             newMixedSizes, newMixedStrides);
 
@@ -516,7 +516,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
         auto newMixedSizes = SmallVector<OpFoldResult>(
             mixedSizes.begin() + rank, mixedSizes.end());
 
-        auto newInsertSliceOp = rewriter.create<tensor::ParallelInsertSliceOp>(
+        auto newInsertSliceOp = tensor::ParallelInsertSliceOp::create(rewriter, 
             parallelInsertSlice.getLoc(), parallelInsertSlice.getSource(),
             bbArgs.back(), newMixedOffsets, newMixedSizes, newMixedStrides);
         rewriter.replaceAllUsesWith(parallelInsertSlice->getResults(),

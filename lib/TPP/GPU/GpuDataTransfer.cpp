@@ -97,7 +97,7 @@ static FailureOr<Value> matchTransferBuffers(RewriterBase &rewriter,
   // argument types.
   if (auto subview =
           dyn_cast<memref::SubViewOp>(kernelOperand.getDefiningOp())) {
-    return <memref::SubViewOp::create(rewriter, 
+    return memref::SubViewOp::create(rewriter, 
             loc, operandType, gpuBuffer, subview.getOffsets(),
             subview.getSizes(), subview.getStrides(),
             subview.getStaticOffsets(), subview.getStaticSizes(),

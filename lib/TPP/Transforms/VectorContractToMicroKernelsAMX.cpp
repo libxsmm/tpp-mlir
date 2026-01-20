@@ -221,12 +221,12 @@ static Value performBitcast(Location loc, PatternRewriter &rewriter,
 
   auto bitcast_i16 = vector::BitCastOp::create(rewriter, 
       loc, VectorType::get(sizeFactor, i16Type), vector);
-  auto extend_i32 = rewriter.create<arith::ExtUIOp>(
+  auto extend_i32 = arith::ExtUIOp::create(rewriter, 
       loc, VectorType::get(sizeFactor, i32Type), bitcast_i16);
   auto vectType = VectorType::get(sizeFactor, i32Type);
-  auto shiftOp = rewriter.create<arith::ShLIOp>(
+  auto shiftOp = arith::ShLIOp::create(rewriter, 
       loc, vectType, extend_i32,
-      rewriter.create<vector::BroadcastOp>(loc, vectType, cst16));
+      vector::BroadcastOp::create(rewriter, loc, vectType, cst16));
   auto value = vector::BitCastOp::create(rewriter, 
       loc, VectorType::get(sizeFactor, rewriter.getF32Type()), shiftOp);
 
@@ -280,7 +280,7 @@ static SmallVector<Value> loadTiles(Location loc, PatternRewriter &rewriter,
     for (int i = 0; i < p1; i = i + 16) {
       Value indexOp_i = arith::ConstantIndexOp::create(rewriter, loc, i);
       Value indexOp_j = arith::ConstantIndexOp::create(rewriter, loc, j);
-      auto load = rewriter.create<amx::TileLoadOp>(
+      auto load = amx::TileLoadOp::create(rewriter, 
           loc, tileType, subview, ValueRange{index, indexOp_i, indexOp_j});
       loads.push_back(load);
     }
@@ -300,7 +300,7 @@ static SmallVector<Value> computeTileMul(Location loc,
   for (int i = 0, p = 0; i < M / 16; i++) {
     for (int j = 0; j < N / 16; j++) {
 
-      auto fma = rewriter.create<amx::TileMulFOp>(loc, resType, tileA[i],
+      auto fma = amx::TileMulFOp::create(rewriter, loc, resType, tileA[i],
                                                   tileB[j], acc[p]);
       computedFMAs.push_back(fma);
       p++;
@@ -816,7 +816,7 @@ struct MicroKernelsAMXOp : OpRewritePattern<vector::ContractionOp> {
                                                        computedFMAs);
               });
 
-          rewriterNewReductionForOp.create<scf::YieldOp>(
+          scf::YieldOp::create(rewriterNewReductionForOp, 
               locNewReductionForOp, newKForOp_last.getResults());
         });
 
@@ -986,7 +986,7 @@ struct MicroKernelsAMXOp : OpRewritePattern<vector::ContractionOp> {
                                                        computedFMAs);
               });
 
-          rewriterNewReductionForOp.create<scf::YieldOp>(
+          scf::YieldOp::create(rewriterNewReductionForOp,
               locNewReductionForOp, newKForOp_last_br.getResults());
         });
 
@@ -1201,13 +1201,13 @@ struct MicroKernelsAMXOp : OpRewritePattern<vector::ContractionOp> {
                     auto bitcast_i16 = vector::BitCastOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i16Type),
                         add_row);
-                    auto extend_i32 = rewriter.create<arith::ExtUIOp>(
+                    auto extend_i32 = arith::ExtUIOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i32Type),
                         bitcast_i16);
-                    auto shiftOp = rewriter.create<arith::ShLIOp>(
+                    auto shiftOp = arith::ShLIOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i32Type),
                         extend_i32,
-                        rewriter.create<vector::BroadcastOp>(
+                        vector::BroadcastOp::create(rewriter, 
                             reductionForOp.getLoc(),
                             VectorType::get(16, i32Type), cst16));
                     f32MLPVector = vector::BitCastOp::create(rewriter, 
@@ -1217,13 +1217,13 @@ struct MicroKernelsAMXOp : OpRewritePattern<vector::ContractionOp> {
                     auto bitcast_i16_1 = vector::BitCastOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i16Type),
                         add_row1);
-                    auto extend_i32_1 = rewriter.create<arith::ExtUIOp>(
+                    auto extend_i32_1 = arith::ExtUIOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i32Type),
                         bitcast_i16_1);
-                    auto shiftOp_1 = rewriter.create<arith::ShLIOp>(
+                    auto shiftOp_1 = arith::ShLIOp::create(rewriter, 
                         reductionForOp.getLoc(), VectorType::get(16, i32Type),
                         extend_i32_1,
-                        rewriter.create<vector::BroadcastOp>(
+                        vector::BroadcastOp::create(rewriter, 
                             reductionForOp.getLoc(),
                             VectorType::get(16, i32Type), cst16));
                     f32MLPVector1 = vector::BitCastOp::create(rewriter, 

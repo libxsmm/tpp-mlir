@@ -48,11 +48,11 @@ Value collapse(OpBuilder &builder, Location loc, Value val, Type newType,
   if (newType == val.getType())
     return val;
   if (isa<RankedTensorType>(newType)) {
-    return tensor::CollapseShapeOp::create(rewriter, loc, newType, val,
+    return tensor::CollapseShapeOp::create(builder, loc, newType, val,
                                                    reassociationMap);
   }
   if (isa<MemRefType>(newType)) {
-    return memref::CollapseShapeOp::create(rewriter, loc, newType, val,
+    return memref::CollapseShapeOp::create(builder, loc, newType, val,
                                                    reassociationMap);
   }
   assert(false && "expect tensor or memref");

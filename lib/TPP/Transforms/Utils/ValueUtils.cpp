@@ -129,15 +129,15 @@ std::pair<Value, Value> getPtrAndOffset(OpBuilder &builder, Value operand,
   Type offsetType = builder.getIndexType();
   SmallVector<Type> sizesTypes(memrefType.getRank(), offsetType);
   SmallVector<Type> stridesTypes(memrefType.getRank(), offsetType);
-  auto meta = builder.create<memref::ExtractStridedMetadataOp>(
+  auto meta = memref::ExtractStridedMetadataOp::create(builder, 
       loc, baseMemrefType, offsetType, sizesTypes, stridesTypes, operand);
   Value alignedPointerAsIndex =
-      builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, basePtrType,
+      memref::ExtractAlignedPointerAsIndexOp::create(builder, loc, basePtrType,
                                                              operand);
-  Value alignedPointerAsI64 = builder.create<arith::IndexCastOp>(
+  Value alignedPointerAsI64 = arith::IndexCastOp::create(builder, 
       loc, builder.getIntegerType(64), alignedPointerAsIndex);
   // TODO: non-POD will require an LLVMTypeConverter.
-  Value alignedPointer = builder.create<LLVM::IntToPtrOp>(
+  Value alignedPointer = LLVM::IntToPtrOp::create(builder, 
       loc, LLVM::LLVMPointerType::get(builder.getContext()),
       alignedPointerAsI64);
   Value offset = meta.getOffset();

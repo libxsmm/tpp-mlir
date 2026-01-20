@@ -60,30 +60,30 @@ struct ConvertAlmostEqualsOp
                                            almostEqOp.getOperand(0), idx);
       ubs.push_back(dim);
     }
-    Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
     SmallVector<Value> lbs(rank, zero);
-    Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+    Value one = arith::ConstantIndexOp::create(rewriter, loc, 1);
     SmallVector<Value> steps(rank, one);
     (void)scf::buildLoopNest(
         rewriter, loc, lbs, ubs, steps,
         [&](OpBuilder &b, Location loc, ValueRange localIvs) {
           Value scalarLhs =
-              b.create<memref::LoadOp>(loc, almostEqOp.getLhs(), localIvs);
+              memref::LoadOp::create(b, loc, almostEqOp.getLhs(), localIvs);
           Value scalarRhs =
-              b.create<memref::LoadOp>(loc, almostEqOp.getRhs(), localIvs);
+              memref::LoadOp::create(b, loc, almostEqOp.getRhs(), localIvs);
           Value compare;
           if (isa<mlir::FloatType>(scalarLhs.getType())) {
-            Value diff = b.create<arith::SubFOp>(loc, scalarLhs, scalarRhs);
-            Value abs = b.create<math::AbsFOp>(loc, diff);
-            compare = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE,
+            Value diff = arith::SubFOp::create(b, loc, scalarLhs, scalarRhs);
+            Value abs = math::AbsFOp::create(b, loc, diff);
+            compare = arith::CmpFOp::create(b, loc, arith::CmpFPredicate::OLE,
                                               abs, almostEqOp.getThreshold());
           } else {
-            Value diff = b.create<arith::SubIOp>(loc, scalarLhs, scalarRhs);
-            Value abs = b.create<math::AbsIOp>(loc, diff);
-            compare = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sle,
+            Value diff = arith::SubIOp::create(b, loc, scalarLhs, scalarRhs);
+            Value abs = math::AbsIOp::create(b, loc, diff);
+            compare = arith::CmpIOp::create(b, loc, arith::CmpIPredicate::sle,
                                               abs, almostEqOp.getThreshold());
           }
-          b.create<cf::AssertOp>(loc, compare,
+          cf::AssertOp::create(b, loc, compare,
                                  b.getStringAttr("Result mismatch"));
         });
     rewriter.eraseOp(almostEqOp);
@@ -100,11 +100,11 @@ struct ConvertExpectTrueOp : public OpRewritePattern<ExpectTrueOp> {
                                 PatternRewriter &rewriter) const override {
     Location loc = expectTrueOp.getLoc();
     IntegerType i1 = IntegerType::get(rewriter.getContext(), 1);
-    Value one = rewriter.create<arith::ConstantOp>(
+    Value one = arith::ConstantOp::create(rewriter, 
         loc, i1, rewriter.getIntegerAttr(i1, 1));
-    Value compare = rewriter.create<arith::CmpIOp>(
+    Value compare = arith::CmpIOp::create(rewriter, 
         loc, arith::CmpIPredicate::eq, expectTrueOp.getOperand(), one);
-    rewriter.create<cf::AssertOp>(loc, compare,
+    cf::AssertOp::create(rewriter, loc, compare,
                                   rewriter.getStringAttr("Result mismatch"));
     rewriter.eraseOp(expectTrueOp);
     return success();
@@ -139,32 +139,32 @@ struct ConvertExpectSaneOp : public OpRewritePattern<ExpectSaneOp> {
       auto dim = linalg::createOrFoldDimOp(rewriter, loc, operand, idx);
       ubs.push_back(dim);
     }
-    Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
     SmallVector<Value> lbs(rank, zero);
-    Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+    Value one = arith::ConstantIndexOp::create(rewriter, loc, 1);
     SmallVector<Value> steps(rank, one);
     (void)scf::buildLoopNest(
         rewriter, loc, lbs, ubs, steps,
         [&](OpBuilder &b, Location loc, ValueRange localIvs) {
           Value scalarOperand =
-              b.create<memref::LoadOp>(loc, operand, localIvs);
-          Value scalarOperandAbsf = b.create<math::AbsFOp>(loc, scalarOperand);
-          Value zeroVal = b.create<arith::ConstantOp>(
+              memref::LoadOp::create(b, loc, operand, localIvs);
+          Value scalarOperandAbsf = math::AbsFOp::create(b, loc, scalarOperand);
+          Value zeroVal = arith::ConstantOp::create(b, 
               loc, elementType, rewriter.getZeroAttr(elementType));
 
-          Value inf = rewriter.create<arith::ConstantOp>(
+          Value inf = arith::ConstantOp::create(rewriter, 
               loc, elementType,
               b.getFloatAttr(
                   elementType,
                   APFloat::getInf(
                       cast<FloatType>(elementType).getFloatSemantics())));
-          Value notNan = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::ORD,
+          Value notNan = arith::CmpFOp::create(b, loc, arith::CmpFPredicate::ORD,
                                                  scalarOperandAbsf, zeroVal);
-          Value notInf = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::ONE,
+          Value notInf = arith::CmpFOp::create(b, loc, arith::CmpFPredicate::ONE,
                                                  scalarOperandAbsf, inf);
 
-          Value compare = b.create<arith::AndIOp>(loc, notNan, notInf);
-          b.create<cf::AssertOp>(
+          Value compare = arith::AndIOp::create(b, loc, notNan, notInf);
+          cf::AssertOp::create(b, 
               loc, compare,
               b.getStringAttr("Buffer can't contain NaNs or Infinite values"));
         });

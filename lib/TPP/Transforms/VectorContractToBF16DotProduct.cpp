@@ -340,7 +340,7 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
 
     rewriter.setInsertionPoint(reductionForOp);
     Value c0 =
-        rewriter.create<arith::ConstantIndexOp>(reductionForOp.getLoc(), 0);
+        arith::ConstantIndexOp::create(rewriter, reductionForOp.getLoc(), 0);
 
     // Creating further subviews from the C matrix subview
     llvm::SmallVector<OpFoldResult> sizes = {rewriter.getIndexAttr(K),
@@ -354,32 +354,32 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
           rewriter.getIndexAttr(i),
           rewriter.getIndexAttr(0),
       };
-      auto newSubview = rewriter.create<memref::SubViewOp>(
+      auto newSubview = memref::SubViewOp::create(rewriter, 
           reductionForOp.getLoc(), subviewOpAcc, offsets, sizes, strides);
       subviewCMatrix.push_back(newSubview);
 
       // vector <16xf32> for iterargs to accumulate results in fp32
       for (int j = 0; j < vnni; j++) {
-        Value indexOp = rewriter.create<arith::ConstantIndexOp>(
+        Value indexOp = arith::ConstantIndexOp::create(rewriter, 
             reductionForOp.getLoc(), j * (N / 2));
-        auto valueCRow = rewriter.create<vector::LoadOp>(
+        auto valueCRow = vector::LoadOp::create(rewriter, 
             reductionForOp.getLoc(), VectorType::get({N / 2}, elementType),
             newSubview, ValueRange{c0, indexOp});
-        auto bitcast_i16 = rewriter.create<vector::BitCastOp>(
+        auto bitcast_i16 = vector::BitCastOp::create(rewriter, 
             reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getIntegerType(16)), valueCRow);
-        auto extend_i32 = rewriter.create<arith::ExtUIOp>(
+        auto extend_i32 = arith::ExtUIOp::create(rewriter, 
             reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getIntegerType(32)), bitcast_i16);
-        auto cst16 = rewriter.create<arith::ConstantOp>(
+        auto cst16 = arith::ConstantOp::create(rewriter, 
             reductionForOp.getLoc(),
             rewriter.getIntegerAttr(rewriter.getIntegerType(32), N / 2));
         auto vectType = VectorType::get({N / 2}, rewriter.getIntegerType(32));
-        auto shiftOp = rewriter.create<arith::ShLIOp>(
+        auto shiftOp = arith::ShLIOp::create(rewriter, 
             reductionForOp.getLoc(), vectType, extend_i32,
-            rewriter.create<vector::BroadcastOp>(reductionForOp.getLoc(),
+            vector::BroadcastOp::create(rewriter, reductionForOp.getLoc(),
                                                  vectType, cst16));
-        auto f32CVector = rewriter.create<vector::BitCastOp>(
+        auto f32CVector = vector::BitCastOp::create(rewriter, 
             reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getF32Type()), shiftOp);
 
@@ -390,12 +390,12 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
     SmallVector<Value, 8> bf16DP;
 
     // Code to re-create the reduction and k loop with iter args
-    auto newReductionForOp = rewriter.create<scf::ForOp>(
+    auto newReductionForOp = scf::ForOp::create(rewriter, 
         reductionForOp.getLoc(), reductionForOp.getLowerBound(),
         reductionForOp.getUpperBound(), reductionForOp.getStep(), loopItrArgs,
         [&](OpBuilder &rewriterNewReductionForOp, Location locNewReductionForOp,
             Value ivNewReductionForOp, ValueRange iterArgsNewReductionForOp) {
-          auto newKForOp = rewriter.create<scf::ForOp>(
+          auto newKForOp = scf::ForOp::create(rewriter, 
               kForOp.getLoc(), kForOp.getLowerBound(), kForOp.getUpperBound(),
               kForOp.getStep(), iterArgsNewReductionForOp,
               [&](OpBuilder &rewriterNewKForOp, Location locNewKForOp,
@@ -414,23 +414,23 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                 llvm::SmallVector<Value, 8> vectorA;
 
                 for (int i = 0; i < M; i++) {
-                  Value indexOp = rewriter.create<arith::ConstantIndexOp>(
+                  Value indexOp = arith::ConstantIndexOp::create(rewriter, 
                       reductionForOp.getLoc(), i);
-                  auto valueA = rewriterNewKForOp.create<vector::LoadOp>(
+                  auto valueA = vector::LoadOp::create(rewriter, 
                       kForOp.getLoc(), VectorType::get({vnni}, elementType),
                       lhsClone->getResult(0), ValueRange{c0, indexOp, c0, c0});
                   auto bitcastValueA =
-                      rewriterNewKForOp.create<vector::BitCastOp>(
+                      vector::BitCastOp::create(rewriter, 
                           kForOp.getLoc(),
                           VectorType::get({1}, rewriterNewKForOp.getI32Type()),
                           valueA);
                   auto broadcastValueA =
-                      rewriterNewKForOp.create<vector::BroadcastOp>(
+                      vector::BroadcastOp::create(rewriter, 
                           kForOp.getLoc(),
                           VectorType::get(16, rewriterNewKForOp.getI32Type()),
                           bitcastValueA);
                   auto bitcastValueA_32 =
-                      rewriterNewKForOp.create<vector::BitCastOp>(
+                      vector::BitCastOp::create(rewriter, 
                           kForOp.getLoc(),
                           VectorType::get({N}, rewriterNewKForOp.getBF16Type()),
                           broadcastValueA);
@@ -451,9 +451,9 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                 // Memory access for B Matrix into <32xbf16>
                 llvm::SmallVector<Value, 8> vectorB;
                 for (int i = 0, j = 0; i < vnni; i++, j = j + 16) {
-                  Value indexOp = rewriter.create<arith::ConstantIndexOp>(
+                  Value indexOp = arith::ConstantIndexOp::create(rewriter, 
                       reductionForOp.getLoc(), j);
-                  auto valueBRow = rewriterNewKForOp.create<vector::LoadOp>(
+                  auto valueBRow = vector::LoadOp::create(rewriter, 
                       kForOp.getLoc(), VectorType::get({N}, elementType),
                       rhsClone->getResult(0), ValueRange{c0, c0, indexOp, c0});
                   vectorB.push_back(valueBRow);
@@ -464,30 +464,30 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                     mlir::VectorType::get({N / 2}, rewriter.getF32Type());
                 for (int i = 0, k = 0; i < M; i++, k = k + vnni) {
                   for (int j = 0; j < vnni; j++) {
-                    auto dp = rewriter.create<mlir::x86vector::DotBF16Op>(
+                    auto dp = mlir::x86vector::DotBF16Op::create(rewriter, 
                         kForOp.getLoc(), dstType, iterArgsNewKForOp[j + k],
                         vectorA[i], vectorB[j]);
                     bf16DP.push_back(dp);
                   }
                 }
 
-                rewriterNewKForOp.create<scf::YieldOp>(locNewKForOp, bf16DP);
+                scf::YieldOp::create(rewriter, locNewKForOp, bf16DP);
               });
 
-          rewriterNewReductionForOp.create<scf::YieldOp>(
+          scf::YieldOp::create(rewriter, 
               locNewReductionForOp, newKForOp.getResults());
         });
 
     // Downconvert <16xf32> to <16xbf16> and store into C Matrix
     for (int i = 0, k = 0; i < M; i++) {
       for (int j = 0; j < vnni; j++) {
-        Value indexOp = rewriter.create<arith::ConstantIndexOp>(
+        Value indexOp = arith::ConstantIndexOp::create(rewriter, 
             reductionForOp.getLoc(), j * 16);
-        auto bf16vec = rewriter.create<arith::TruncFOp>(
+        auto bf16vec = arith::TruncFOp::create(rewriter, 
             reductionForOp.getLoc(),
             VectorType::get({16}, rewriter.getBF16Type()),
             newReductionForOp.getResult(k));
-        rewriter.create<vector::StoreOp>(reductionForOp.getLoc(), bf16vec,
+        vector::StoreOp::create(rewriter, reductionForOp.getLoc(), bf16vec,
                                          subviewCMatrix[i],
                                          ValueRange{c0, indexOp});
         k++;
