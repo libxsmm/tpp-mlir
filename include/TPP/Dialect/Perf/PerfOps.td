@@ -177,7 +177,7 @@ def Perf_BenchOp : Perf_Op<"bench",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$numIters,
-      CArg<"ValueRange", "std::nullopt">:$iterArgs)>
+      CArg<"ValueRange", "{}">:$iterArgs)>
   ];
 
   let extraClassDeclaration = [{

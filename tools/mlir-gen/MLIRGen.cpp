@@ -223,7 +223,7 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
     affineExprs.push_back(getAffineDimExpr(i, &context));
 
   // Create module
-  module = builder.create<ModuleOp>(loc);
+  module = ModuleOp::create(builder, loc);
   builder.setInsertionPoint(module);
 }
 
@@ -273,10 +273,9 @@ Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
   Value reScaleFactor = scalingFactors[1];
   Type rescaleType = reScaleFactor.getType();
   auto castedOutput =
-      builder.create<tensor::EmptyOp>(loc, rescaleType, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, rescaleType, ValueRange{});
   Value castedVal =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, rescaleType, ValueRange{chain}, ValueRange{castedOutput},
               ArrayRef<AffineMap>{getMap(chain, MAP_PARALLEL),
                                   getMap(castedOutput, MAP_PARALLEL)},
@@ -284,13 +283,12 @@ Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
-                auto casted = nestedBuilder.create<arith::SIToFPOp>(
+                auto casted = arith::SIToFPOp::create(nestedBuilder, 
                     loc, dataTypes[2], arg0);
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{casted});
+                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{casted});
               })
           .getResult(0);
-  castedVal = builder
-                  .create<linalg::MulOp>(loc, TypeRange{castedOutput.getType()},
+  castedVal = linalg::MulOp::create(builder, loc, TypeRange{castedOutput.getType()},
                                          ValueRange{castedVal, reScaleFactor},
                                          ValueRange{castedOutput})
                   .getResult(0);
@@ -422,7 +420,7 @@ void MLIRGenerator::createKernel(bool hasMixedType) {
     arg.output.value = lastOutput;
   }
   // Data is now output
-  builder.create<func::ReturnOp>(loc, lastArg.output.value);
+  func::ReturnOp::create(builder, loc, lastArg.output.value);
 }
 
 int MLIRGenerator::generate(StringRef filename, bool hasMixedType) {
@@ -506,8 +504,7 @@ Value MLIRGenerator::lowerNamedMatmul(Value input, Value weight, Value output) {
 
   Value namedMatmul;
   if (inputShape.getRank() == 2) {
-    namedMatmul = builder
-                      .create<linalg::MatmulOp>(
+    namedMatmul = linalg::MatmulOp::create(builder, 
                           loc, TypeRange{output.getType()},
                           ValueRange{input, weight}, ValueRange{output})
                       .getResult(0);
@@ -515,16 +512,13 @@ Value MLIRGenerator::lowerNamedMatmul(Value input, Value weight, Value output) {
     SmallVector<OpFoldResult, 4> dims =
         tensor::getMixedSizes(builder, loc, weight);
     applyPermutationToVector(dims, {0, 1, 3, 2});
-    Value emptyTensor = builder.create<tensor::EmptyOp>(
+    Value emptyTensor = tensor::EmptyOp::create(builder, 
         loc, dims, weightShape.getElementType());
 
-    Value transpose =
-        builder
-            .create<linalg::TransposeOp>(loc, weight, emptyTensor,
+    Value transpose = linalg::TransposeOp::create(builder, loc, weight, emptyTensor,
                                          ArrayRef<int64_t>{0, 1, 3, 2})
             .getResults()[0];
-    namedMatmul = builder
-                      .create<linalg::Mmt4DOp>(loc, TypeRange{output.getType()},
+    namedMatmul = linalg::Mmt4DOp::create(builder, loc, TypeRange{output.getType()},
                                                ValueRange{input, transpose},
                                                ValueRange{output})
                       .getResult(0);
@@ -583,7 +577,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
       reassociationIndices.push_back({index});
     reassociationIndices.push_back({inputRank - 1, inputRank});
 
-    input = builder.create<tensor::ExpandShapeOp>(loc, vnniType, input,
+    input = tensor::ExpandShapeOp::create(builder, loc, vnniType, input,
                                                   reassociationIndices);
   }
 
@@ -606,8 +600,7 @@ Value MLIRGenerator::lowerGenericMatmul(Value input, Value weight,
   auto map2 = getMap(weight, MAP_MATMUL_WEIGHT); // { 2, 1 }
   auto map3 = getMap(output, MAP_MATMUL_OUTPUT); // { 0, 1 }
   auto matmul =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, output.getType(), ValueRange{input, weight},
               ValueRange{output}, ArrayRef<AffineMap>{map1, map2, map3},
               getIterators(MAP_MATMUL),
@@ -626,34 +619,34 @@ Value MLIRGenerator::lowerGenericMatmul(Value input, Value weight,
                     cast<ShapedType>(output.getType()).getElementType();
                 if (inputElementType != outputElementType) {
                   if (inputElementType.isFloat()) {
-                    arg0 = nestedBuilder.create<arith::ExtFOp>(
+                    arg0 = arith::ExtFOp::create(builder, 
                         loc, outputElementType, arg0);
                   } else {
-                    arg0 = nestedBuilder.create<arith::ExtSIOp>(
+                    arg0 = arith::ExtSIOp::create(nestedBuilder, 
                         loc, outputElementType, arg0);
                   }
                 }
 
                 if (weightElementType != outputElementType) {
                   if (weightElementType.isFloat()) {
-                    arg1 = nestedBuilder.create<arith::ExtFOp>(
+                    arg1 = arith::ExtFOp::create(builder, 
                         loc, outputElementType, arg1);
                   } else {
-                    arg1 = nestedBuilder.create<arith::ExtSIOp>(
+                    arg1 = arith::ExtSIOp::create(nestedBuilder, 
                         loc, outputElementType, arg1);
                   }
                 }
 
                 auto *mul =
                     outputElementType.isFloat()
-                        ? nestedBuilder.create<arith::MulFOp>(loc, arg0, arg1)
-                        : nestedBuilder.create<arith::MulIOp>(loc, arg0, arg1);
+                        ? arith::MulFOp::create(nestedBuilder, loc, arg0, arg1)
+                        : arith::MulIOp::create(nestedBuilder, loc, arg0, arg1);
                 auto *add = outputElementType.isFloat()
-                                ? nestedBuilder.create<arith::AddFOp>(
+                                ? arith::AddFOp::create(nestedBuilder, 
                                       loc, arg2, mul->getResult(0))
-                                : nestedBuilder.create<arith::AddIOp>(
+                                : arith::AddIOp::create(nestedBuilder, 
                                       loc, arg2, mul->getResult(0));
-                nestedBuilder.create<linalg::YieldOp>(
+                linalg::YieldOp::create(nestedBuilder, 
                     loc, ValueRange{add->getResults()});
               })
           .getResult(0);
@@ -667,8 +660,7 @@ Value MLIRGenerator::lowerContract(Value input, Value weight, Value output) {
   maps.push_back(AffineMapAttr::get(getMap(input, MAP_MATMUL_INPUT)));   // { 0, 2 }
   maps.push_back(AffineMapAttr::get(getMap(weight, MAP_MATMUL_WEIGHT))); // { 2, 1 }
   maps.push_back(AffineMapAttr::get(getMap(output, MAP_MATMUL_OUTPUT))); // { 0, 1 }
-  auto contract = builder
-                      .create<linalg::ContractOp>(
+  auto contract = linalg::ContractOp::create(builder, 
                           loc, output.getType(), ValueRange{input, weight}, ValueRange{output},
                           builder.getArrayAttr(maps))
                       .getResult(0);
@@ -684,7 +676,7 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
   auto elementType = inputType.getElementType();
 
   // Initialize the reduction tensor with the minimum possible value
-  Value initValue = builder.create<arith::ConstantOp>(
+  Value initValue = arith::ConstantOp::create(builder, 
       loc, builder.getFloatAttr(elementType,
                                 -std::numeric_limits<float>::infinity()));
   auto reductionType =
@@ -692,38 +684,36 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
 
   // Per channel scale factor output tensor
   Value scaleTensor =
-      builder.create<tensor::EmptyOp>(loc, reductionType, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
   Value scaleTensorInit =
-      builder.create<linalg::FillOp>(loc, initValue, scaleTensor).getResult(0);
+      linalg::FillOp::create(builder, loc, initValue, scaleTensor).getResult(0);
 
   // Reduce along dimension 0 (rows) to find max of each column for per channel
   // quantization.
-  Value absMax =
-      builder
-          .create<linalg::ReduceOp>(
+  Value absMax = linalg::ReduceOp::create(builder, 
               loc, input, scaleTensorInit, ArrayRef<int64_t>{0},
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange args) {
                 Value absVal =
-                    nestedBuilder.create<math::AbsFOp>(nestedLoc, args[0]);
-                Value maxVal = nestedBuilder.create<arith::MaximumFOp>(
+                    math::AbsFOp::create(nestedBuilder, nestedLoc, args[0]);
+                Value maxVal = arith::MaximumFOp::create(nestedBuilder, 
                     nestedLoc, absVal, args[1]);
-                nestedBuilder.create<linalg::YieldOp>(nestedLoc, maxVal);
+                linalg::YieldOp::create(nestedBuilder, nestedLoc, maxVal);
               })
           .getResult(0);
 
   // Compute the scaling factors (2^(-exponent)) from the absolute maximum
   // values.
-  Value zeroVal = builder.create<arith::ConstantIntOp>(loc, 0, 32);
+  Value zeroVal = arith::ConstantIntOp::create(builder, loc, 0, 32);
 
   // Create two output tensors for the two results
   context.getOrLoadDialect<mlir::LLVM::LLVMDialect>();
   Value channelScale =
-      builder.create<tensor::EmptyOp>(loc, reductionType, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
   Value channelReScale =
-      builder.create<tensor::EmptyOp>(loc, reductionType, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
 
-  auto frExp = builder.create<linalg::GenericOp>(
+  auto frExp = linalg::GenericOp::create(builder, 
       loc,
       TypeRange{reductionType, reductionType}, // Specify multiple result types
       ValueRange{absMax}, ValueRange{channelScale, channelReScale},
@@ -741,25 +731,23 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
             LLVM::ExtractValueOp::create(nestedBuilder, nestedLoc,
                                          builder.getI32Type(), frexpResult, 1)
                 .getResult();
-        Value unbiased = nestedBuilder.create<arith::SubIOp>(
+        Value unbiased = arith::SubIOp::create(nestedBuilder, 
             nestedLoc, exponent,
-            builder.create<arith::ConstantOp>(nestedLoc,
+            arith::ConstantOp::create(builder, nestedLoc,
                                               builder.getI32IntegerAttr(7)));
         Value negExponent =
-            nestedBuilder.create<arith::SubIOp>(nestedLoc, zeroVal, unbiased);
+            arith::SubIOp::create(nestedBuilder, nestedLoc, zeroVal, unbiased);
         auto tchannleReScale =
-            nestedBuilder
-                .create<math::Exp2Op>(nestedLoc,
-                                      nestedBuilder.create<arith::SIToFPOp>(
+            math::Exp2Op::create(nestedBuilder, nestedLoc,
+                                      arith::SIToFPOp::create(nestedBuilder, 
                                           nestedLoc, elementType, unbiased))
                 ->getResult(0);
         auto tchannleScale =
-            nestedBuilder
-                .create<math::Exp2Op>(nestedLoc,
-                                      nestedBuilder.create<arith::SIToFPOp>(
+            math::Exp2Op::create(nestedBuilder, nestedLoc,
+                                      arith::SIToFPOp::create(nestedBuilder, 
                                           nestedLoc, elementType, negExponent))
                 ->getResult(0);
-        nestedBuilder.create<linalg::YieldOp>(
+        linalg::YieldOp::create(nestedBuilder, 
             nestedLoc, ValueRange{tchannleScale, tchannleReScale});
       });
 
@@ -769,21 +757,19 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
 
   SmallVector<Value> scalingFactors;
   Value scalingFactor =
-      builder.create<tensor::EmptyOp>(loc, inputType, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, inputType, ValueRange{});
   Value filledTensor =
-      builder.create<linalg::FillOp>(loc, initValue, scalingFactor)
+      linalg::FillOp::create(builder, loc, initValue, scalingFactor)
           .getResult(0);
   // Broadcast to match output shape
   auto broadcastScaleRes =
-      builder
-          .create<linalg::BroadcastOp>(loc, frExpVec[0], filledTensor,
+      linalg::BroadcastOp::create(builder, loc, frExpVec[0], filledTensor,
                                        ArrayRef<int64_t>{0})
           ->getResult(0);
   scalingFactors.push_back(broadcastScaleRes);
 
   broadcastScaleRes =
-      builder
-          .create<linalg::BroadcastOp>(loc, frExpVec[1], filledTensor,
+      linalg::BroadcastOp::create(builder, loc, frExpVec[1], filledTensor,
                                        ArrayRef<int64_t>{0})
           ->getResult(0);
   scalingFactors.push_back(broadcastScaleRes);
@@ -808,22 +794,20 @@ Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain,
       RankedTensorType::get(shape, inputShapedTy.getElementType());
 
   auto castedOutput =
-      builder.create<tensor::EmptyOp>(loc, outputShapedTy, ValueRange{});
+      tensor::EmptyOp::create(builder, loc, outputShapedTy, ValueRange{});
   SmallVector<Attribute> maps;
   maps.push_back(AffineMapAttr::get(getMap(input, MAP_MATMUL_INPUT)));
   maps.push_back(AffineMapAttr::get(getMap(weight, MAP_MATMUL_WEIGHT)));
   maps.push_back(AffineMapAttr::get(getMap(castedOutput, MAP_MATMUL_OUTPUT)));
   auto dquantVal = getZeroInitTensor(contractOutputTy);
 
-  auto dquantRes = builder
-                       .create<linalg::MulOp>(loc, chain.getType(),
+  auto dquantRes = linalg::MulOp::create(builder, loc, chain.getType(),
                                               ValueRange{chain, scaleFactor},
                                               ValueRange{dquantVal})
                        .getResult(0);
 
   dquantRes =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, outputShapedTy, ValueRange{dquantRes},
               ValueRange{castedOutput},
               ArrayRef<AffineMap>{getMap(dquantRes, MAP_PARALLEL),
@@ -832,9 +816,9 @@ Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain,
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
-                auto casted = nestedBuilder.create<arith::FPToSIOp>(
+                auto casted = arith::FPToSIOp::create(nestedBuilder, 
                     loc, outputShapedTy.getElementType(), arg0);
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{casted});
+                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{casted});
               })
           .getResult(0);
 
@@ -956,16 +940,15 @@ Value MLIRGenerator::lowerBiasAdd(Value input, Value bias, Value output) {
   auto mapA = getMap(input, MAP_BROADCAST);
   auto mapB = getMap(input, MAP_PARALLEL);
   auto sum =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, outTy, ValueRange{bias}, ValueRange{input},
               ArrayRef<AffineMap>{mapA, mapB}, getIterators(MAP_PARALLEL),
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
                 auto arg1 = blockArgs[1];
-                auto add = nestedBuilder.create<arith::AddFOp>(loc, arg0, arg1);
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{add});
+                auto add = arith::AddFOp::create(nestedBuilder, loc, arg0, arg1);
+                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{add});
               })
           .getResult(0);
 
@@ -979,7 +962,7 @@ Value MLIRGenerator::lowerNamedBiasAdd(Value input, Value bias, Value output) {
 
   auto outTy = cast<ShapedType>(input.getType());
   auto biasTy = cast<ShapedType>(bias.getType());
-  Value emptyTensor = builder.create<tensor::EmptyOp>(loc, outTy, ValueRange{});
+  Value emptyTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
   SmallVector<int64_t> addedDimensions;
   SmallVector<bool> dimsNeeded =
       getBroadcastDims(biasTy.getShape(), outTy.getShape());
@@ -989,11 +972,9 @@ Value MLIRGenerator::lowerNamedBiasAdd(Value input, Value bias, Value output) {
   }
 
   Value broadcast =
-      builder
-          .create<linalg::BroadcastOp>(loc, bias, emptyTensor, addedDimensions)
+      linalg::BroadcastOp::create(builder, loc, bias, emptyTensor, addedDimensions)
           .getResult()[0];
-  Value biasAdd = builder
-                      .create<linalg::AddOp>(loc, TypeRange{output.getType()},
+  Value biasAdd = linalg::AddOp::create(builder, loc, TypeRange{output.getType()},
                                              ValueRange{broadcast, input},
                                              ValueRange{emptyTensor})
                       .getResult(0);
@@ -1009,12 +990,10 @@ Value MLIRGenerator::lowerNamedRelu(Value input, Value output) {
   auto outTy = cast<ShapedType>(input.getType());
   auto zero =
       getConstFloat(builder, 0.0, cast<FloatType>(outTy.getElementType()));
-  Value emptyTensor = builder.create<tensor::EmptyOp>(loc, outTy, ValueRange{});
+  Value emptyTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
   auto fill =
-      builder.create<linalg::FillOp>(loc, zero, emptyTensor)->getResult(0);
-  Value relu =
-      builder
-          .create<linalg::MaxOp>(loc, TypeRange{output.getType()},
+      linalg::FillOp::create(builder, loc, zero, emptyTensor)->getResult(0);
+  Value relu = linalg::MaxOp::create(builder, loc, TypeRange{output.getType()},
                                  ValueRange{input, fill}, ValueRange{emptyTensor})
           .getResult(0);
 
@@ -1030,16 +1009,15 @@ Value MLIRGenerator::lowerRelu(Value input, Value output) {
   auto outTy = cast<ShapedType>(input.getType());
   auto map = getMap(input, MAP_PARALLEL);
   auto relu =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, outTy, ValueRange{}, ValueRange{input},
               ArrayRef<AffineMap>{map}, getIterators(MAP_PARALLEL),
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
                 auto max =
-                    nestedBuilder.create<arith::MaximumFOp>(loc, arg0, zero);
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{max});
+                    arith::MaximumFOp::create(nestedBuilder, loc, arg0, zero);
+                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{max});
               })
           .getResult(0);
 
@@ -1075,46 +1053,45 @@ Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
   auto outTy = cast<ShapedType>(input.getType());
 
   // First, we calculate the element-wise exp
-  Value expTensor = builder.create<tensor::EmptyOp>(loc, outTy, ValueRange{});
-  auto exp = builder.create<linalg::GenericOp>(
+  Value expTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
+  auto exp = linalg::GenericOp::create(builder, 
       loc, outTy, ValueRange{input}, ValueRange{expTensor},
       ArrayRef<AffineMap>{map1, map1}, getIterators(MAP_PARALLEL),
       [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange blockArgs) {
         auto arg0 = blockArgs[0];
-        auto exp = nestedBuilder.create<math::ExpOp>(loc, arg0);
-        nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{exp});
+        auto exp = math::ExpOp::create(nestedBuilder, loc, arg0);
+        linalg::YieldOp::create(nestedBuilder, loc, ValueRange{exp});
       });
 
   // Second, we sum-reduce and splat
   SmallVector<int64_t> dims{batch, 1};
   auto redTy = getShape(dims, PACK_OUTPUT);
   Value redTensor =
-      builder.create<tensor::EmptyOp>(loc, dims, outTy.getElementType());
+      tensor::EmptyOp::create(builder, loc, dims, outTy.getElementType());
   auto zero = getConstFloat(builder, 0.0, cast<FloatType>(dataTypes[0]));
-  auto fill = builder.create<linalg::FillOp>(loc, zero, redTensor);
-  auto redux = builder.create<linalg::GenericOp>(
+  auto fill = linalg::FillOp::create(builder, loc, zero, redTensor);
+  auto redux = linalg::GenericOp::create(builder, 
       loc, redTy, ValueRange{exp.getResult(0)}, ValueRange{fill.getResult(0)},
       ArrayRef<AffineMap>{map1, map2}, getIterators(MAP_REDUCTION),
       [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange blockArgs) {
         auto arg0 = blockArgs[0];
         auto arg1 = blockArgs[1];
-        auto add = nestedBuilder.create<arith::AddFOp>(loc, arg0, arg1);
-        nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{add});
+        auto add = arith::AddFOp::create(nestedBuilder, loc, arg0, arg1);
+        linalg::YieldOp::create(nestedBuilder, loc, ValueRange{add});
       });
   // Splat back to the same dims
-  Value meanTensor = builder.create<tensor::EmptyOp>(loc, outTy, ValueRange{});
-  auto mean = builder.create<linalg::GenericOp>(
+  Value meanTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
+  auto mean = linalg::GenericOp::create(builder, 
       loc, outTy, ValueRange{redux.getResult(0)}, ValueRange{meanTensor},
       ArrayRef<AffineMap>{map2, map1}, getIterators(MAP_PARALLEL),
       [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange blockArgs) {
         auto arg0 = blockArgs[0];
-        nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{arg0});
+        linalg::YieldOp::create(nestedBuilder, loc, ValueRange{arg0});
       });
 
   // Third, we update the exp/sum(exp) onto the output tensor
   auto softmax =
-      builder
-          .create<linalg::GenericOp>(
+      linalg::GenericOp::create(builder, 
               loc, outTy, ValueRange{exp.getResult(0), mean.getResult(0)},
               ValueRange{output}, ArrayRef<AffineMap>{map1, map1, map1},
               getIterators(MAP_PARALLEL),
@@ -1122,8 +1099,8 @@ Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
                 auto arg1 = blockArgs[1];
-                auto div = nestedBuilder.create<arith::DivFOp>(loc, arg0, arg1);
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{div});
+                auto div = arith::DivFOp::create(nestedBuilder, loc, arg0, arg1);
+                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{div});
               })
           .getResult(0);
 
@@ -1358,7 +1335,7 @@ Value MLIRGenerator::getZeroInitTensor(TensorType type) {
   }
 
   Value tensor =
-      builder.create<tensor::EmptyOp>(loc, type, ValueRange{}).getResult();
-  tensor = builder.create<linalg::FillOp>(loc, zero, tensor).getResult(0);
+      tensor::EmptyOp::create(builder, loc, type, ValueRange{}).getResult();
+  tensor = linalg::FillOp::create(builder, loc, zero, tensor).getResult(0);
   return tensor;
 }

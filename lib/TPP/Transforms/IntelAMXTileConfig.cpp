@@ -59,7 +59,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
     auto attributesSetup = *brgemmFlags;
     attributesSetup.push_back(xsmm::GemmFlagsAttr::get(
         rewriter.getContext(), xsmm::GemmFlags::NO_RESET_TILECONFIG));
-    auto tileConfigSetup = rewriter.create<xsmm::IntelAMXTileConfigDispatchOp>(
+    auto tileConfigSetup = xsmm::IntelAMXTileConfigDispatchOp::create(rewriter, 
         op.getLoc(), rewriter.getI64Type(),
         DenseI64ArrayAttr::get(
             rewriter.getContext(),
@@ -71,7 +71,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
     SmallVector<Attribute> attributesReset = *brgemmFlags;
     attributesReset.push_back(xsmm::GemmFlagsAttr::get(
         rewriter.getContext(), xsmm::GemmFlags::NO_SETUP_TILECONFIG));
-    auto tileConfigReset = rewriter.create<xsmm::IntelAMXTileConfigDispatchOp>(
+    auto tileConfigReset = xsmm::IntelAMXTileConfigDispatchOp::create(rewriter, 
         op.getLoc(), rewriter.getI64Type(),
         DenseI64ArrayAttr::get(
             rewriter.getContext(),
@@ -90,11 +90,11 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
         rewriter.clone(*op.getOperand(0).getDefiningOp()));
     dispatch.setFlagsAttr(rewriter.getArrayAttr(attributesBrgemm));
 
-    auto alloca = rewriter.create<memref::AllocaOp>(
+    auto alloca = memref::AllocaOp::create(rewriter, 
         op.getLoc(), MemRefType::get({64}, rewriter.getI8Type()));
 
     SmallVector<Value> tileConfigInputs{alloca};
-    rewriter.create<mlir::xsmm::IntelAMXTileConfigOp>(
+    mlir::xsmm::IntelAMXTileConfigOp::create(rewriter, 
         op.getLoc(), tileConfigSetup, tileConfigInputs);
 
     SmallVector<Value> invokeOperands;
@@ -102,13 +102,13 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
     auto opItr = op->getOperands().begin();
     std::advance(opItr, 1);
     invokeOperands.append(opItr, op->getOperands().end());
-    rewriter.create<InvokeOpTy>(
+    InvokeOpTy::create(rewriter, 
         op.getLoc(),
         xsmm::utils::getDataType(rewriter, op.getOperand(1).getType()),
         invokeOperands);
 
     SmallVector<Value> tileResetInputs{alloca};
-    rewriter.create<mlir::xsmm::IntelAMXTileConfigOp>(
+    mlir::xsmm::IntelAMXTileConfigOp::create(rewriter, 
         op.getLoc(), tileConfigReset, tileResetInputs);
 
     rewriter.eraseOp(op);

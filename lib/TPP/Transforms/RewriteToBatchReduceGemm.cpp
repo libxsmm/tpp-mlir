@@ -225,11 +225,11 @@ mlir::linalgx::rewriteToBRGemmOp(RewriterBase &rewriter,
 
     linalg::BatchReduceMatmulOp brgemm =
         (linalgOp.hasPureTensorSemantics())
-            ? builder.create<linalg::BatchReduceMatmulOp>(
+            ? linalg::BatchReduceMatmulOp::create(builder, 
                   loc, slicedOperands[2].getType(),
                   ValueRange{slicedOperands[0], slicedOperands[1]},
                   slicedOperands[2])
-            : builder.create<linalg::BatchReduceMatmulOp>(
+            : linalg::BatchReduceMatmulOp::create(builder, 
                   loc, ValueRange{slicedOperands[0], slicedOperands[1]},
                   slicedOperands[2]);
     tensorResults =

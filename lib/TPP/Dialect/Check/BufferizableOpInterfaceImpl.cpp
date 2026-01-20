@@ -58,7 +58,7 @@ struct ExpectTrueLayoutInterface
       return failure();
     Value srcBuffer = *maybeSrcBuffer;
 
-    rewriter.create<check::ExpectTrueOp>(op->getLoc(), srcBuffer);
+    check::ExpectTrueOp::create(rewriter, op->getLoc(), srcBuffer);
     return success();
   }
 };
@@ -107,7 +107,7 @@ struct ExpectAlmostEqLayoutInterface
       return failure();
     Value secondBuffer = *maybeSecondBuffer;
 
-    auto newExpectOp = rewriter.create<check::ExpectAlmostEqOp>(
+    auto newExpectOp = check::ExpectAlmostEqOp::create(rewriter,
         op->getLoc(), firstBuffer, secondBuffer, almostEqOp.getThreshold());
     op->replaceAllUsesWith(newExpectOp);
     rewriter.eraseOp(op);
@@ -155,7 +155,7 @@ struct ExpectSaneLayoutInterface
     Value buffer = *maybeBuffer;
 
     auto newExpectOp =
-        rewriter.create<check::ExpectSaneOp>(op->getLoc(), buffer);
+        check::ExpectSaneOp::create(rewriter, op->getLoc(), buffer);
     op->replaceAllUsesWith(newExpectOp);
     rewriter.eraseOp(op);
     return success();

@@ -289,14 +289,14 @@ struct VectorContractToFMAPattern
         ctx.outermostLoop.getBody(),
         std::prev(ctx.outermostLoop.getBody()->end(), 1));
 
-    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
     SmallVector<Value, 4> subview_2_splits;
     for (int i = 0; i < M; i++) {
       SmallVector<OpFoldResult> mixedOffsets = {
           rewriter.getIndexAttr(i),
           rewriter.getIndexAttr(0),
       };
-      auto split = rewriter.create<memref::SubViewOp>(
+      auto split = memref::SubViewOp::create(rewriter, 
           loc, accSubview, mixedOffsets, mixedSizes, mixedStrides);
       subview_2_splits.push_back(split);
     }
@@ -305,21 +305,21 @@ struct VectorContractToFMAPattern
     SmallVector<Value, 4> initAccs;
     for (auto subview : subview_2_splits) {
       for (unsigned j = 0; j < N; j += vecLen) {
-        auto acc = rewriter.create<vector::LoadOp>(
+        auto acc = vector::LoadOp::create(rewriter, 
             loc, VectorType::get({vecLen}, elementType), subview,
-            ValueRange{c0, rewriter.create<arith::ConstantIndexOp>(loc, j)});
+            ValueRange{c0, arith::ConstantIndexOp::create(rewriter, loc, j)});
         initAccs.push_back(acc);
       }
     }
 
     // Create new outer loop with M different accumulators.
-    auto newOuterForOp = rewriter.create<scf::ForOp>(
+    auto newOuterForOp = scf::ForOp::create(rewriter, 
         loc, ctx.outerForOp.getLowerBound(), ctx.outerForOp.getUpperBound(),
         ctx.outerForOp.getStep(), initAccs,
         [&](OpBuilder &nestedBuilder, Location loc, Value iv,
             ValueRange iterArgs) {
           // Create new inner loop with M accumulators.
-          auto newInnerForOp = nestedBuilder.create<scf::ForOp>(
+          auto newInnerForOp = scf::ForOp::create(nestedBuilder, 
               loc, ctx.innerForOp.getLowerBound(),
               ctx.innerForOp.getUpperBound(), ctx.innerForOp.getStep(),
               iterArgs,
@@ -338,13 +338,13 @@ struct VectorContractToFMAPattern
                 // Load and broadcast individual elements
                 SmallVector<Value, 4> broadcasts;
                 for (int i = 0; i < M; i++) {
-                  auto elem = innerBuilder.create<memref::LoadOp>(
+                  auto elem = memref::LoadOp::create(innerBuilder, 
                       loc, lhsClone->getResult(0),
                       ValueRange{
                           c0,
-                          innerBuilder.create<arith::ConstantIndexOp>(loc, i),
+                          arith::ConstantIndexOp::create(innerBuilder, loc, i),
                           c0});
-                  auto bcast = innerBuilder.create<vector::BroadcastOp>(
+                  auto bcast = vector::BroadcastOp::create(innerBuilder, 
                       loc, VectorType::get({vecLen}, elem.getType()), elem);
                   broadcasts.push_back(bcast);
                 }
@@ -363,16 +363,16 @@ struct VectorContractToFMAPattern
                     *rhsDefiningOp.getBase().getDefiningOp(), rhsMapping);
                 if (vecLen == 8) {
                   for (unsigned j = 0; j < N; j += vecLen) {
-                    auto rowVec = innerBuilder.create<vector::LoadOp>(
+                    auto rowVec = vector::LoadOp::create(innerBuilder, 
                         loc, VectorType::get({vecLen}, elementType),
                         rhsClone->getResult(0),
                         ValueRange{c0, c0,
-                                   innerBuilder.create<arith::ConstantIndexOp>(
+                                   arith::ConstantIndexOp::create(innerBuilder, 
                                        loc, j)});
                     unsigned iterArgAccessStride = N / vecLen;
                     unsigned offset = j / vecLen;
                     for (int i = 0; i < M; i++) {
-                      auto fma = innerBuilder.create<vector::FMAOp>(
+                      auto fma = vector::FMAOp::create(innerBuilder, 
                           loc, broadcasts[i], rowVec,
                           innerIterArgs[offset + iterArgAccessStride * i]);
                       argResults.push_back(fma);
@@ -394,15 +394,15 @@ struct VectorContractToFMAPattern
                   for (int i = 0; i < M; i++) {
                     unsigned iterArgAccessStride = (i) * ((N / vecLen));
                     for (unsigned j = 0; j < N; j += vecLen) {
-                      auto rowVec = innerBuilder.create<vector::LoadOp>(
+                      auto rowVec = vector::LoadOp::create(innerBuilder, 
                           loc, VectorType::get({vecLen}, elementType),
                           rhsClone->getResult(0),
                           ValueRange{
                               c0, c0,
-                              innerBuilder.create<arith::ConstantIndexOp>(loc,
+                              arith::ConstantIndexOp::create(innerBuilder, loc,
                                                                           j)});
                       unsigned offset = (j / vecLen);
-                      auto fma = innerBuilder.create<vector::FMAOp>(
+                      auto fma = vector::FMAOp::create(innerBuilder, 
                           loc, broadcasts[i], rowVec,
                           innerIterArgs[offset + iterArgAccessStride]);
                       results.push_back(fma);
@@ -411,11 +411,11 @@ struct VectorContractToFMAPattern
                 }
 
                 // Yield all M results
-                innerBuilder.create<scf::YieldOp>(loc, results);
+                scf::YieldOp::create(innerBuilder, loc, results);
               });
 
           // Yield results from inner loop to outer loop
-          nestedBuilder.create<scf::YieldOp>(loc, newInnerForOp.getResults());
+          scf::YieldOp::create(nestedBuilder, loc, newInnerForOp.getResults());
         });
 
     Value matResult = ctx.outerForOp.getResult(0);
@@ -432,10 +432,10 @@ struct VectorContractToFMAPattern
         unsigned iterArgAccessStride = i * (N / vecLen);
         for (unsigned j = 0; j < N; j += vecLen) {
           unsigned offset = j / vecLen;
-          rewriter.create<vector::StoreOp>(
+          vector::StoreOp::create(rewriter, 
               loc, newOuterForOp.getResult(offset + iterArgAccessStride),
               subview_2_splits[i],
-              ValueRange{c0, rewriter.create<arith::ConstantIndexOp>(loc, j)});
+              ValueRange{c0, arith::ConstantIndexOp::create(rewriter, loc, j)});
         }
       }
     }
