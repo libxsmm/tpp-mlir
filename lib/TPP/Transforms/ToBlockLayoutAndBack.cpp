@@ -46,7 +46,7 @@ namespace tpp {
 //===----------------------------------------------------------------------===//
 
 // Helper function to create the pack operation.
-static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
                               ArrayRef<OpFoldResult> tiles,
                               ArrayRef<int64_t> innerDimsPos,
                               ArrayRef<int64_t> outerDimsPerm) {
@@ -54,7 +54,7 @@ static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
   SmallVector<int64_t> staticTiles;
   dispatchIndexOpFoldResults(tiles, dynamicTiles, staticTiles);
   RankedTensorType result =
-      linalg::PackOp::inferPackedType(cast<RankedTensorType>(input.getType()),
+      linalg::PackOp::inferPackedTensorType(cast<RankedTensorType>(input.getType()),
                                       staticTiles, innerDimsPos, outerDimsPerm);
   auto inputType = cast<RankedTensorType>(input.getType());
   ArrayRef<int64_t> shape = result.getShape();
@@ -65,7 +65,7 @@ static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
                                         outerDimsPerm);
 }
 
-static Value handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                                ArrayRef<OpFoldResult> tiles, int64_t kDimPos) {
   assert(tiles.size() == 1 && "expect 1 block for VNNI");
   return toPackLayoutImpl(builder, loc, input, tiles,
@@ -73,7 +73,7 @@ static Value handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                           /*outerDimsPerm=*/{});
 }
 
-static Value handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
+static linalg::PackOp handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
                                      Value input, ArrayRef<OpFoldResult> tiles,
                                      int64_t kDimPos) {
   assert(tiles.size() == 1 && "expect 1 block for VNNI");
@@ -83,13 +83,13 @@ static Value handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
 }
 
 // Helper function to pack from [outer][K][inner] to [outer][K/2][inner][2].
-static Value toPackLayout_VNNI(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp toPackLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                                ArrayRef<OpFoldResult> tiles, int64_t kDimPos) {
   return handleLayout_VNNI(builder, loc, input, tiles, kDimPos);
 }
 
 // Helper function to pack from [outer][K][inner] to [outer][K/2][inner][2].
-static Value toPackBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
+static linalg::PackOp toPackBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
                                      Value input, ArrayRef<OpFoldResult> tiles,
                                      int64_t kDimPos) {
   return handleBRGemmLayout_VNNI(builder, loc, input, tiles, kDimPos);
@@ -142,16 +142,16 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
     return rewriter.notifyMatchFailure(matmulOp,
                                        "Invalid reduction dim operands");
   // Reshape input A.
-  Value packedMatrixA =
+  linalg::PackOp packedMatrixA =
       toPackLayout_VNNI(rewriter, loc, matmulOp.getInputs()[0], tilesOnSmallK,
                         kOperands[0].second);
   // Reshape input B.
-  Value packedMatrixB = toPackLayout_VNNI(rewriter, loc, operandB.get(),
+  linalg::PackOp packedMatrixB = toPackLayout_VNNI(rewriter, loc, operandB.get(),
                                           tilesOnSmallK, kOperands[1].second);
 
   MLIRContext *ctx = matmulOp.getContext();
   AffineExpr p1, p2, r1, p3, p4, r2, r3;
-  SmallVector<Value> packedInputs = {packedMatrixA, packedMatrixB};
+  SmallVector<linalg::PackOp> packedInputs = {packedMatrixA, packedMatrixB};
   AffineMap mapA, mapB, mapC;
   Value matrixC = matmulOp.getOutputs()[0];
 
@@ -210,10 +210,10 @@ mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
 
   Location loc = brgemmOp.getLoc();
   // Reshape input A.
-  Value packedMatrixA = toPackBRGemmLayout_VNNI(
+  linalg::PackOp packedMatrixA = toPackBRGemmLayout_VNNI(
       rewriter, loc, brgemmOp.getInputs()[0], tilesOnK, 2);
   // Reshape input B.
-  Value packedMatrixB =
+  linalg::PackOp packedMatrixB =
       toPackBRGemmLayout_VNNI(rewriter, loc, operandB, tilesOnK, 1);
 
   MLIRContext *ctx = brgemmOp.getContext();
