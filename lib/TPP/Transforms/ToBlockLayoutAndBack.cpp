@@ -151,7 +151,8 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
 
   MLIRContext *ctx = matmulOp.getContext();
   AffineExpr p1, p2, r1, p3, p4, r2, r3;
-  SmallVector<linalg::PackOp> packedInputs = {packedMatrixA, packedMatrixB};
+  SmallVector<Value> packedInputs = {packedMatrixA.getResult(),
+                                     packedMatrixB.getResult()};
   AffineMap mapA, mapB, mapC;
   Value matrixC = matmulOp.getOutputs()[0];
 
@@ -224,9 +225,9 @@ mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
   mapB = AffineMap::get(/*dims=*/5, /*symbols=*/0, {r1, r3, p2, r4}, ctx);
   mapC = AffineMap::get(/*dims=*/5, /*symbols=*/0, {p1, p2}, ctx);
 
-  auto replacementOp = linalg::GenericOp::create(rewriter, 
-      loc, brgemmOp.getOutputs()[0].getType(),
-      ValueRange{packedMatrixA, packedMatrixB},
+  auto replacementOp = linalg::GenericOp::create(
+      rewriter, loc, brgemmOp.getOutputs()[0].getType(),
+      ValueRange{packedMatrixA.getResult(), packedMatrixB.getResult()},
       ValueRange{brgemmOp.getOutputs()[0]},
       ArrayRef<AffineMap>{mapA, mapB, mapC},
       ArrayRef<mlir::utils::IteratorType>{
