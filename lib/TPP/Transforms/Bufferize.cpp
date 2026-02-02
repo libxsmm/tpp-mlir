@@ -132,8 +132,11 @@ void Bufferize::runOnOperation() {
   }
   passManager.addPass(createOneShotBufferizePass(buffOpts));
 
+  bufferization::DropEquivalentBufferResultsPassOptions dropBufOpts;
+  dropBufOpts.modifyPublicFunctions = true;
   if (!runOnlyAnalysis) {
-    passManager.addPass(bufferization::createDropEquivalentBufferResultsPass());
+    passManager.addPass(
+        bufferization::createDropEquivalentBufferResultsPass(dropBufOpts));
 
     // Post-processing.
     passManager.addNestedPass<func::FuncOp>(createCanonicalizerPass());
@@ -143,7 +146,8 @@ void Bufferize::runOnOperation() {
     // memrefs are unified in CSE pass, so we can truly remove redundant memcpy.
     passManager.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   }
-  passManager.addPass(bufferization::createDropEquivalentBufferResultsPass());
+  passManager.addPass(
+      bufferization::createDropEquivalentBufferResultsPass(dropBufOpts));
 
   if (dealloc) {
     bufferization::BufferDeallocationPipelineOptions options;
