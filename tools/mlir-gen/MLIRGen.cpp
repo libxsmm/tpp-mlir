@@ -81,7 +81,7 @@ static Value createExpandedScaleTensor(OpBuilder &builder, Location loc,
       RankedTensorType::get(scaleShapes, outputScaleTy.getElementType());
   SmallVector<ReassociationIndices> reassociationIndices;
   reassociationIndices.push_back({0, 1, 2, 3});
-  scale = builder.create<tensor::ExpandShapeOp>(loc, packedScaleTy, scale,
+  scale = tensor::ExpandShapeOp::create(builder, loc, packedScaleTy, scale,
                                                 reassociationIndices);
   return scale;
 }
@@ -895,36 +895,35 @@ Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
   }
 
   auto result =
-      builder
-          .create<linalg::GenericOp>(
-              loc, TypeRange{outputShapedTy},
-              ValueRange{chain, inputScale, weightScale}, ValueRange{output},
-              reshapeMap, iteratorTypes,
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange blockArgs) {
-                auto arg0 = blockArgs[0];
-                auto arg1 = blockArgs[1];
-                auto arg2 = blockArgs[2];
-                auto alu =
-                    inputScaleTy.getElementType().isInteger()
-                        ? nestedBuilder.create<arith::MulIOp>(loc, arg1, arg2)
-                              .getResult()
-                        : nestedBuilder.create<arith::MulFOp>(loc, arg1, arg2)
-                              .getResult();
-                Value castToFloat = arg0;
-                if (arg0.getType() != dataTypes[2]) {
-                  if (arg0.getType().isF16() || arg0.getType().isBF16()) {
-                    castToFloat = nestedBuilder.create<arith::ExtFOp>(
-                        loc, dataTypes[2], arg0);
-                  } else {
-                    castToFloat = nestedBuilder.create<arith::SIToFPOp>(
-                        loc, dataTypes[2], arg0);
-                  }
-                }
-                alu = nestedBuilder.create<arith::MulFOp>(loc, castToFloat, alu)
+      linalg::GenericOp::create(
+          builder, loc, TypeRange{outputShapedTy},
+          ValueRange{chain, inputScale, weightScale}, ValueRange{output},
+          reshapeMap, iteratorTypes,
+          [&](OpBuilder &nestedBuilder, Location nestedLoc,
+              ValueRange blockArgs) {
+            auto arg0 = blockArgs[0];
+            auto arg1 = blockArgs[1];
+            auto arg2 = blockArgs[2];
+            auto alu =
+                inputScaleTy.getElementType().isInteger()
+                    ? arith::MulIOp::create(nestedBuilder, loc, arg1, arg2)
+                          .getResult()
+                    : arith::MulFOp::create(nestedBuilder, loc, arg1, arg2)
                           .getResult();
-                nestedBuilder.create<linalg::YieldOp>(loc, ValueRange{alu});
-              })
+            Value castToFloat = arg0;
+            if (arg0.getType() != dataTypes[2]) {
+              if (arg0.getType().isF16() || arg0.getType().isBF16()) {
+                castToFloat = arith::ExtFOp::create(nestedBuilder, loc,
+                                                    dataTypes[2], arg0);
+              } else {
+                castToFloat = arith::SIToFPOp::create(nestedBuilder, loc,
+                                                      dataTypes[2], arg0);
+              }
+            }
+            alu = arith::MulFOp::create(nestedBuilder, loc, castToFloat, alu)
+                      .getResult();
+            linalg::YieldOp::create(nestedBuilder, loc, ValueRange{alu});
+          })
           .getResult(0);
 
   // TODO: A place holder for flops computation for dequantization.
