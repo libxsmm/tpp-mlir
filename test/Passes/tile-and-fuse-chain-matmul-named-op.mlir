@@ -55,13 +55,14 @@ func.func @matmul_sequence_fusion(%arg0: tensor<32x64xf32>, %arg1: tensor<64x32x
 // CONF1:             }
 // CONF1:             scf.yield %[[VAL_26]] : tensor<32x64xf32>
 // CONF1:           } {parallel = "root"}
+// CONF1:           %[[EMPTY:.*]] = tensor.empty() : tensor<32x32xf32>
 // CONF1:           %[[VAL_34:.*]] = scf.for %[[VAL_35:.*]] = %[[VAL_9]] to %[[VAL_10]] step %[[VAL_11]] iter_args(%[[VAL_36:.*]] = %[[VAL_2]]) -> (tensor<32x32xf32>) {
 // CONF1:             %[[VAL_37:.*]] = scf.for %[[VAL_38:.*]] = %[[VAL_9]] to %[[VAL_10]] step %[[VAL_11]] iter_args(%[[VAL_39:.*]] = %[[VAL_36]]) -> (tensor<32x32xf32>) {
 // CONF1:               %[[VAL_40:.*]] = tensor.extract_slice %[[VAL_23]]{{\[}}%[[VAL_35]], 0] [2, 64] [1, 1] : tensor<32x64xf32> to tensor<2x64xf32>
 // CONF1:               %[[VAL_41:.*]] = tensor.extract_slice %[[VAL_5]][0, %[[VAL_38]]] [64, 2] [1, 1] : tensor<64x32xf32> to tensor<64x2xf32>
 // CONF1:               %[[VAL_42:.*]] = tensor.extract_slice %[[VAL_6]]{{\[}}%[[VAL_35]], %[[VAL_38]]] [2, 2] [1, 1] : tensor<32x32xf32> to tensor<2x2xf32>
 // CONF1:               %[[VAL_43:.*]] = linalg.matmul ins(%[[VAL_40]], %[[VAL_41]] : tensor<2x64xf32>, tensor<64x2xf32>) outs(%[[VAL_42]] : tensor<2x2xf32>) -> tensor<2x2xf32>
-// CONF1:               %[[VAL_44:.*]] = tensor.empty() : tensor<2x2xf32>
+// CONF1:               %[[VAL_44:.*]] = tensor.extract_slice %[[EMPTY]]{{\[}}%[[VAL_35]], %[[VAL_38]]] [2, 2] [1, 1] : tensor<32x32xf32> to tensor<2x2xf32>
 // CONF1:               %[[VAL_45:.*]] = linalg.fill ins(%[[VAL_8]] : f32) outs(%[[VAL_44]] : tensor<2x2xf32>) -> tensor<2x2xf32>
 // CONF1:               %[[VAL_46:.*]] = tensor.extract_slice %[[VAL_39]]{{\[}}%[[VAL_35]], %[[VAL_38]]] [2, 2] [1, 1] : tensor<32x32xf32> to tensor<2x2xf32>
 // CONF1:               %[[VAL_47:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel", "parallel"]} ins(%[[VAL_43]], %[[VAL_45]] : tensor<2x2xf32>, tensor<2x2xf32>) outs(%[[VAL_46]] : tensor<2x2xf32>) {
@@ -87,6 +88,7 @@ func.func @matmul_sequence_fusion(%arg0: tensor<32x64xf32>, %arg1: tensor<64x32x
 // CONF2:           %[[VAL_8:.*]] = arith.constant 0 : index
 // CONF2:           %[[VAL_9:.*]] = arith.constant 32 : index
 // CONF2:           %[[VAL_10:.*]] = arith.constant 2 : index
+// CONF2:           %[[EMPTY:.*]] = tensor.empty() : tensor<32x32xf32>
 // CONF2:           %[[VAL_11:.*]] = scf.for %[[VAL_12:.*]] = %[[VAL_8]] to %[[VAL_9]] step %[[VAL_10]] iter_args(%[[VAL_13:.*]] = %[[VAL_2]]) -> (tensor<32x32xf32>) {
 // CONF2:             %[[VAL_14:.*]] = tensor.extract_slice %[[VAL_0]]{{\[}}%[[VAL_12]], 0] [2, 64] [1, 1] : tensor<32x64xf32> to tensor<2x64xf32>
 // CONF2:             %[[VAL_15:.*]] = tensor.extract_slice %[[VAL_13]]{{\[}}%[[VAL_12]], 0] [2, 32] [1, 1] : tensor<32x32xf32> to tensor<2x32xf32>
@@ -95,7 +97,7 @@ func.func @matmul_sequence_fusion(%arg0: tensor<32x64xf32>, %arg1: tensor<64x32x
 // CONF2:             %[[VAL_18:.*]] = linalg.matmul ins(%[[VAL_16]], %[[VAL_3]] : tensor<2x32xf32>, tensor<32x64xf32>) outs(%[[VAL_17]] : tensor<2x64xf32>) -> tensor<2x64xf32>
 // CONF2:             %[[VAL_19:.*]] = tensor.extract_slice %[[VAL_6]]{{\[}}%[[VAL_12]], 0] [2, 32] [1, 1] : tensor<32x32xf32> to tensor<2x32xf32>
 // CONF2:             %[[VAL_20:.*]] = linalg.matmul ins(%[[VAL_18]], %[[VAL_5]] : tensor<2x64xf32>, tensor<64x32xf32>) outs(%[[VAL_19]] : tensor<2x32xf32>) -> tensor<2x32xf32>
-// CONF2:             %[[VAL_21:.*]] = tensor.empty() : tensor<2x32xf32>
+// CONF2:             %[[VAL_21:.*]] = tensor.extract_slice %[[EMPTY]]{{\[}}%[[VAL_12]], 0] [2, 32] [1, 1] : tensor<32x32xf32> to tensor<2x32xf32>
 // CONF2:             %[[VAL_22:.*]] = linalg.fill ins(%[[VAL_7]] : f32) outs(%[[VAL_21]] : tensor<2x32xf32>) -> tensor<2x32xf32>
 // CONF2:             %[[VAL_23:.*]] = tensor.extract_slice %[[VAL_13]]{{\[}}%[[VAL_12]], 0] [2, 32] [1, 1] : tensor<32x32xf32> to tensor<2x32xf32>
 // CONF2:             %[[VAL_24:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel", "parallel"]} ins(%[[VAL_20]], %[[VAL_22]] : tensor<2x32xf32>, tensor<2x32xf32>) outs(%[[VAL_23]] : tensor<2x32xf32>) {
@@ -134,11 +136,12 @@ func.func @matmul_sequence_fusion(%arg0: tensor<32x64xf32>, %arg1: tensor<64x32x
 // CONF3:             %[[VAL_25:.*]] = tensor.insert_slice %[[VAL_24]] into %[[VAL_21]][0, %[[VAL_20]]] [32, 2] [1, 1] : tensor<32x2xf32> into tensor<32x64xf32>
 // CONF3:             scf.yield %[[VAL_25]] : tensor<32x64xf32>
 // CONF3:           } {parallel = "root"}
+// CONF3:           %[[EMPTY:.*]] = tensor.empty() : tensor<32x32xf32>
 // CONF3:           %[[VAL_26:.*]] = scf.for %[[VAL_27:.*]] = %[[VAL_9]] to %[[VAL_10]] step %[[VAL_11]] iter_args(%[[VAL_28:.*]] = %[[VAL_2]]) -> (tensor<32x32xf32>) {
 // CONF3:             %[[VAL_29:.*]] = tensor.extract_slice %[[VAL_5]][0, %[[VAL_27]]] [64, 2] [1, 1] : tensor<64x32xf32> to tensor<64x2xf32>
 // CONF3:             %[[VAL_30:.*]] = tensor.extract_slice %[[VAL_6]][0, %[[VAL_27]]] [32, 2] [1, 1] : tensor<32x32xf32> to tensor<32x2xf32>
 // CONF3:             %[[VAL_31:.*]] = linalg.matmul ins(%[[VAL_19]], %[[VAL_29]] : tensor<32x64xf32>, tensor<64x2xf32>) outs(%[[VAL_30]] : tensor<32x2xf32>) -> tensor<32x2xf32>
-// CONF3:             %[[VAL_32:.*]] = tensor.empty() : tensor<32x2xf32>
+// CONF3:             %[[VAL_32:.*]] = tensor.extract_slice %[[EMPTY]][0, %[[VAL_27]]] [32, 2] [1, 1] : tensor<32x32xf32> to tensor<32x2xf32>
 // CONF3:             %[[VAL_33:.*]] = linalg.fill ins(%[[VAL_8]] : f32) outs(%[[VAL_32]] : tensor<32x2xf32>) -> tensor<32x2xf32>
 // CONF3:             %[[VAL_34:.*]] = tensor.extract_slice %[[VAL_28]][0, %[[VAL_27]]] [32, 2] [1, 1] : tensor<32x32xf32> to tensor<32x2xf32>
 // CONF3:             %[[VAL_35:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel", "parallel"]} ins(%[[VAL_31]], %[[VAL_33]] : tensor<32x2xf32>, tensor<32x2xf32>) outs(%[[VAL_34]] : tensor<32x2xf32>) {

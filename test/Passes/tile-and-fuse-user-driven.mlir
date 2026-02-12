@@ -88,15 +88,15 @@ func.func @blck_conv(%arg0: tensor<1x2x56x56x32xi64>, %arg1: tensor<2x2x1x1x32x3
 // CONF2: %[[EMPTY_OUT_ADD:.+]] = tensor.empty() : tensor<1x2x56x56x32xi64>
 // CONF2: %[[LOOP:.+]] = scf.for %[[ARG4:.+]] = %[[C0]] to %[[C2]] step %[[C1]]
 // CONF2-NEXT: %[[LOOP1:.+]] = scf.for %[[ARG6:.+]] = %[[C0]] to %[[C56]] step %[[C1]]
+// CONF2: %[[SLICE:.+]] = tensor.extract_slice
+// CONF2-SAME:  %[[ARG0]][0, 0, %[[ARG6]], 0, 0] [1, 2, 1, 56, 32] [1, 1, 1, 1, 1]
+// CONF2-SAME:  : tensor<1x2x56x56x32xi64> to tensor<2x56x32xi64>
 // CONF2: %[[SLICE1:.+]] = tensor.extract_slice
 // CONF2-SAME:  %[[ARG1]][%[[ARG4]], 0, 0, 0, 0, 0] [1, 2, 1, 1, 32, 32] [1, 1, 1, 1, 1, 1]
 // CONF2-SAME:  : tensor<2x2x1x1x32x32xi64> to tensor<2x32x32xi64>
 // CONF2: %[[SLICE2:.+]] = tensor.extract_slice
 // CONF2-SAME:  %[[ARG2]][0, %[[ARG4]], %[[ARG6]], 0, 0] [1, 1, 1, 56, 32] [1, 1, 1, 1, 1]
 // CONF2-SAME:  : tensor<1x2x56x56x32xi64> to tensor<56x32xi64>
-// CONF2: %[[SLICE:.+]] = tensor.extract_slice
-// CONF2-SAME:  %[[ARG0]][0, 0, %[[ARG6]], 0, 0] [1, 2, 1, 56, 32] [1, 1, 1, 1, 1]
-// CONF2-SAME:  : tensor<1x2x56x56x32xi64> to tensor<2x56x32xi64>
 // CONF2: %[[CONV:.+]] = linalg.generic
 // CONF2-SAME:  indexing_maps = [#[[MAP]], #[[MAP1]], #[[MAP2]]]
 // CONF2-SAME:  iterator_types = ["parallel", "parallel", "reduction", "reduction"]
@@ -105,12 +105,14 @@ func.func @blck_conv(%arg0: tensor<1x2x56x56x32xi64>, %arg1: tensor<2x2x1x1x32x3
 // CONF2: %[[SLICE3:.+]] = tensor.extract_slice
 // CONF2-SAME:  %[[ARG3]][%[[ARG4]], 0] [1, 32] [1, 1]
 // CONF2-SAME:  : tensor<2x32xi64> to tensor<32xi64>
-// CONF2: %[[EMPTY_OUT_BIAS:.+]] = tensor.empty() : tensor<56x32xi64>
+// CONF2: %[[SLICE4:.+]] = tensor.extract_slice
+// CONF2-SAME:  %[[EMPTY_OUT_ADD]][0, %[[ARG4]], %[[ARG6]], 0, 0] [1, 1, 1, 56, 32] [1, 1, 1, 1, 1]
+// CONF2-SAME:  : tensor<1x2x56x56x32xi64> to tensor<56x32xi64>
 // CONF2: %[[BIAS:.+]] = linalg.generic
 // CONF2-SAME:  indexing_maps = [#[[MAP3]], #[[MAP4]]]
 // CONF2-SAME:  iterator_types = ["parallel", "parallel"]
 // CONF2-SAME:  ins(%[[SLICE3]]
-// CONF2-SAME:  outs(%[[EMPTY_OUT_BIAS]]
+// CONF2-SAME:  outs(%[[SLICE4]]
 // CONF2: %[[SLICE4:.+]] = tensor.extract_slice
 // CONF2-SAME:  %{{.+}}[0, %[[ARG4]], %[[ARG6]], 0, 0] [1, 1, 1, 56, 32] [1, 1, 1, 1, 1]
 // CONF2-SAME:  : tensor<1x2x56x56x32xi64> to tensor<56x32xi64>
