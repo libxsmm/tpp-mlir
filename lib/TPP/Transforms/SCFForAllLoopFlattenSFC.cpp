@@ -163,9 +163,8 @@ using namespace mlir::scf;
 /// where N is the total iteration count ub0 * ub1
 static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
   // Only handle 2D forall loops
-  if (op.getRank() != 2) {
+  if (op.getRank() != 2)
     return failure();
-  }
 
   Location loc = op.getLoc();
   builder.setInsertionPoint(op);
@@ -178,17 +177,14 @@ static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
   // Helper to extract constant int from OpFoldResult
   auto getConstant = [](OpFoldResult ofr) -> std::optional<int64_t> {
     if (auto attr = dyn_cast<Attribute>(ofr)) {
-      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+      if (auto intAttr = dyn_cast<IntegerAttr>(attr))
         return intAttr.getInt();
-      }
     }
     if (auto val = dyn_cast<Value>(ofr)) {
-      if (auto constOp = val.getDefiningOp<arith::ConstantIndexOp>()) {
+      if (auto constOp = val.getDefiningOp<arith::ConstantIndexOp>())
         return constOp.value();
-      }
-      if (auto constOp = val.getDefiningOp<arith::ConstantIntOp>()) {
+      if (auto constOp = val.getDefiningOp<arith::ConstantIntOp>())
         return constOp.value();
-      }
     }
     return std::nullopt;
   };
@@ -202,31 +198,26 @@ static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
   auto step1 = getConstant(steps[1]);
 
   // We need constant bounds to generate the dense vectors
-  if (!lb0 || !lb1 || !ub0 || !ub1 || !step0 || !step1) {
+  if (!lb0 || !lb1 || !ub0 || !ub1 || !step0 || !step1)
     return failure();
-  }
 
   // Only support unit steps for simplicity (can be relaxed if needed)
-  if (*step0 != 1 || *step1 != 1) {
+  if (*step0 != 1 || *step1 != 1)
     return failure();
-  }
 
   // Only support lower bounds of 0 for simplicity (can be relaxed if needed)
-  if (*lb0 != 0 || *lb1 != 0) {
+  if (*lb0 != 0 || *lb1 != 0)
     return failure();
-  }
 
   // Calculate iteration counts
   int64_t count0 = (*ub0 - *lb0) / *step0;
   int64_t count1 = (*ub1 - *lb1) / *step1;
   int64_t totalCount = count0 * count1;
 
-  if (totalCount <= 0) {
+  if (totalCount <= 0)
     return failure();
-  }
-  if (count0 > std::numeric_limits<int16_t>::max() || count1 > std::numeric_limits<int16_t>::max()) {
+  if (count0 > std::numeric_limits<int16_t>::max() || count1 > std::numeric_limits<int16_t>::max())
     return failure();
-  }
 
   // Build the flattened index vectors
   SmallVector<int16_t> iv0Values;
@@ -329,20 +320,21 @@ static void getInnermostForallLoops(Operation *rootOp,
     
     if (!hasNestedForall) {
       // Only consider 2D forall loops that are innermost (no nested forall)
-      if (forallOp.getRank() == 2) {
-        // Check if the forall body contains any affine.apply operations
-        bool hasAffineApply = false;
-        forallOp->walk([&](affine::AffineApplyOp applyOp) {
-          hasAffineApply = true;
-          return WalkResult::interrupt();
-        });
+      if (forallOp.getRank() != 2)
+        return WalkResult::advance();
+      
+      // Check if the forall body contains any affine.apply operations
+      bool hasAffineApply = false;
+      forallOp->walk([&](affine::AffineApplyOp applyOp) {
+        hasAffineApply = true;
+        return WalkResult::interrupt();
+      });
 
-        // Only add if no affine.apply operations found
-        if (!hasAffineApply) {
-          result.push_back(forallOp);
-        }
-      }
+      // Only add if no affine.apply operations found
+      if (!hasAffineApply)
+        result.push_back(forallOp);
     }
+    return WalkResult::advance();
   });
 }
 
@@ -359,11 +351,9 @@ struct SCFForAllLoopFlattenSFC
 
     // Process each innermost 2D forall loop
     for (ForallOp forallOp : innermostForalls) {
-      if (failed(flattenForallLoop(forallOp, builder))) {
-        // If flattening fails for any reason, just skip this loop
-        // (e.g., non-constant bounds, etc.)
-        continue;
-      }
+      // Flatten the loop if possible; failures are silently ignored
+      // (e.g., non-constant bounds, non-unit steps, etc.)
+      (void)succeeded(flattenForallLoop(forallOp, builder));
     }
   }
 };
