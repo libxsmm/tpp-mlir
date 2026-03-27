@@ -39,18 +39,18 @@ module {
 
 
 // CHECK-LABEL:   func.func @optimal_register_allocation_i8
-// CHECK: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
+// CHECK: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
-// CHECK-NEXT: x86vector.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
+// CHECK-NEXT: x86.avx.dot.i8
