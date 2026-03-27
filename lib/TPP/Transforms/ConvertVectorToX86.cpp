@@ -8,11 +8,10 @@
 
 #include "TPP/Passes.h"
 
-#include "mlir/Dialect/AMX/AMXDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Linalg/IR/LinalgInterfaces.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
-#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
+#include "mlir/Dialect/X86/X86Dialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -87,16 +86,17 @@ struct ContractionToFMA : OpRewritePattern<vector::ContractionOp> {
                                          "Unsupported accumulator shape");
 
     // Turn an outer product contraction into a broadcast+FMA sequence.
-    auto castLhs = vector::ShapeCastOp::create(rewriter, 
-        loc, VectorType::get(1, lhsTy.getElementType()), contractOp.getLhs());
-    auto castRhs = vector::ShapeCastOp::create(rewriter, 
-        loc, VectorType::get(rhsShape.back(), rhsTy.getElementType()),
+    auto castLhs = vector::ShapeCastOp::create(
+        rewriter, loc, VectorType::get(1, lhsTy.getElementType()),
+        contractOp.getLhs());
+    auto castRhs = vector::ShapeCastOp::create(
+        rewriter, loc, VectorType::get(rhsShape.back(), rhsTy.getElementType()),
         contractOp.getRhs());
-    auto castAcc = vector::ShapeCastOp::create(rewriter, 
-        loc, VectorType::get(accShape.back(), accTy.getElementType()),
+    auto castAcc = vector::ShapeCastOp::create(
+        rewriter, loc, VectorType::get(accShape.back(), accTy.getElementType()),
         contractOp.getAcc());
-    auto broadcastLhs = vector::BroadcastOp::create(rewriter, 
-        loc, castRhs.getResult().getType(), castLhs);
+    auto broadcastLhs = vector::BroadcastOp::create(
+        rewriter, loc, castRhs.getResult().getType(), castLhs);
     auto fma =
         vector::FMAOp::create(rewriter, loc, broadcastLhs, castRhs, castAcc);
     auto castFma = vector::ShapeCastOp::create(rewriter, loc, accTy, fma);

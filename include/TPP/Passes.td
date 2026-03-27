@@ -25,7 +25,7 @@ def LoadTppDialects : Pass<"load-tpp-dialects", "ModuleOp"> {
                            "check::CheckDialect",
                            "perf::PerfDialect",
                            "omp::OpenMPDialect",
-                           "amx::AMXDialect",
+                           "x86::X86Dialect",
                            "async::AsyncDialect"];
 }
 
@@ -118,8 +118,7 @@ def VectorContractToAMX : Pass<
                            "tensor::TensorDialect",
                            "vector::VectorDialect",
                            "arith::ArithDialect",
-                           "amx::AMXDialect",
-                           "x86vector::X86VectorDialect"];
+                           "x86::X86Dialect"];
 }
 
 
@@ -142,7 +141,7 @@ def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
    let description = [{
      Perform avx512bf16 dot product lowering of vector contraction operation for bf16 type with vnni layout=2.
    }];
-   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86vector::X86VectorDialect" ];
+   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86::X86Dialect" ];
 }
 
 def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
@@ -153,7 +152,7 @@ def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
    let dependentDialects = [ "vector::VectorDialect", 
 			     "scf::SCFDialect", 
 			     "arith::ArithDialect",
-			     "x86vector::X86VectorDialect" ];
+			     "x86::X86Dialect" ];
   let options = [
          Option<"targetFeature", "target-feature", "std::string", "",
                 "Target feature for a given architecture">,
@@ -170,8 +169,7 @@ def MicroKernelsAMX : Pass<"vector-contract-to-micro-kernels-amx"> {
                              "linalg::LinalgDialect",
                              "scf::SCFDialect",
                              "arith::ArithDialect",
-                             "amx::AMXDialect",
-                             "x86vector::X86VectorDialect" ];
+                             "x86::X86Dialect" ];
 }
 
 def ConvertXsmmToFunc : Pass<"convert-xsmm-to-func", "ModuleOp"> {
@@ -671,8 +669,7 @@ def ConvertVectorToX86 : Pass<"convert-vector-to-x86"> {
     sequences of operations.
   }];
   let dependentDialects = ["vector::VectorDialect",
-                           "x86vector::X86VectorDialect",
-                           "amx::AMXDialect",
+                           "x86::X86Dialect",
                            "arith::ArithDialect"];
 }
 

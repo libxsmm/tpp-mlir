@@ -229,8 +229,7 @@ def X86Vectorizer : Pass<"x86-vectorizer", "ModuleOp"> {
                            "math::MathDialect",
                            "tensor::TensorDialect",
                            "arith::ArithDialect",
-                           "x86vector::X86VectorDialect",
-                           "amx::AMXDialect",
+                           "x86::X86Dialect",
                            "affine::AffineDialect",
                            "vector::VectorDialect"];
   let options = [

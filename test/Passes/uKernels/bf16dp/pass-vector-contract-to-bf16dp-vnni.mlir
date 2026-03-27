@@ -43,50 +43,50 @@ module {
 }
 
 // CHECK-LABEL:   func.func @optimal_register_allocation
-// CHECK: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
 // CHECK-NEXT: vector.bitcast
 // CHECK-NEXT: vector.broadcast
 // CHECK-NEXT: vector.bitcast
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
 // CHECK-NEXT: vector.bitcast
 // CHECK-NEXT: vector.broadcast
 // CHECK-NEXT: vector.bitcast
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
 // CHECK-NEXT: vector.bitcast
 // CHECK-NEXT: vector.broadcast
 // CHECK-NEXT: vector.bitcast
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
 // CHECK-NEXT: vector.bitcast
 // CHECK-NEXT: vector.broadcast
 // CHECK-NEXT: vector.bitcast
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
 // CHECK-NEXT: vector.bitcast
 // CHECK-NEXT: vector.broadcast
 // CHECK-NEXT: vector.bitcast
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 
 // -----
 
@@ -136,7 +136,7 @@ module {
 }
 
 // CHECK-LABEL: func.func @mlp_bf16
-// CHECK-COUNT-4: x86vector.avx512.dot
+// CHECK-COUNT-4: x86.avx512.dot
 // CHECK-NOT: vector.transfer_read
 // CHECK-NOT: vector.transfer_write
 
@@ -180,7 +180,7 @@ module {
 }
 
 // CHECK-LABEL: func.func @gemm_mixed_precision
-// CHECK: x86vector.avx512.dot
+// CHECK: x86.avx512.dot
 // CHECK-COUNT-24: vector.store{{.*}}vector<16xf32>
 
 // -----
@@ -228,32 +228,32 @@ module {
 // CHECK: vector.broadcast
 // CHECK: vector.broadcast
 // CHECK: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // CHECK-NEXT: vector.load
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot

@@ -5,7 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements lowering of vector contraction to x86vector::DotBF16Op.
+// This file implements lowering of vector contraction to
+// x86::avx512::DotBF16Op.
 //
 //===----------------------------------------------------------------------===//
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -16,7 +17,7 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
-#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
+#include "mlir/Dialect/X86/X86Dialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -199,7 +200,7 @@ static LogicalResult checkNestedLoop(SmallVector<scf::ForOp> loops,
 }
 
 /// This pass lowers vector.contract (linalg.batch_reduce_matmul) for bf16
-/// (vnni=2) type into sequence of x86vector::DotBF16Op.
+/// (vnni=2) type into sequence of x86::avx512::DotBF16Op.
 ///
 /// As an example, the following pseudo-code will be rewritten
 /// scf.for // m-tile
@@ -220,10 +221,10 @@ static LogicalResult checkNestedLoop(SmallVector<scf::ForOp> loops,
 ///   arith.shli + vector.bitcast // upconvert to f32 and pass them as iterargs
 ///   scf.for (iterargs = C matrix load as f32) // batch-reduce
 ///    scf.for (iterargs = batch-reduce iterArgs) // k-tile
-///     vector.load // load 2 elements of A matrix and broadcast them into <32xbf16>
-///     vector.load // load elements of B matrix into <32xbf16>
-///     x86vector.avx512.dot %iterargs, %Ax, %Bx // accumulate in f32 (via iterargs)
-///     x86vector.avx512.dot %iterargs, %Ax, %By // accumulate in f32 (via iterargs)
+///     vector.load // load 2 elements of A matrix and broadcast them into
+///     <32xbf16> vector.load // load elements of B matrix into <32xbf16>
+///     x86.avx512.dot %iterargs, %Ax, %Bx // accumulate in f32 (via iterargs)
+///     x86.avx512.dot %iterargs, %Ax, %By // accumulate in f32 (via iterargs)
 ///     ..............
 ///     ..............
 ///    scf.yield // yield dpbf16 results
@@ -354,33 +355,35 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
           rewriter.getIndexAttr(i),
           rewriter.getIndexAttr(0),
       };
-      auto newSubview = memref::SubViewOp::create(rewriter, 
-          reductionForOp.getLoc(), subviewOpAcc, offsets, sizes, strides);
+      auto newSubview =
+          memref::SubViewOp::create(rewriter, reductionForOp.getLoc(),
+                                    subviewOpAcc, offsets, sizes, strides);
       subviewCMatrix.push_back(newSubview);
 
       // vector <16xf32> for iterargs to accumulate results in fp32
       for (int j = 0; j < vnni; j++) {
-        Value indexOp = arith::ConstantIndexOp::create(rewriter, 
-            reductionForOp.getLoc(), j * (N / 2));
-        auto valueCRow = vector::LoadOp::create(rewriter, 
-            reductionForOp.getLoc(), VectorType::get({N / 2}, elementType),
-            newSubview, ValueRange{c0, indexOp});
-        auto bitcast_i16 = vector::BitCastOp::create(rewriter, 
-            reductionForOp.getLoc(),
+        Value indexOp = arith::ConstantIndexOp::create(
+            rewriter, reductionForOp.getLoc(), j * (N / 2));
+        auto valueCRow =
+            vector::LoadOp::create(rewriter, reductionForOp.getLoc(),
+                                   VectorType::get({N / 2}, elementType),
+                                   newSubview, ValueRange{c0, indexOp});
+        auto bitcast_i16 = vector::BitCastOp::create(
+            rewriter, reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getIntegerType(16)), valueCRow);
-        auto extend_i32 = arith::ExtUIOp::create(rewriter, 
-            reductionForOp.getLoc(),
+        auto extend_i32 = arith::ExtUIOp::create(
+            rewriter, reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getIntegerType(32)), bitcast_i16);
-        auto cst16 = arith::ConstantOp::create(rewriter, 
-            reductionForOp.getLoc(),
+        auto cst16 = arith::ConstantOp::create(
+            rewriter, reductionForOp.getLoc(),
             rewriter.getIntegerAttr(rewriter.getIntegerType(32), N / 2));
         auto vectType = VectorType::get({N / 2}, rewriter.getIntegerType(32));
-        auto shiftOp = arith::ShLIOp::create(rewriter, 
-            reductionForOp.getLoc(), vectType, extend_i32,
+        auto shiftOp = arith::ShLIOp::create(
+            rewriter, reductionForOp.getLoc(), vectType, extend_i32,
             vector::BroadcastOp::create(rewriter, reductionForOp.getLoc(),
-                                                 vectType, cst16));
-        auto f32CVector = vector::BitCastOp::create(rewriter, 
-            reductionForOp.getLoc(),
+                                        vectType, cst16));
+        auto f32CVector = vector::BitCastOp::create(
+            rewriter, reductionForOp.getLoc(),
             VectorType::get({N / 2}, rewriter.getF32Type()), shiftOp);
 
         loopItrArgs.push_back(f32CVector);
@@ -390,14 +393,15 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
     SmallVector<Value, 8> bf16DP;
 
     // Code to re-create the reduction and k loop with iter args
-    auto newReductionForOp = scf::ForOp::create(rewriter, 
-        reductionForOp.getLoc(), reductionForOp.getLowerBound(),
+    auto newReductionForOp = scf::ForOp::create(
+        rewriter, reductionForOp.getLoc(), reductionForOp.getLowerBound(),
         reductionForOp.getUpperBound(), reductionForOp.getStep(), loopItrArgs,
         [&](OpBuilder &rewriterNewReductionForOp, Location locNewReductionForOp,
             Value ivNewReductionForOp, ValueRange iterArgsNewReductionForOp) {
-          auto newKForOp = scf::ForOp::create(rewriter, 
-              kForOp.getLoc(), kForOp.getLowerBound(), kForOp.getUpperBound(),
-              kForOp.getStep(), iterArgsNewReductionForOp,
+          auto newKForOp = scf::ForOp::create(
+              rewriter, kForOp.getLoc(), kForOp.getLowerBound(),
+              kForOp.getUpperBound(), kForOp.getStep(),
+              iterArgsNewReductionForOp,
               [&](OpBuilder &rewriterNewKForOp, Location locNewKForOp,
                   Value ivNewKForOp, ValueRange iterArgsNewKForOp) {
                 IRMapping mapping;
@@ -414,34 +418,32 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                 llvm::SmallVector<Value, 8> vectorA;
 
                 for (int i = 0; i < M; i++) {
-                  Value indexOp = arith::ConstantIndexOp::create(rewriter, 
-                      reductionForOp.getLoc(), i);
-                  auto valueA = vector::LoadOp::create(rewriter, 
-                      kForOp.getLoc(), VectorType::get({vnni}, elementType),
+                  Value indexOp = arith::ConstantIndexOp::create(
+                      rewriter, reductionForOp.getLoc(), i);
+                  auto valueA = vector::LoadOp::create(
+                      rewriter, kForOp.getLoc(),
+                      VectorType::get({vnni}, elementType),
                       lhsClone->getResult(0), ValueRange{c0, indexOp, c0, c0});
-                  auto bitcastValueA =
-                      vector::BitCastOp::create(rewriter, 
-                          kForOp.getLoc(),
-                          VectorType::get({1}, rewriterNewKForOp.getI32Type()),
-                          valueA);
-                  auto broadcastValueA =
-                      vector::BroadcastOp::create(rewriter, 
-                          kForOp.getLoc(),
-                          VectorType::get(16, rewriterNewKForOp.getI32Type()),
-                          bitcastValueA);
-                  auto bitcastValueA_32 =
-                      vector::BitCastOp::create(rewriter, 
-                          kForOp.getLoc(),
-                          VectorType::get({N}, rewriterNewKForOp.getBF16Type()),
-                          broadcastValueA);
+                  auto bitcastValueA = vector::BitCastOp::create(
+                      rewriter, kForOp.getLoc(),
+                      VectorType::get({1}, rewriterNewKForOp.getI32Type()),
+                      valueA);
+                  auto broadcastValueA = vector::BroadcastOp::create(
+                      rewriter, kForOp.getLoc(),
+                      VectorType::get(16, rewriterNewKForOp.getI32Type()),
+                      bitcastValueA);
+                  auto bitcastValueA_32 = vector::BitCastOp::create(
+                      rewriter, kForOp.getLoc(),
+                      VectorType::get({N}, rewriterNewKForOp.getBF16Type()),
+                      broadcastValueA);
 
                   vectorA.push_back(bitcastValueA_32);
                 }
 
                 IRMapping rhsMapping;
                 rhsMapping.map(
-                  vectorReadOpRhs.getBase().getDefiningOp()->getOperand(1),
-                  ivNewReductionForOp);
+                    vectorReadOpRhs.getBase().getDefiningOp()->getOperand(1),
+                    ivNewReductionForOp);
                 rhsMapping.map(
                     vectorReadOpRhs.getBase().getDefiningOp()->getOperand(2),
                     ivNewKForOp);
@@ -451,22 +453,23 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                 // Memory access for B Matrix into <32xbf16>
                 llvm::SmallVector<Value, 8> vectorB;
                 for (int i = 0, j = 0; i < vnni; i++, j = j + 16) {
-                  Value indexOp = arith::ConstantIndexOp::create(rewriter, 
-                      reductionForOp.getLoc(), j);
-                  auto valueBRow = vector::LoadOp::create(rewriter, 
-                      kForOp.getLoc(), VectorType::get({N}, elementType),
-                      rhsClone->getResult(0), ValueRange{c0, c0, indexOp, c0});
+                  Value indexOp = arith::ConstantIndexOp::create(
+                      rewriter, reductionForOp.getLoc(), j);
+                  auto valueBRow = vector::LoadOp::create(
+                      rewriter, kForOp.getLoc(),
+                      VectorType::get({N}, elementType), rhsClone->getResult(0),
+                      ValueRange{c0, c0, indexOp, c0});
                   vectorB.push_back(valueBRow);
                 }
 
-                // Code for x86vector.avx512.dot
+                // Code for x86.avx512.dot
                 mlir::VectorType dstType =
                     mlir::VectorType::get({N / 2}, rewriter.getF32Type());
                 for (int i = 0, k = 0; i < M; i++, k = k + vnni) {
                   for (int j = 0; j < vnni; j++) {
-                    auto dp = mlir::x86vector::DotBF16Op::create(rewriter, 
-                        kForOp.getLoc(), dstType, iterArgsNewKForOp[j + k],
-                        vectorA[i], vectorB[j]);
+                    auto dp = mlir::x86::avx512::DotBF16Op::create(
+                        rewriter, kForOp.getLoc(), dstType,
+                        iterArgsNewKForOp[j + k], vectorA[i], vectorB[j]);
                     bf16DP.push_back(dp);
                   }
                 }
@@ -474,22 +477,21 @@ struct BF16DotProductOp : OpRewritePattern<vector::ContractionOp> {
                 scf::YieldOp::create(rewriter, locNewKForOp, bf16DP);
               });
 
-          scf::YieldOp::create(rewriter, 
-              locNewReductionForOp, newKForOp.getResults());
+          scf::YieldOp::create(rewriter, locNewReductionForOp,
+                               newKForOp.getResults());
         });
 
     // Downconvert <16xf32> to <16xbf16> and store into C Matrix
     for (int i = 0, k = 0; i < M; i++) {
       for (int j = 0; j < vnni; j++) {
-        Value indexOp = arith::ConstantIndexOp::create(rewriter, 
-            reductionForOp.getLoc(), j * 16);
-        auto bf16vec = arith::TruncFOp::create(rewriter, 
-            reductionForOp.getLoc(),
+        Value indexOp = arith::ConstantIndexOp::create(
+            rewriter, reductionForOp.getLoc(), j * 16);
+        auto bf16vec = arith::TruncFOp::create(
+            rewriter, reductionForOp.getLoc(),
             VectorType::get({16}, rewriter.getBF16Type()),
             newReductionForOp.getResult(k));
         vector::StoreOp::create(rewriter, reductionForOp.getLoc(), bf16vec,
-                                         subviewCMatrix[i],
-                                         ValueRange{c0, indexOp});
+                                subviewCMatrix[i], ValueRange{c0, indexOp});
         k++;
       }
     }

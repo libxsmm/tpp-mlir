@@ -231,7 +231,6 @@ private:
       break;
     }
     case GpuType::Intel: {
-      pm.addPass(xegpu::createXeGPUFoldAliasOps());
 
       std::string clientApi = "intel";
       SetSPIRVCapabilitiesOptions capabilitiesOptions{clientApi};
