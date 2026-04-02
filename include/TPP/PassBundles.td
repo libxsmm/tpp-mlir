@@ -60,6 +60,8 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
            "Disables VNNI packing for packed types.">,
     ListOption<"registerBlocking", "registerBlocking",
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
+    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
+               "GEMM unroll sizes for the innermost dims: [M, N, K]">,
 
   ];
 }

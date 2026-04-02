@@ -85,7 +85,29 @@ def HoistVectorTransfers : Pass<"hoist-vector-transfer"> {
   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
 }
 
+def HoistLoopInvariantSubsets : Pass<"hoist-loop-invariant-subsets"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
+}
 
+def VectorContractToNanoKernels : Pass<"vector-contract-to-nano-kernels"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect"];
+}
+
+def FlattenVectorOps : Pass<"flatten-vector-ops"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect" ];
+}
 
 def VectorContractToOuterproduct : Pass<
     "vector-contract-to-outerproduct"> {
@@ -141,7 +163,7 @@ def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
    let description = [{
      Perform avx512bf16 dot product lowering of vector contraction operation for bf16 type with vnni layout=2.
    }];
-   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86::X86Dialect" ];
+   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
 }
 
 def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {

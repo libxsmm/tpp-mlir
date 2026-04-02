@@ -105,6 +105,9 @@ struct HoistVectorTransferOp : OpRewritePattern<vector::ContractionOp> {
     // Check the vector contract operation satisfies the required pattern.
     // Check the Acc, Lhs, and Rhs of contract operation
 
+
+    llvm::outs() << "Reaching here" << "\n";
+
     auto operands = getContractOperands(contractOp);
     if (failed(operands))
       return rewriter.notifyMatchFailure(contractOp,
