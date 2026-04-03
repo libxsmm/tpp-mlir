@@ -130,13 +130,17 @@ private:
       // bufferization.
       pm.addNestedPass<func::FuncOp>(createDecomposeAggregatedOps());
 
+      // pm.addPass(createBufferize());
+
       // Flatten 2D scf.forall loops using space-filling curve before bufferization
       if (sfcOrder) {
         pm.addPass(createSCFForAllLoopFlattenSFC());
       }
 
       // Bufferize: tensor->memref.
-      pm.addPass(createBufferize());
+      if (!(linalgToVector || forceLinalgToVector)) {
+        pm.addPass(createBufferize());
+      }
 
       // Lower Linalg to XSMM.
       pm.addNestedPass<func::FuncOp>(
@@ -146,21 +150,39 @@ private:
         // Vectorizes the remaining Linalg operations
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
             BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
+
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
+
+        tpp::RegisterUnrollOptions unrollOpts;
+        unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
+        pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
+
+        pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
+
+        pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+
+        pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+
+        pm.addPass(createBufferize());
+
+        pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
+
+        pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
 
         // Please note, canonicalizer should be after hoisting pass because
         // it fuses outer tiling loops and it results in no pattern
         // matching for hoisting pass. Moved inside VectorToKernel Path.
 
-        if (vectorToXSMM) {
+        /*if (vectorToXSMM) {
           pm.addPass(createVectorToXSMM());
         }
         if (vectorToKernel) {
           VectorToKernelOptions options;
           options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
           pm.addPass(createVectorToKernel(options));
-        }
+        } */
       }
 
       // Final cleanup.

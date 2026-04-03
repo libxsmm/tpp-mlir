@@ -85,7 +85,29 @@ def HoistVectorTransfers : Pass<"hoist-vector-transfer"> {
   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
 }
 
+def HoistLoopInvariantSubsets : Pass<"hoist-loop-invariant-subsets"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
+}
 
+def VectorContractToNanoKernels : Pass<"vector-contract-to-nano-kernels"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect"];
+}
+
+def FlattenVectorOps : Pass<"flatten-vector-ops"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "vector::VectorDialect" ];
+}
 
 def VectorContractToOuterproduct : Pass<
     "vector-contract-to-outerproduct"> {
