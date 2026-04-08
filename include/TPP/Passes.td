@@ -172,6 +172,16 @@ def MicroKernelsAMX : Pass<"vector-contract-to-micro-kernels-amx"> {
                              "x86::X86Dialect" ];
 }
 
+def ConvertLinalgGenericTo32BitAccumulation : Pass<"convert-linalg-generic-to-32-bit-acc"> {
+   let summary = "Convert linalg.generic op from bf16/i8 to f32/i32 accumulation.";
+   let description = [{
+     Converts a linalg.generic from low-precision (bf16/i8) to high-precision
+      accumulation (f32/i32) and finally tuncates the output back to original type.
+   }];
+   let dependentDialects = [ "linalg::LinalgDialect",
+                             "arith::ArithDialect" ];
+}
+
 def ConvertXsmmToFunc : Pass<"convert-xsmm-to-func", "ModuleOp"> {
   let summary = "Convert xsmm to func";
   let description = [{

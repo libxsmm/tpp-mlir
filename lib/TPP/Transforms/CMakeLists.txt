@@ -38,6 +38,7 @@ add_mlir_library(TPPTransforms
   RegisterUnroll.cpp
   VectorContractToMicroKernelsAMX.cpp
   TileDequantElementwiseOps.cpp
+  ConvertLinalgGenericTo32BitAccumulation.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${PROJECT_SOURCE_DIR}/include/TPP
