@@ -157,6 +157,8 @@ private:
 
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
 
+        pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
+
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
         tpp::RegisterUnrollOptions unrollOpts;
