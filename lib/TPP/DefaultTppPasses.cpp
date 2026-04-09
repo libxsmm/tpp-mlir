@@ -148,6 +148,10 @@ private:
 
       if (linalgToVector || forceLinalgToVector) {
         // Vectorizes the remaining Linalg operations
+        //
+        
+	pm.addNestedPass<func::FuncOp>(createConvertGenericOpTo32Acc());
+	
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
             BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
 

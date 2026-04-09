@@ -1,13 +1,14 @@
-//===-VectorContractToNanoKernels.cpp -----------------------------*-C++-*-===//
+//===-ConvertGenericOpTo32Acc.cpp -----------------------------*-C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-#include "TPP/Transforms/Utils/VNNIUtils.h"
-
+//
+// This file implements tile configuration hoisting on parallel loops.
+//
+//===----------------------------------------------------------------------===//
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
@@ -19,7 +20,7 @@
 
 namespace mlir {
 namespace tpp {
-#define GEN_PASS_DEF_VECTORCONTRACTTONANOKERNELS
+#define GEN_PASS_DEF_CONVERTGENERICOPTO32ACC
 #include "TPP/Passes.h.inc"
 } // namespace tpp
 } // namespace mlir
@@ -27,29 +28,13 @@ namespace tpp {
 namespace mlir {
 namespace tpp {
 
-struct VectorContractToNanoKernels
-    : public impl::VectorContractToNanoKernelsBase<VectorContractToNanoKernels> {
-  using VectorContractToNanoKernelsBase::VectorContractToNanoKernelsBase;
+struct ConvertGenericOpTo32Acc
+    : public impl::ConvertGenericOpTo32AccBase<ConvertGenericOpTo32Acc> {
+  using ConvertGenericOpTo32AccBase::ConvertGenericOpTo32AccBase;
 
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-
-    x86::populateVectorContractToFMAPatterns(patterns);
-
-    if (vnni::utils::hasAMX())
-      x86::populateVectorContractToAMXDotProductPatterns(patterns);
-
-    auto cpuName = vnni::utils::getTargetArchName();
-    if (cpuName == "SRF") {
-       x86::populateVectorContractBF16ToFMAPatterns(patterns);
-       x86::populateShuffleVectorFMAOpsPatterns(patterns);
-    }
-
-    if (cpuName == "CPX_SPR")
-       x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
-
-    x86::populateSinkVectorProducerOpsPatterns(patterns);
-
+    x86::populateConvertLinalgGenericTo32BitAccumulationPatterns(patterns);
     GreedyRewriteConfig config;
     config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);

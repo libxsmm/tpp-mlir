@@ -109,6 +109,14 @@ def FlattenVectorOps : Pass<"flatten-vector-ops"> {
   let dependentDialects = [ "vector::VectorDialect" ];
 }
 
+def ConvertGenericOpTo32Acc : Pass<"convert-generic-op-to-32bit-acc"> {
+  let summary = "TBA";
+  let description = [{
+    TBA.
+  }];
+  let dependentDialects = [ "tensor::TensorDialect", "scf::SCFDialect", "linalg::LinalgDialect"];
+}
+
 def VectorContractToOuterproduct : Pass<
     "vector-contract-to-outerproduct"> {
   let summary = "Perform outerproduct lowering of vector contraction ops";
