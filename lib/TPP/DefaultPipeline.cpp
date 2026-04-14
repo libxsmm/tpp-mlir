@@ -78,6 +78,11 @@ llvm::cl::opt<bool>
                    llvm::cl::desc("Lower vector to micro-kernels"),
                    llvm::cl::init(false));
 
+llvm::cl::opt<bool>
+    nanoKernel("nano-kernels",
+                   llvm::cl::desc("Lower vector.contract to nano-kernels"),
+                   llvm::cl::init(false));
+
 llvm::cl::opt<bool> lowerPackUnpackWithoutTranspose(
     "lower-pack-unpack-without-transpose",
     llvm::cl::desc("Lower packs and unpacks reverting any dim permutations"),
@@ -182,6 +187,7 @@ private:
       tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
           registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;
+      tppDefaultOptions.nanoKernel = nanoKernel;
       tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
 
       pm.addPass(createDefaultTppPasses(tppDefaultOptions));

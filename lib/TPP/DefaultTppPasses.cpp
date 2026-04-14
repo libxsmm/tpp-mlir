@@ -89,7 +89,7 @@ private:
     SmallVector<std::string> skipOperations;
     // General "linalg-to-vector" choice needs to skip all XSMM matching at
     // linalg level.
-    if (linalgToVector || vectorToKernel) {
+    if (linalgToVector || vectorToKernel || nanoKernel) {
       skipOperations.push_back("all");
     }
     if (vectorToXSMM) {
@@ -138,7 +138,7 @@ private:
       }
 
       // Bufferize: tensor->memref.
-      if (!(linalgToVector || forceLinalgToVector)) {
+      if (!nanoKernel) {
         pm.addPass(createBufferize());
       }
 
@@ -146,18 +146,13 @@ private:
       pm.addNestedPass<func::FuncOp>(
           createLinalgLowering(LinalgLoweringOptions{skipOperations}));
 
-      if (linalgToVector || forceLinalgToVector) {
-        // Vectorizes the remaining Linalg operations
-        //
-        
-	pm.addNestedPass<func::FuncOp>(createConvertGenericOpTo32Acc());
-	
+      if (nanoKernel) {
+        pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
+
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
             BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
 
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-
-        pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
 
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
@@ -174,21 +169,31 @@ private:
         pm.addPass(createBufferize());
 
         pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
-
+        pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
         pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
+      }
+
+      if (linalgToVector || forceLinalgToVector) {
+
+        // Vectorizes the remaining Linalg operations
+        pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
+            BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
+        pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+        pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
+        pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
         // Please note, canonicalizer should be after hoisting pass because
         // it fuses outer tiling loops and it results in no pattern
         // matching for hoisting pass. Moved inside VectorToKernel Path.
 
-        /*if (vectorToXSMM) {
+        if (vectorToXSMM) {
           pm.addPass(createVectorToXSMM());
         }
         if (vectorToKernel) {
           VectorToKernelOptions options;
           options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
           pm.addPass(createVectorToKernel(options));
-        } */
+        }
       }
 
       // Final cleanup.
