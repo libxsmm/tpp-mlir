@@ -75,8 +75,6 @@ def VectorizationPass : Pass<"vectorization-pass",
   let dependentDialects = [ "memref::MemRefDialect", "linalg::LinalgDialect", "vector::VectorDialect" ];
 }
 
-
-
 def HoistVectorTransfers : Pass<"hoist-vector-transfer"> {
   let summary = "Hoist vector transfer operation outside of reduction and k loop";
   let description = [{
@@ -86,25 +84,29 @@ def HoistVectorTransfers : Pass<"hoist-vector-transfer"> {
 }
 
 def HoistLoopInvariantSubsets : Pass<"hoist-loop-invariant-subsets"> {
-  let summary = "TBA";
+  let summary = "Hoists operations ouside loop iteration.";
   let description = [{
-    TBA.
+    Moves operations that access or compute subsets (slices/views) of data outside 
+	a loop when those subsets do not depend on the loop iteration with the help
+        of upstream MLIR pass.
   }];
   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect" ];
 }
 
 def VectorContractToNanoKernels : Pass<"vector-contract-to-nano-kernels"> {
-  let summary = "TBA";
+  let summary = "Lowers a vector.contract operation to a target CPU-specific kernels";
   let description = [{
-    TBA.
+    Performs lowering of a vector.contract operation to a target specific CPU vector
+    instruction sets such as AMX, AVX512, AVX512_BF16, AVX2, AVX2_BF16/Int8, AVX10_Int8.
   }];
   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect"];
 }
 
 def FlattenVectorOps : Pass<"flatten-vector-ops"> {
-  let summary = "TBA";
+  let summary = "Flatten vector.transfer_read/write ops into simpler 1D forms.";
   let description = [{
-    TBA.
+    Rewrite multi-dimensional vector.transfer_read/write ops into simpler (often 1D) forms.
+    Helps downstream lowering and optimization by flattening complex vector memory accesses.
   }];
   let dependentDialects = [ "vector::VectorDialect" ];
 }

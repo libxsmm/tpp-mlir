@@ -147,6 +147,7 @@ private:
           createLinalgLowering(LinalgLoweringOptions{skipOperations}));
 
       if (nanoKernel) {
+        pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
         pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
 
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
