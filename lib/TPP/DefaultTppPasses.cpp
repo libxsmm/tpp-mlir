@@ -81,7 +81,7 @@ private:
     //    micro-kernels via specialized lowering of certain vector patterns.
     assert(!(vectorToXSMM && vectorToKernel) &&
            "XSMM and Kernel lowering are mutually exclusive");
-    bool forceLinalgToVector = (vectorToXSMM || vectorToKernel);
+    bool forceLinalgToVector = (vectorToXSMM || vectorToKernel || nanoKernel);
 
     // List of operations to skip when lowering Linalg to XSMM / Kernel.
     // This allows further passes to lower to vector, function, codegen
@@ -146,35 +146,12 @@ private:
       pm.addNestedPass<func::FuncOp>(
           createLinalgLowering(LinalgLoweringOptions{skipOperations}));
 
-      if (nanoKernel) {
-        pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
-        pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
-
-        pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
-            BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
-
-        pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-
-        pm.addNestedPass<func::FuncOp>(createVectorizationPass());
-
-        tpp::RegisterUnrollOptions unrollOpts;
-        unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
-        pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
-
-        pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
-
-        pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-
-        pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-
-        pm.addPass(createBufferize());
-
-        pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
-        pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-        pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
-      }
-
       if (linalgToVector || forceLinalgToVector) {
+
+        if (nanoKernel) {
+	  pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+          pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
+        }
 
         // Vectorizes the remaining Linalg operations
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
@@ -183,6 +160,19 @@ private:
         pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
+        if (nanoKernel) {
+          tpp::RegisterUnrollOptions unrollOpts;
+          unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
+          pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
+          pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
+          pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+          pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+          pm.addPass(createBufferize());
+          pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
+          pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+          pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
+        }
+
         // Please note, canonicalizer should be after hoisting pass because
         // it fuses outer tiling loops and it results in no pattern
         // matching for hoisting pass. Moved inside VectorToKernel Path.
@@ -190,6 +180,8 @@ private:
         if (vectorToXSMM) {
           pm.addPass(createVectorToXSMM());
         }
+
+        // This path will be soon replaced by the nanoKernel path.
         if (vectorToKernel) {
           VectorToKernelOptions options;
           options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
