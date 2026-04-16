@@ -130,8 +130,6 @@ private:
       // bufferization.
       pm.addNestedPass<func::FuncOp>(createDecomposeAggregatedOps());
 
-      // pm.addPass(createBufferize());
-
       // Flatten 2D scf.forall loops using space-filling curve before bufferization
       if (sfcOrder) {
         pm.addPass(createSCFForAllLoopFlattenSFC());
@@ -149,7 +147,7 @@ private:
       if (linalgToVector || forceLinalgToVector) {
 
         if (nanoKernel) {
-	  pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+          pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
           pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
         }
 
