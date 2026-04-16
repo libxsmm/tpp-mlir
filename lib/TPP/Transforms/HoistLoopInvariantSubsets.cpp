@@ -5,19 +5,16 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file implements tile configuration hoisting on parallel loops.
-//
-//===----------------------------------------------------------------------===//
+
+#include "mlir/Dialect/Linalg/Transforms/Hoisting.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "mlir/Dialect/Linalg/Transforms/Hoisting.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Transforms/LoopInvariantCodeMotionUtils.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/Debug.h"
@@ -39,8 +36,14 @@ struct HoistLISubsetOp : OpRewritePattern<vector::ContractionOp> {
                                 PatternRewriter &rewriter) const override {
 
     Operation *current = contractOp;
-    hoistLoopInvariantSubsets(rewriter, current->getParentOfType<scf::ForOp>());
-    hoistLoopInvariantSubsets(rewriter, current->getParentOfType<scf::ForOp>()->getParentOfType<scf::ForOp>());
+
+    auto loop1 = current->getParentOfType<scf::ForOp>();
+    if (loop1)
+      hoistLoopInvariantSubsets(rewriter, loop1);
+
+    auto loop2 = loop1 ? loop1->getParentOfType<scf::ForOp>() : nullptr;
+    if (loop2)
+      hoistLoopInvariantSubsets(rewriter, loop2);
 
     return success();
   }
