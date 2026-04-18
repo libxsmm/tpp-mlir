@@ -1,63 +1,63 @@
 [
  {
-  "gemm_fp32_mlir_vector_kernel_32_avx512": {
+  "gemm_fp32_mlir_nano_kernel_32_avx512": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     }
   }},
   {
-  "mlp_fp32_mlir_vector_kernel_32_avx512": {
+  "mlp_fp32_mlir_nano_kernel_32_avx512": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --registerBlocking=8,32,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --nano-kernels --registerBlocking=8,32,1 '" ],
       "extensions": [ "avx512.*" ]
     }
   }},
@@ -65,30 +65,30 @@
   "gemm_fp32_mlir_vector_kernel_64_avx512": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=1,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=1,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     }
   }},
@@ -96,92 +96,92 @@
   "mlp_fp32_mlir_vector_kernel_64_avx512": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=64,64,64 --registerUnroll=1,16,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=1,4 --vector-to-kernels --registerBlocking=4,64,1 '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=1,4 --nano-kernels --registerBlocking=4,64,1 '" ],
       "extensions": [ "avx512.*" ]
     }
   }},
   {
-  "gemm_fp32_mlir_vector_kernel_32_avx2_adl": {
+  "gemm_fp32_mlir_nano_kernel_32_avx2_adl": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     }
   }},
   {
-  "mlp_fp32_mlir_vector_kernel_32_avx2_adl": {
+  "mlp_fp32_mlir_nano_kernel_32_avx2_adl": {
     "fp32_3x1024_omp_2_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
       "extensions": [ "avx2" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32" ],
+      "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --vector-to-kernels --target-feature=avx2 --registerBlocking=4,16,1  '" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8 --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1 '" ],
       "extensions": [ "avx2" ]
     }
   }},

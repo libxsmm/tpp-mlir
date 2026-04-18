@@ -51,6 +51,9 @@ class MLIRGenerator {
   /// Tile sizes
   SmallVector<int64_t> tiles;
 
+  ///
+  SmallVector<int64_t> registerUnroll;
+
   /// Data type (element type of all tensors)
   SmallVector<Type> dataTypes;
 
@@ -260,7 +263,7 @@ public:
   /// Creates a specific module. Different configurations need different modules
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
-  MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef,
+  MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
                 StringRef, StringRef, int, bool, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }

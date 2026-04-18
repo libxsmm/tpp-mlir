@@ -41,6 +41,7 @@ struct HoistLISubsetOp : OpRewritePattern<vector::ContractionOp> {
     if (loop1)
       hoistLoopInvariantSubsets(rewriter, loop1);
 
+    loop1 = current->getParentOfType<scf::ForOp>();
     auto loop2 = loop1 ? loop1->getParentOfType<scf::ForOp>() : nullptr;
     if (loop2)
       hoistLoopInvariantSubsets(rewriter, loop2);

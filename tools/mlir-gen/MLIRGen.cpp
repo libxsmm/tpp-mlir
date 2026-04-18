@@ -8,6 +8,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -115,7 +116,7 @@ static Value createCastToType(OpBuilder &builder, Location loc, Value value,
 
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              unsigned batch, StringRef layersStr,
-                             StringRef tilesStr, StringRef targetType,
+                             StringRef tilesStr, StringRef registerUnrollStr, StringRef targetType,
                              StringRef scaleType, StringRef quantizationTypeStr,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
@@ -163,6 +164,10 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   parseStringList(tilesStr, tiles);
   assert((tiles.size() == 0 || tiles.size() == 3) &&
          "Must have 3 tile sizes (or none)");
+
+  parseStringList(registerUnrollStr, registerUnroll);
+  assert((tiles.size() == 0 || tiles.size() == 3) &&
+         "Must have 3 register unrolling or none");
 
   // Pick data type
   auto elementType =
@@ -395,6 +400,31 @@ void MLIRGenerator::createKernel(bool hasMixedType) {
   // Create function with all necessary arguments
   auto func = createFunction(builder, module, "entry", inputTypes,
                              {lastArg.output.type});
+
+  // Add the register unroll user input as a DLTI attribute.
+  if (registerUnroll.size() == 3) {
+    builder.getContext()->getOrLoadDialect<mlir::DLTIDialect>();
+    auto i64 = IntegerType::get(builder.getContext(), 64);
+
+    SmallVector<Attribute> unrollVals = {
+        IntegerAttr::get(i64, registerUnroll[0]),
+        IntegerAttr::get(i64, registerUnroll[1]),
+        IntegerAttr::get(i64, registerUnroll[2])
+    };
+
+    auto unrollArray = ArrayAttr::get(builder.getContext(), unrollVals);
+    auto keyAttr = StringAttr::get(builder.getContext(), "reg_gemm_unroll");
+    auto entry = DataLayoutEntryAttr::get(keyAttr, unrollArray);
+    auto deviceSpec = TargetDeviceSpecAttr::get(builder.getContext(), {entry});
+    auto systemKey = StringAttr::get(builder.getContext(), "CPU");
+    TargetSystemSpecAttr systemSpec = TargetSystemSpecAttr::get(
+        builder.getContext(),
+        {DataLayoutEntryAttr::get(systemKey, deviceSpec)}
+    );
+
+    func->setAttr("dlti.target_system_spec", systemSpec);
+  }
+
 
   // Initialize the values depending on the KernelType
   //   * Model: input = arg, weights/bias = const, output = zero
