@@ -61,9 +61,7 @@ struct HoistLoopInvariantSubsets
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     populateHoistLoopInvariantSubsetPatterns(patterns);
-    GreedyRewriteConfig config;
-    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 } // namespace tpp
