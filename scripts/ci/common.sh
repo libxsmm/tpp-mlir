@@ -62,6 +62,8 @@ add_device_extensions() {
   # GPU extensions
   if [[ ${DEVICE_LIST,,} =~ "cuda" ]]; then
     BASE=${BASE}-cuda
+  elif [[ ${DEVICE_LIST,,} =~ "intel" ]]; then
+    BASE=${BASE}-intel
   fi
 
   echo ${BASE}

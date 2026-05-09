@@ -1,5 +1,4 @@
 // RUN: tpp-opt %s -default-tpp-passes -split-input-file | FileCheck %s
-// RUN: tpp-sched --bundle=default-tpp-passes %s --split-input-file | FileCheck %s
 
 #map = affine_map<(d0, d1, d2, d3) -> (d1, d3, d0)>
 #map1 = affine_map<(d0, d1, d2, d3) -> (d3, d2, d0)>

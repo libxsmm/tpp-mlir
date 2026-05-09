@@ -37,18 +37,18 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
     assert(dyn_cast_or_null<perf::YieldOp>(benchYield) &&
            "expect perf.yield in perf.bench");
 
-    auto zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-    auto one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-    auto numIters = rewriter.create<arith::IndexCastOp>(
+    auto zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    auto one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+    auto numIters = arith::IndexCastOp::create(rewriter, 
         loc, rewriter.getIndexType(), benchOp.getNumIters());
 
     // Create benchmark loop up to perf.bench numIters.
     // Wrap the benchmark kernel in timer calls.
-    auto timer = rewriter.create<perf::StartTimerOp>(
+    auto timer = perf::StartTimerOp::create(rewriter, 
         loc, TimerType::get(rewriter.getContext()));
-    auto loop = rewriter.create<scf::ForOp>(loc, zero, numIters, one,
+    auto loop = scf::ForOp::create(rewriter, loc, zero, numIters, one,
                                             benchOp.getIterArgs());
-    auto delta = rewriter.create<perf::StopTimerOp>(loc, rewriter.getF64Type(),
+    auto delta = perf::StopTimerOp::create(rewriter, loc, rewriter.getF64Type(),
                                                     timer.getTimer());
 
     if (benchOp.getIterArgs().empty()) {
@@ -73,7 +73,7 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
     // Pass perf.yield values through the scf.yield.
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(loop.getBody());
-    rewriter.create<scf::YieldOp>(loc, benchYield->getOperands());
+    scf::YieldOp::create(rewriter, loc, benchYield->getOperands());
     rewriter.eraseOp(benchYield);
 
     // Swap bench results with loop results.

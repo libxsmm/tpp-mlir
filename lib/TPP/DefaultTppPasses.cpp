@@ -81,7 +81,7 @@ private:
     //    micro-kernels via specialized lowering of certain vector patterns.
     assert(!(vectorToXSMM && vectorToKernel) &&
            "XSMM and Kernel lowering are mutually exclusive");
-    bool forceLinalgToVector = (vectorToXSMM || vectorToKernel);
+    bool forceLinalgToVector = (vectorToXSMM || vectorToKernel || nanoKernel);
 
     // List of operations to skip when lowering Linalg to XSMM / Kernel.
     // This allows further passes to lower to vector, function, codegen
@@ -89,7 +89,7 @@ private:
     SmallVector<std::string> skipOperations;
     // General "linalg-to-vector" choice needs to skip all XSMM matching at
     // linalg level.
-    if (linalgToVector || vectorToKernel) {
+    if (linalgToVector || vectorToKernel || nanoKernel) {
       skipOperations.push_back("all");
     }
     if (vectorToXSMM) {
@@ -130,19 +130,46 @@ private:
       // bufferization.
       pm.addNestedPass<func::FuncOp>(createDecomposeAggregatedOps());
 
+      // Flatten 2D scf.forall loops using space-filling curve before bufferization
+      if (sfcOrder) {
+        pm.addPass(createSCFForAllLoopFlattenSFC());
+      }
+
       // Bufferize: tensor->memref.
-      pm.addPass(createBufferize());
+      if (!nanoKernel) {
+        pm.addPass(createBufferize());
+      }
 
       // Lower Linalg to XSMM.
       pm.addNestedPass<func::FuncOp>(
           createLinalgLowering(LinalgLoweringOptions{skipOperations}));
 
       if (linalgToVector || forceLinalgToVector) {
+
+        if (nanoKernel) {
+          pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+          pm.addNestedPass<func::FuncOp>(createConvertLinalgGenericTo32BitAccumulation());
+        }
+
         // Vectorizes the remaining Linalg operations
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
             BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+        pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
+
+        if (nanoKernel) {
+          tpp::RegisterUnrollOptions unrollOpts;
+          unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
+          pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
+          pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
+          pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+          pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+          pm.addPass(createBufferize());
+          pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
+          pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+          pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
+        }
 
         // Please note, canonicalizer should be after hoisting pass because
         // it fuses outer tiling loops and it results in no pattern
@@ -151,6 +178,8 @@ private:
         if (vectorToXSMM) {
           pm.addPass(createVectorToXSMM());
         }
+
+        // This path will be soon replaced by the nanoKernel path.
         if (vectorToKernel) {
           VectorToKernelOptions options;
           options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
@@ -171,10 +200,14 @@ private:
     if (linalgToVector) {
       pm.addPass(createConvertVectorToSCFPass());
       // Low level parallelization passes.
-      pm.addPass(createLowLevelParallelization(LowLevelParallelization));
+      if(!sfcOrder) {
+        pm.addPass(createLowLevelParallelization(LowLevelParallelization));
+      }
     } else {
       // Low level parallelization passes.
-      pm.addPass(createLowLevelParallelization(LowLevelParallelization));
+      if(!sfcOrder) {
+        pm.addPass(createLowLevelParallelization(LowLevelParallelization));
+      }
       // TODO: These passes have been moved out of low level parallelization
       // pass since these apply on xsmm dialect. They'll be moved back in
       // subsequent commits.

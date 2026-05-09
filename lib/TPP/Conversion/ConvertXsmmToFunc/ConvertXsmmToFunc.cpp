@@ -62,7 +62,7 @@ static SmallVector<Value> getOperands(OpBuilder &builder, Location loc,
   SmallVector<Value> res;
   IntegerType integer64 = IntegerType::get(builder.getContext(), 64);
   res.push_back(
-      builder.create<arith::ConstantOp>(loc, integer64, dataTypeAttr));
+      arith::ConstantOp::create(builder, loc, integer64, dataTypeAttr));
 
   for (Value operand : operands) {
     auto memrefType = dyn_cast<MemRefType>(operand.getType());
@@ -91,11 +91,11 @@ static void buildInvokeCall(OpBuilder &builder, Location loc,
     builder.setInsertionPoint(module.getBody(),
                               std::prev(module.getBody()->end()));
     func::FuncOp funcOp =
-        builder.create<func::FuncOp>(loc, fnName.getValue(), libFnType);
+        func::FuncOp::create(builder, loc, fnName.getValue(), libFnType);
     funcOp.setPrivate();
   }
 
-  builder.create<func::CallOp>(
+  func::CallOp::create(builder, 
       loc, fnName.getValue(), TypeRange(),
       getOperands(builder, loc, op->getOperands(), dataTypeAttr));
 }
@@ -200,11 +200,11 @@ static func::CallOp buildDispatchCall(RewriterBase &rewriter, Location loc,
     rewriter.setInsertionPoint(module.getBody(),
                                std::prev(module.getBody()->end()));
     func::FuncOp funcOp =
-        rewriter.create<func::FuncOp>(loc, fnName.getValue(), libFnType);
+        func::FuncOp::create(rewriter, loc, fnName.getValue(), libFnType);
     funcOp.setPrivate();
   }
 
-  func::CallOp call = rewriter.create<func::CallOp>(
+  func::CallOp call = func::CallOp::create(rewriter, 
       loc, fnName.getValue(), IntegerType::get(rewriter.getContext(), 64),
       dispatchOperands);
   return call;
@@ -218,7 +218,7 @@ void addKindOperand(RewriterBase &rewriter, OpTy dispatchOp,
                     SmallVectorImpl<Type> &dispatchOperandTypes) {
   Location loc = dispatchOp.getLoc();
   IntegerType integer64 = IntegerType::get(rewriter.getContext(), 64);
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, cast<TypedAttr>(dispatchOp.getKindAttr())));
   dispatchOperandTypes.push_back(integer64);
 }
@@ -277,20 +277,20 @@ void addUnaryAndBinaryFlags(RewriterBase &rewriter,
   IntegerType integer64 = IntegerType::get(rewriter.getContext(), 64);
 
   int64_t oredFlag = getOredFlags(dispatchOp.getUnaryFlags());
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, IntegerAttr::get(rewriter.getI64Type(), oredFlag)));
   dispatchOperandTypes.push_back(integer64);
 
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, cast<TypedAttr>(dispatchOp.getUnaryKindAttr())));
   dispatchOperandTypes.push_back(integer64);
 
   oredFlag = getOredFlags(dispatchOp.getBinaryFlags());
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, IntegerAttr::get(rewriter.getI64Type(), oredFlag)));
   dispatchOperandTypes.push_back(integer64);
 
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, cast<TypedAttr>(dispatchOp.getBinaryKindAttr())));
   dispatchOperandTypes.push_back(integer64);
 }
@@ -316,7 +316,7 @@ static LogicalResult buildDispatchOp(RewriterBase &rewriter, OpTy dispatchOp,
   }
 
   // Dispatch the data type.
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, cast<TypedAttr>(dispatchOp.getDataTypeAttr())));
   dispatchOperandTypes.push_back(integer64);
 
@@ -326,7 +326,7 @@ static LogicalResult buildDispatchOp(RewriterBase &rewriter, OpTy dispatchOp,
   for (size_t idx = 0; idx < arrayAttrSize; idx++) {
     IntegerAttr attr = IntegerAttr::get(rewriter.getI64Type(), integers[idx]);
     dispatchOperands.push_back(
-        rewriter.create<arith::ConstantOp>(loc, integer64, attr));
+        arith::ConstantOp::create(rewriter, loc, integer64, attr));
     dispatchOperandTypes.push_back(integer64);
   }
 
@@ -335,7 +335,7 @@ static LogicalResult buildDispatchOp(RewriterBase &rewriter, OpTy dispatchOp,
   // are assumed to be verified before (i.e., op verifier).
   int64_t oredFlag = getOredFlags(dispatchOp.getFlagsAttr());
 
-  dispatchOperands.push_back(rewriter.create<arith::ConstantOp>(
+  dispatchOperands.push_back(arith::ConstantOp::create(rewriter, 
       loc, integer64, IntegerAttr::get(rewriter.getI64Type(), oredFlag)));
   dispatchOperandTypes.push_back(integer64);
 

@@ -35,10 +35,10 @@ module {
 // In order to make splat layout look a like vnni between two vector<32xbf16>, we shuffle them like below to get vnni format + aline them in 128 bit packing.
 // CHECK: vector.shuffle{{.*}}[0, 32, 1, 33, 2, 34, 3, 35, 8, 40, 9, 41, 10, 42, 11, 43, 16, 48, 17, 49, 18, 50, 19, 51, 24, 56, 25, 57, 26, 58, 27, 59] : vector<32xbf16>, vector<32xbf16>
 // CHECK: vector.shuffle{{.*}}[4, 36, 5, 37, 6, 38, 7, 39, 12, 44, 13, 45, 14, 46, 15, 47, 20, 52, 21, 53, 22, 54, 23, 55, 28, 60, 29, 61, 30, 62, 31, 63] : vector<32xbf16>, vector<32xbf16>
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
-// CHECK-NEXT: x86vector.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
+// CHECK-NEXT: x86.avx512.dot
 // For cases where we have one vector<32xbf16>, we extract as ymm i.e two vector<16xbf16> and interleave them to get one vector<32xbf16> in vnni format.
 // CHECK: vector.shuffle{{.*}}[0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23, 8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31] : vector<16xbf16>, vector<16xbf16>
 // The final accumulated value has to be shuffled with respect to the earlier input matrix shuffle as below.
@@ -80,7 +80,7 @@ module {
 
 // CHECK-LABEL:   func.func @opt_register_9x3_splat
 // CHECK-COUNT-3: vector.shuffle
-// CHECK-COUNT-27: x86vector.avx512.dot
+// CHECK-COUNT-27: x86.avx512.dot
 
 // -----
 
@@ -118,4 +118,4 @@ module {
 
 // CHECK-LABEL:   func.func @opt_register_6x4_splat
 // CHECK-COUNT-3: vector.shuffle
-// CHECK-COUNT-24: x86vector.avx512.dot
+// CHECK-COUNT-24: x86.avx512.dot

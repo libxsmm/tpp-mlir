@@ -12,6 +12,8 @@ using namespace mlir;
 
 TensorInitFloat::DataType
 TensorInitFloat::getTensorInitDataType(mlir::Type type) {
+  if (type.isFloat(8))
+    return DataType::F8E8M0FNU;
   if (type.isBF16())
     return DataType::BF16;
   if (type.isF16())
@@ -33,6 +35,9 @@ void TensorInitFloat::push(float value) {
 
 void TensorInitFloat::convertType(llvm::APFloat &value) {
   switch (type) {
+  case DataType::F8E8M0FNU:
+    toF8E8M0FNU(value);
+    break;
   case DataType::FP16:
     toFP16(value);
     break;
@@ -87,5 +92,13 @@ void IdentityTensorInitFloat::fillData() {
   for (size_t i=0; i < ld; i++) {
     size_t offset = i*ld + i;
     insert(offset, APFloat(1.0));
+  }
+}
+
+// Update internal buffer with rescale values.
+void QuantScaleTensorInitFloat::fillData() {
+  assert(scaleBuffer.size() > 0 && "scaleBuffer is empty");
+  for (size_t i = 0; i < scaleBuffer.size(); i++) {
+    push(scaleBuffer[i]);
   }
 }

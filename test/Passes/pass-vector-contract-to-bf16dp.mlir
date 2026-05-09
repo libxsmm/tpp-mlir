@@ -84,10 +84,10 @@ module {
 // CONF1:                   %[[VAL_59:.*]] = memref.subview %[[VAL_1]]{{\[}}%[[VAL_39]], %[[VAL_45]], %[[VAL_10]], 0] [1, 1, 32, 2] [1, 1, 1, 1] : memref<32x16x32x2xbf16> to memref<1x1x32x2xbf16, strided<[1024, 64, 2, 1], offset: ?>>
 // CONF1:                   %[[VAL_60:.*]] = vector.load %[[VAL_59]]{{\[}}%[[VAL_4]], %[[VAL_4]], %[[VAL_4]], %[[VAL_4]]] : memref<1x1x32x2xbf16, strided<[1024, 64, 2, 1], offset: ?>>, vector<32xbf16>
 // CONF1:                   %[[VAL_61:.*]] = vector.load %[[VAL_59]]{{\[}}%[[VAL_4]], %[[VAL_4]], %[[VAL_8]], %[[VAL_4]]] : memref<1x1x32x2xbf16, strided<[1024, 64, 2, 1], offset: ?>>, vector<32xbf16>
-// CONF1:                   %[[VAL_62:.*]] = x86vector.avx512.dot %[[VAL_46]], %[[VAL_54]], %[[VAL_60]] : vector<32xbf16> -> vector<16xf32>
-// CONF1:                   %[[VAL_63:.*]] = x86vector.avx512.dot %[[VAL_47]], %[[VAL_54]], %[[VAL_61]] : vector<32xbf16> -> vector<16xf32>
-// CONF1:                   %[[VAL_64:.*]] = x86vector.avx512.dot %[[VAL_48]], %[[VAL_58]], %[[VAL_60]] : vector<32xbf16> -> vector<16xf32>
-// CONF1:                   %[[VAL_65:.*]] = x86vector.avx512.dot %[[VAL_49]], %[[VAL_58]], %[[VAL_61]] : vector<32xbf16> -> vector<16xf32>
+// CONF1:                   %[[VAL_62:.*]] = x86.avx512.dot %[[VAL_46]], %[[VAL_54]], %[[VAL_60]] : vector<32xbf16> -> vector<16xf32>
+// CONF1:                   %[[VAL_63:.*]] = x86.avx512.dot %[[VAL_47]], %[[VAL_54]], %[[VAL_61]] : vector<32xbf16> -> vector<16xf32>
+// CONF1:                   %[[VAL_64:.*]] = x86.avx512.dot %[[VAL_48]], %[[VAL_58]], %[[VAL_60]] : vector<32xbf16> -> vector<16xf32>
+// CONF1:                   %[[VAL_65:.*]] = x86.avx512.dot %[[VAL_49]], %[[VAL_58]], %[[VAL_61]] : vector<32xbf16> -> vector<16xf32>
 // CONF1:                   scf.yield %[[VAL_62]], %[[VAL_63]], %[[VAL_64]], %[[VAL_65]] : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
 // CONF1:                 }
 // CONF1:                 scf.yield %[[VAL_66:.*]]#0, %[[VAL_66]]#1, %[[VAL_66]]#2, %[[VAL_66]]#3 : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
@@ -140,7 +140,7 @@ module {
 }
 
 // CONF1-LABEL: func.func @TransposeB_no_lowering
-// CONF1-NOT: x86vector.avx512.dot
+// CONF1-NOT: x86.avx512.dot
 
 // -----
 
@@ -157,21 +157,21 @@ module {
 }
 
 // CONF2-LABEL: func.func @gemm_64_tiles_testing_different_cases
-// CONF2: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
-// CONF2-NEXT: x86vector.avx512.dot
+// CONF2: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
+// CONF2-NEXT: x86.avx512.dot
 // CONF2-NEXT: scf.yield
 
 // CONF3-LABEL: func.func @gemm_64_tiles_testing_different_cases
-// CONF3-NOT: x86vector.avx512.dot
+// CONF3-NOT: x86.avx512.dot
 
 // CONF4-LABEL: func.func @gemm_64_tiles_testing_different_cases
-// CONF4-NOT: x86vector.avx512.dot
+// CONF4-NOT: x86.avx512.dot
 
 // -----
 
@@ -183,5 +183,5 @@ module {
 }
 
 // CONF2-LABEL: func.func @gemm_no_bf16dp_lowering
-// CONF2-NOT: x86vector.avx512.dot
+// CONF2-NOT: x86.avx512.dot
 

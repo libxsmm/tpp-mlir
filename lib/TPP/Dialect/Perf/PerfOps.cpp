@@ -46,7 +46,7 @@ LogicalResult StopTimerOp::verify() {
 // BenchOp
 //===----------------------------------------------------------------------===//
 
-OperandRange BenchOp::getEntrySuccessorOperands(RegionBranchPoint point) {
+OperandRange BenchOp::getEntrySuccessorOperands(RegionSuccessor point) {
   return getIterArgs();
 }
 
@@ -54,14 +54,19 @@ void BenchOp::getSuccessorRegions(RegionBranchPoint parentReg,
                                   SmallVectorImpl<RegionSuccessor> &regions) {
   // The `body` region branch back to the parent operation. Drop the first
   // argument which is the timer value.
-  if (parentReg == getBodyRegion()) {
-    regions.push_back(RegionSuccessor(getBodyResults().drop_front()));
+  if (!parentReg.isParent()) {
+    regions.push_back(RegionSuccessor::parent());
     return;
   }
 
   // Otherwise the successor is the body region.
-  regions.push_back(
-      RegionSuccessor(&getBodyRegion(), getBodyRegion().getArguments()));
+  regions.push_back(RegionSuccessor(&getBodyRegion()));
+}
+
+ValueRange BenchOp::getSuccessorInputs(RegionSuccessor successor) {
+  if (successor.isParent())
+    return getBodyResults().drop_front();
+  return getIterArgs();
 }
 
 void BenchOp::build(OpBuilder &builder, OperationState &result, Value numIters,
@@ -86,7 +91,7 @@ void BenchOp::build(OpBuilder &builder, OperationState &result, Value numIters,
   if (iterArgs.empty()) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&bodyBlock);
-    builder.create<perf::YieldOp>(result.location);
+    perf::YieldOp::create(builder, result.location);
   }
 }
 

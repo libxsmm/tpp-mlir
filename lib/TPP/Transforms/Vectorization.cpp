@@ -76,7 +76,7 @@ struct LinalgGenericToVector : OpRewritePattern<linalg::GenericOp> {
       AffineExpr expr = map1.getResult(map1Index);
       if (isa<AffineBinaryOpExpr>(expr)) {
 
-        auto expand = rewriter.create<memref::ExpandShapeOp>(
+        auto expand = memref::ExpandShapeOp::create(rewriter, 
             linalgOp.getLoc(), shape, linalgOp.getOperand(0), indices);
         linalgOp.setOperand(0, expand.getResult());
         map1 = map1.insertResult(

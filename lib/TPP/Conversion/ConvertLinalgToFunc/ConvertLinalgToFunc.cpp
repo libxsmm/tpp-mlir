@@ -90,11 +90,11 @@ static void buildInvokeCall(OpBuilder &builder, Operation *op) {
     builder.setInsertionPoint(module.getBody(),
                               std::prev(module.getBody()->end()));
     func::FuncOp funcOp =
-        builder.create<func::FuncOp>(loc, fnName.getValue(), libFnType);
+        func::FuncOp::create(builder, loc, fnName.getValue(), libFnType);
     funcOp.setPrivate();
   }
 
-  builder.create<func::CallOp>(
+  func::CallOp::create(builder, 
       loc, fnName.getValue(), TypeRange(),
       getGemmOperands(builder, loc, op->getOperands()));
 }

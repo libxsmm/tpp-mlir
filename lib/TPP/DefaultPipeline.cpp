@@ -14,12 +14,12 @@
 #include "llvm/Support/CommandLine.h"
 
 #include "mlir/Conversion/Passes.h"
-#include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
-#include "mlir/Dialect/GPU/Transforms/Passes.h"
-#include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Async/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/Transforms/Passes.h"
+#include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Pass/PassOptions.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -55,6 +55,13 @@ llvm::cl::opt<bool>
                 llvm::cl::desc("Default pipeline - enable parallel execution"),
                 llvm::cl::init(false));
 
+// Control scf.forall iteration ordering / flattening strategy.
+llvm::cl::opt<bool> sfcOrder(
+    "sfc-order",
+    llvm::cl::desc("Use space-filling-curve-based iteration ordering / "
+                   "flattening for scf.forall loops in the default pipeline"),
+    llvm::cl::init(true));
+
 // Control grid parallelism sizes.
 llvm::cl::list<unsigned>
     parallelTaskGrid("parallel-task-grid",
@@ -66,24 +73,31 @@ llvm::cl::opt<bool> linalgToVector("linalg-to-vector",
                                    llvm::cl::desc("Lower linalg to vector"),
                                    llvm::cl::init(false));
 
-llvm::cl::opt<bool> vectorToKernel("vector-to-kernels",
-                                   llvm::cl::desc("Lower vector to micro-kernels"),
-                                   llvm::cl::init(false)); 
+llvm::cl::opt<bool>
+    vectorToKernel("vector-to-kernels",
+                   llvm::cl::desc("Lower vector to micro-kernels"),
+                   llvm::cl::init(false));
+
+llvm::cl::opt<bool>
+    nanoKernel("nano-kernels",
+                   llvm::cl::desc("Lower vector.contract to nano-kernels"),
+                   llvm::cl::init(false));
 
 llvm::cl::opt<bool> lowerPackUnpackWithoutTranspose(
     "lower-pack-unpack-without-transpose",
     llvm::cl::desc("Lower packs and unpacks reverting any dim permutations"),
     llvm::cl::init(false));
 
-llvm::cl::opt<bool> disableVnniPacking("disable-vnni-packing",
-                                   llvm::cl::desc("Disables VNNI packing for packed types"),
-                                   llvm::cl::init(false));
+llvm::cl::opt<bool>
+    disableVnniPacking("disable-vnni-packing",
+                       llvm::cl::desc("Disables VNNI packing for packed types"),
+                       llvm::cl::init(false));
 
-llvm::cl::list<unsigned>
-    registerBlocking("registerBlocking", llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
-            llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 32}),
-            llvm::cl::CommaSeparated);
-
+llvm::cl::list<unsigned> registerBlocking(
+    "registerBlocking",
+    llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
+    llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 32}),
+    llvm::cl::CommaSeparated);
 
 llvm::cl::opt<bool> vectorToXSMM("vector-to-XSMM",
                                  llvm::cl::desc("Lower vector to XSMM"),
@@ -160,17 +174,20 @@ private:
       pm.addPass(createGpuPipeline(GpuPipelineOptions{gpuBackend}));
     } else {
       // Apply the default preprocessing pass
-      DefaultTppPassesOptions tppDefaultOptions; 
+      DefaultTppPassesOptions tppDefaultOptions;
       tppDefaultOptions.linalgToLoops = linalgToLoops;
+      tppDefaultOptions.sfcOrder = sfcOrder;
       tppDefaultOptions.parallelTaskGrid = SmallVector<unsigned>{
           parallelTaskGrid.begin(), parallelTaskGrid.end()};
       tppDefaultOptions.linalgToVector = linalgToVector;
       tppDefaultOptions.vectorToXSMM = vectorToXSMM;
-      tppDefaultOptions.lowerPackUnpackWithoutTranspose = lowerPackUnpackWithoutTranspose;
+      tppDefaultOptions.lowerPackUnpackWithoutTranspose =
+          lowerPackUnpackWithoutTranspose;
       tppDefaultOptions.disableVnniPacking = disableVnniPacking;
-      tppDefaultOptions.registerBlocking =
-          SmallVector<unsigned>{registerBlocking.begin(), registerBlocking.end()};
+      tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
+          registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;
+      tppDefaultOptions.nanoKernel = nanoKernel;
       tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
 
       pm.addPass(createDefaultTppPasses(tppDefaultOptions));
@@ -193,7 +210,9 @@ private:
     if (defParallel)
       pm.addPass(createConvertSCFToOpenMPPass());
     pm.addPass(createConvertVectorToSCFPass());
-    pm.addPass(arith::createArithExpandOpsPass());
+    mlir::arith::ArithExpandOpsPassOptions arithExpandOpsOptions;
+    arithExpandOpsOptions.includeF8E8M0 = true;
+    pm.addPass(arith::createArithExpandOpsPass(arithExpandOpsOptions));
     pm.addPass(createLowerAffinePass());
 
     // Print IR of optimized kernel and main
@@ -202,10 +221,9 @@ private:
 
     // Lower to LLVM
     ConvertVectorToLLVMPassOptions options;
-    options.amx = vnni::utils::hasAMX();
-    #if defined(__x86_64__)
-    	options.x86Vector = true;
-    #endif
+#if defined(__x86_64__)
+    options.x86 = true;
+#endif
     pm.addPass(createConvertVectorToLLVMPass(options));
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
     pm.addPass(createSCFToControlFlowPass());

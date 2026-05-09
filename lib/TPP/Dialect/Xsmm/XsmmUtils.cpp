@@ -78,7 +78,7 @@ void replaceOpWithUnary(RewriterBase &rewriter, Operation *operation,
       rewriter.getContext(), ArrayRef<int64_t>{unaryInfo.m, unaryInfo.n,
                                                unaryInfo.ldi, unaryInfo.ldo});
   auto dtype = xsmm::utils::getDataType(rewriter, operands.back().getType());
-  Value dispatched = rewriter.create<xsmm::UnaryDispatchOp>(
+  Value dispatched = xsmm::UnaryDispatchOp::create(rewriter, 
       loc, integer64, kind, dims, flags, dtype);
   SmallVector<Value> invokeOperands;
   invokeOperands.push_back(dispatched);
@@ -427,7 +427,7 @@ func::CallOp buildXsmmCall(RewriterBase &rewriter, XsmmCallType callType,
 
   SmallVector<Value> finalOperands =
       xsmm::utils::getXsmmOperands(rewriter, loc, operands, dtype, parentOp);
-  return rewriter.create<func::CallOp>(loc, fnName.getValue(), results,
+  return func::CallOp::create(rewriter, loc, fnName.getValue(), results,
                                        finalOperands);
 }
 

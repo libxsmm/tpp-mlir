@@ -31,13 +31,13 @@ module {
 
 // CHECK-LABEL:   func.func @gemm_splat
 // We leverage the ARL nature and do even->odd loads
-// CHECK: x86vector.avx.cvt.packed.even.indexed_to_f32
+// CHECK: x86.avx.cvt.packed.even.indexed_to_f32
 // CHECK-NEXT: vector.fma{{.*}}vector<8xf32>
 // CHECK-NEXT: vector.fma{{.*}}vector<8xf32>
 // CHECK-NEXT: vector.fma{{.*}}vector<8xf32>
-// CHECK: x86vector.avx.cvt.packed.odd.indexed_to_f32
-// CHECK: x86vector.avx.cvt.packed.even.indexed_to_f32
-// CHECK: x86vector.avx.cvt.packed.odd.indexed_to_f32
+// CHECK: x86.avx.cvt.packed.odd.indexed_to_f32
+// CHECK: x86.avx.cvt.packed.even.indexed_to_f32
+// CHECK: x86.avx.cvt.packed.odd.indexed_to_f32
 // The final accumulated value has to be shuffled as the load is even+odd
 // CHECK: vector.shuffle{{.*}}[0, 8, 1, 9, 2, 10, 3, 11] : vector<8xf32>, vector<8xf32>
 // CHECK: vector.shuffle{{.*}}[4, 12, 5, 13, 6, 14, 7, 15] : vector<8xf32>, vector<8xf32>

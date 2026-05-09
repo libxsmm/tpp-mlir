@@ -12,6 +12,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 #include "TPP/Transforms/Utils/BuilderUtils.h"
 
@@ -30,7 +31,7 @@ arith::ConstantOp getConstant(OpBuilder &builder, Type type, ValueT value) {
     attr = builder.getFloatAttr(type, value);
   }
   assert(attr && "Unsupported ConstantOp type");
-  return builder.create<arith::ConstantOp>(unkLoc, type, attr);
+  return arith::ConstantOp::create(builder, unkLoc, type, attr);
 }
 } // anonymous namespace
 
@@ -56,6 +57,8 @@ func::FuncOp createFunction(OpBuilder &builder, ModuleOp module, StringRef name,
 
 Value getConstInt(OpBuilder &builder, int value, int width) {
   switch (width) {
+  case 8:
+    return getConstant(builder, builder.getI8Type(), value);
   case 32:
     return getConstant(builder, builder.getI32Type(), value);
   case 64:
@@ -77,14 +80,15 @@ Value getConstIndex(OpBuilder &builder, int value) {
 Value createDenseTensor(OpBuilder &builder, TensorInitType initType,
                         TensorType type, int seed) {
   auto unkLoc = builder.getUnknownLoc();
-  auto init = getTensorInit(initType, type.getElementType(), seed);
+  auto init = getTensorInit(initType, type.getElementType(), nullptr, seed);
   auto floatInit = init->get(type);
   assert(!failed(floatInit) && "Invalid dense tensor initializer");
-  return builder.create<arith::ConstantOp>(unkLoc, type, floatInit.value());
+  return arith::ConstantOp::create(builder, unkLoc, type, floatInit.value());
 }
 
 Value createDenseMemref(OpBuilder &builder, ModuleOp module,
-                        TensorInitType initType, MemRefType type, int seed) {
+                        TensorInitType initType, MemRefType type, int seed,
+                        MemRefType nextType, bool isScaleArgument) {
   auto unkLoc = builder.getUnknownLoc();
   StringRef globalName;
   // First create the global
@@ -102,12 +106,14 @@ Value createDenseMemref(OpBuilder &builder, ModuleOp module,
     std::string name = "__wrapper_" + std::to_string(order++);
 
     auto alignment = builder.getIntegerAttr(builder.getI64Type(), 128);
-    auto init = getTensorInit(initType, type.getElementType(), seed);
+    auto init = getTensorInit(initType, type.getElementType(),
+                              nextType ? nextType.getElementType() : nullptr,
+                              seed, isScaleArgument);
     auto floatInit = init->get(type);
     assert(!failed(floatInit) && "Invalid dense tensor initializer");
 
     // Create the global object in the Module's region
-    auto global = builder.create<memref::GlobalOp>(
+    auto global = memref::GlobalOp::create(builder, 
         unkLoc, StringRef(name), privAttr, type, floatInit.value(),
         /*constant=*/false, alignment);
     globalName = global.getName();
@@ -115,7 +121,7 @@ Value createDenseMemref(OpBuilder &builder, ModuleOp module,
   // Get the created global value and use it
   // as an input to the kernel
   auto nameAttr = builder.getStringAttr(globalName);
-  return builder.create<memref::GetGlobalOp>(unkLoc, type, nameAttr);
+  return memref::GetGlobalOp::create(builder, unkLoc, type, nameAttr);
 }
 
 TypedAttr getTypedAttr(OpBuilder &builder, Type type, double value) {

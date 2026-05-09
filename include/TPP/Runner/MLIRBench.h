@@ -71,8 +71,13 @@ class MLIRBench {
   /// Kernel function, if found
   func::FuncOp kernel;
 
-  /// Values of the kernel arguments (no need to declare every time)
-  llvm::SmallVector<Value> kernelArgs;
+  /// Each kernel argument can be of two kinds, data and scale. KernelArg struct
+  /// captures this info.
+  struct KernelArg {
+    Value value;
+    enum class Kind { DATA, SCALE } kind;
+  };
+  llvm::SmallVector<KernelArg> kernelArgs;
 
   /// Main wrapper function, calls kernel
   func::FuncOp main;
@@ -110,7 +115,7 @@ class MLIRBench {
 
 public:
   /// Return kernelArgs
-  llvm::SmallVector<Value> getKernelArgs() { return kernelArgs; }
+  llvm::SmallVector<KernelArg> getKernelArgs() { return kernelArgs; }
   /// Creates context, builder
   MLIRBench(Operation *op, const MLIRBenchConfig &config);
 

@@ -20,8 +20,6 @@ class Value;
 namespace linalg {
 class GenericOp;
 class LinalgOp;
-class Conv2DNchwFchwOp;
-class Conv2DNhwcHwcfOp;
 class MatmulOp;
 class BatchReduceMatmulOp;
 class BatchMatmulOp;
@@ -33,23 +31,6 @@ namespace linalgx {
 // On success the returned values are the materialzed loops with BRGEMM inside.
 FailureOr<SmallVector<Value>> rewriteToBRGemmOp(RewriterBase &rewriter,
                                                 linalg::LinalgOp linalgOp);
-
-// Rewrite a convolution to a matmul operation. We support the following
-// formats:
-// 1. [N][P][Q][K] += [N][H][W][C] * [R][S][C][K]
-// 2. [N][K’][P][Q][k] += [N][C’][H][W][c] * [K’][C’][R][S][c][k] (blocked)
-FailureOr<linalg::MatmulOp> rewriteConvToMatmul(RewriterBase &rewriter,
-                                                linalg::LinalgOp linalgOp);
-
-// Attempt to block a Conv2DNchwFchwOp.
-FailureOr<linalg::GenericOp>
-packConv2DNchwFchwOp(RewriterBase &rewriter, linalg::Conv2DNchwFchwOp linalgOp,
-                     ArrayRef<OpFoldResult> tiles);
-
-// Attempt to pack a Conv2DNhwcHwcfOp.
-FailureOr<linalg::GenericOp>
-packConv2DNhwcHwcfOp(RewriterBase &rewriter, linalg::Conv2DNhwcHwcfOp linalgOp,
-                     ArrayRef<OpFoldResult> tiles);
 
 // Attempt to block a MatmulOp to VNNI format.
 FailureOr<linalg::GenericOp> packVNNIMatmulOp(RewriterBase &rewriter,

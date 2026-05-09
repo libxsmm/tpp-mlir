@@ -51,7 +51,7 @@ struct LinalgConvertCompareSelectToMaximumf
         select.getOperand(1) != cmpf.getOperand(0))
       return failure();
     rewriter.setInsertionPointAfter(&op.getBody()->front());
-    auto maxf = rewriter.create<arith::MaximumFOp>(
+    auto maxf = arith::MaximumFOp::create(rewriter, 
         op.getLoc(),
         dyn_cast<arith::CmpFOp>(op.getBody()->getOperations().begin())
             ->getOperands());

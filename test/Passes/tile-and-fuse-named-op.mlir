@@ -40,12 +40,12 @@ func.func @matmul_eletwise_matmul_and_relu(%arg0: tensor<32x64xf32>, %arg1: tens
 // CHECK: %[[LOOP:.+]] = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C2]]
 // CHECK-NEXT: %[[LOOP1:.+]] = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C2]]
 // CHECK: linalg.matmul
-// CHECK-NEXT: tensor.empty()
-// CHECK-NEXT: linalg.fill
+// CHECK: linalg.fill
 // CHECK: linalg.generic
 // CHECK-SAME:  {indexing_maps = [#[[MAP]], #[[MAP]], #[[MAP]]],
 // CHECK-SAME:  iterator_types = ["parallel", "parallel"]}
 // CHECK-SAME:  outs({{.+}} : tensor<2x2xf32>)
+// CHECK: arith.maximumf
 // CHECK: scf.yield %{{.+}} : tensor<32x32xf32>
 // CHECK-NEXT: }
 // CHECK: scf.yield %{{.+}} : tensor<32x32xf32>
@@ -78,8 +78,7 @@ func.func @matmul_eletwise_blk_matmul(%arg0: tensor<4x4x32x32xf32>, %arg1: tenso
 // CHECK-NEXT: ^bb0(
 // CHECK-NEXT: arith.mulf
 // CHECK-NEXT: arith.addf
-// CHECK: tensor.empty()
-// CHECK-NEXT: linalg.fill
+// CHECK: linalg.fill
 // CHECK-NEXT: linalg.generic
 // CHECK-NEXT: ^bb0(
 // CHECK-NEXT: arith.maximumf
@@ -115,8 +114,7 @@ func.func @matmul_sequence_fusion_with_relu(%arg0: tensor<32x64xf32>, %arg1: ten
 // CHECK: %[[LOOP:.+]] = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C2]]
 // CHECK-NEXT: %[[LOOP1:.+]] = scf.for %{{.+}} = %[[C0]] to %[[C32]] step %[[C2]]
 // CHECK: linalg.matmul
-// CHECK: tensor.empty()
-// CHECK-NEXT: linalg.fill
+// CHECK: linalg.fill
 // CHECK: linalg.generic
 // CHECK-SAME:  indexing_maps = [#[[MAP]], #[[MAP]], #[[MAP]]],
 // CHECK-SAME:  iterator_types = ["parallel", "parallel"]

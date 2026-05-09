@@ -99,7 +99,8 @@ def Perf_StopTimerOp : Perf_Op<"stop_timer", []> {
 def Perf_BenchOp : Perf_Op<"bench",
     [AutomaticAllocationScope, SingleBlockImplicitTerminator<"perf::YieldOp">,
      RecursiveMemoryEffects,
-     DeclareOpInterfaceMethods<RegionBranchOpInterface, ["getEntrySuccessorOperands"]>,
+     DeclareOpInterfaceMethods<RegionBranchOpInterface,
+     ["getEntrySuccessorOperands", "getSuccessorInputs"]>,
      RangedTypesMatchWith<"iter_args types match types of yield",
                           "$_self",
                           "iterArgs",
@@ -177,7 +178,7 @@ def Perf_BenchOp : Perf_Op<"bench",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$numIters,
-      CArg<"ValueRange", "std::nullopt">:$iterArgs)>
+      CArg<"ValueRange", "{}">:$iterArgs)>
   ];
 
   let extraClassDeclaration = [{

@@ -78,11 +78,11 @@ static SmallVector<Value> getNormalizedOperands(OpBuilder &b, Location loc,
     auto type = extractNormalizedTypes(b, op);
     TypeSwitch<Type>(op.getType())
         .Case<MemRefType>([&](Type t) {
-          Value cast = b.create<memref::CastOp>(loc, type, op);
+          Value cast = memref::CastOp::create(b, loc, type, op);
           res.push_back(cast);
         })
         .Case<TensorType>([&](Type t) {
-          Value cast = b.create<tensor::CastOp>(loc, type, op);
+          Value cast = tensor::CastOp::create(b, loc, type, op);
           res.push_back(cast);
         })
         .Default([&](Type t) { res.push_back(op); });
@@ -107,7 +107,7 @@ static func::FuncOp createPerfFuncPrototype(Location loc, const std::string& fun
       extractNormalizedTypes(rewriter, op->getResults()));
 
   auto funcOp =
-      rewriter.create<func::FuncOp>(loc, fnName.getValue(), libFnType);
+      func::FuncOp::create(rewriter, loc, fnName.getValue(), libFnType);
   funcOp.setPrivate();
 
   return funcOp;
@@ -134,7 +134,7 @@ static LogicalResult buildPerfSinkFunc(Location loc,
   rewriter.setInsertionPointToEnd(block);
 
   // Insert empty return.
-  rewriter.create<func::ReturnOp>(loc, ValueRange{});
+  func::ReturnOp::create(rewriter, loc, ValueRange{});
 
   return success();
 }
@@ -177,7 +177,7 @@ static LogicalResult buildPerfFuncCall(Location loc, std::string funcName,
   }
 
   // Insert a function call.
-  auto funcCall = rewriter.create<func::CallOp>(
+  auto funcCall = func::CallOp::create(rewriter, 
       loc, fnName.getValue(),
       extractNormalizedTypes(rewriter, op->getResults()),
       getNormalizedOperands(rewriter, loc, op->getOperands()));

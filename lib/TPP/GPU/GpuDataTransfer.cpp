@@ -88,7 +88,7 @@ static FailureOr<Value> matchTransferBuffers(RewriterBase &rewriter,
 
   // Cast device allocation to match the operand if possible.
   if (memref::CastOp::areCastCompatible(gpuAllocType, operandType)) {
-    return rewriter.create<memref::CastOp>(loc, operandType, gpuBuffer)
+    return memref::CastOp::create(rewriter, loc, operandType, gpuBuffer)
         .getDest();
   }
 
@@ -97,8 +97,7 @@ static FailureOr<Value> matchTransferBuffers(RewriterBase &rewriter,
   // argument types.
   if (auto subview =
           dyn_cast<memref::SubViewOp>(kernelOperand.getDefiningOp())) {
-    return rewriter
-        .create<memref::SubViewOp>(
+    return memref::SubViewOp::create(rewriter, 
             loc, operandType, gpuBuffer, subview.getOffsets(),
             subview.getSizes(), subview.getStrides(),
             subview.getStaticOffsets(), subview.getStaticSizes(),
@@ -130,7 +129,7 @@ static FailureOr<Value> transferMemref(RewriterBase &rewriter,
 
   // Allocate device buffer.
   rewriter.setInsertionPointToStart(&block);
-  auto gpuAlloc = rewriter.create<gpu::AllocOp>(
+  auto gpuAlloc = gpu::AllocOp::create(rewriter, 
       loc, TypeRange(hostBuffer), ValueRange{}, ValueRange{}, ValueRange{});
   Value gpuBuffer = gpuAlloc.getMemref();
 
@@ -146,19 +145,19 @@ static FailureOr<Value> transferMemref(RewriterBase &rewriter,
       return failure();
     gpuBuffer = *newBuffer;
   }
-  rewriter.create<gpu::MemcpyOp>(loc, ValueRange{}, ValueRange{}, gpuBuffer,
+  gpu::MemcpyOp::create(rewriter, loc, ValueRange{}, ValueRange{}, gpuBuffer,
                                  hostBuffer);
 
   // If requested, copy data back to the host.
   if (copyDataBack) {
     rewriter.setInsertionPointAfter(launchFuncOp);
-    rewriter.create<gpu::MemcpyOp>(loc, ValueRange{}, ValueRange{}, hostBuffer,
+    gpu::MemcpyOp::create(rewriter, loc, ValueRange{}, ValueRange{}, hostBuffer,
                                    gpuBuffer);
   }
 
   // Cleanup device buffer.
   rewriter.setInsertionPoint(block.getTerminator());
-  rewriter.create<gpu::DeallocOp>(loc, ValueRange{}, gpuAlloc.getMemref());
+  gpu::DeallocOp::create(rewriter, loc, ValueRange{}, gpuAlloc.getMemref());
 
   return gpuBuffer;
 }

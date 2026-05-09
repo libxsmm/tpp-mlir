@@ -65,6 +65,12 @@ llvm::cl::opt<std::string>
           llvm::cl::desc("Comma-separated values of size of each tile (N,K,C)"),
           llvm::cl::value_desc("32,32,32"), llvm::cl::init(""));
 
+// Tile sizes (N, C, K)
+llvm::cl::opt<std::string>
+    registerUnroll("registerUnroll",
+          llvm::cl::desc("Comma-separated values of size of each tile (N,K,C)"),
+          llvm::cl::value_desc("1,1,1"), llvm::cl::init(""));
+
 // Float type flag to indicate input data type. It is being extended to further
 // indicate mixed precision types, source and destination types in case of
 // quantization using 'mx-' prefix. This may be changed further with clarity on
@@ -79,13 +85,13 @@ llvm::cl::opt<std::string>
 // place holder.
 llvm::cl::opt<std::string>
     scaleType("scale-type", llvm::cl::desc("Data type of scaling factor"),
-              llvm::cl::value_desc("f32|i32"), llvm::cl::init(""));
+              llvm::cl::value_desc("f32|f8E8M0FNU"), llvm::cl::init(""));
 
 // Quantization type to specify the quantization kernel to be generated.
-llvm::cl::opt<std::string>
-    quantizationType("quant-type", llvm::cl::desc("Specify quantization type"),
-                     llvm::cl::value_desc("quantize|dequantize"),
-                     llvm::cl::init(""));
+llvm::cl::opt<std::string> quantizationType(
+    "quant-type", llvm::cl::desc("Specify quantization type"),
+    llvm::cl::value_desc("mixed|quantize|dequantize|testquant"),
+    llvm::cl::init(""));
 
 // Random seed
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
@@ -135,7 +141,7 @@ int main(int argc, char **argv) {
 
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
 
-  MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, floatType,
+  MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, floatType,
                     scaleType, quantizationType, seed, identity, enableBias,
                     enableRelu, enableSoftmax, keepGenericMatmul, vnni);
   return gen.generate(filename, floatType.getValue().find("mx-", 0) == 0);

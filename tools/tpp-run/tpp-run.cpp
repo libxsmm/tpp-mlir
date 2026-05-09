@@ -95,7 +95,8 @@ llvm::cl::opt<int> seed("seed",
 // Default const if seed == 0, and normal otherwise
 llvm::cl::opt<std::string> initType(
     "init-type",
-    llvm::cl::desc("Initializer type (const, rand, normal)"),
+    llvm::cl::desc(
+        "Initializer type (const, rand, normal, identity, mixed, quant)"),
     llvm::cl::init(""));
 
 // Identity matrix
@@ -238,8 +239,10 @@ std::unique_ptr<llvm::Module> lowerToLLVMIR(Operation *module,
 
   // Specify target machine
   std::string error;
+  llvm::Triple triple(targetMachineOptStr.triple);
   const llvm::Target *target =
-      llvm::TargetRegistry::lookupTarget(targetMachineOptStr.triple, error);
+      llvm::TargetRegistry::lookupTarget(triple, error);
+
   if (!target) {
     llvm::errs() << "Error while looking up target triple: ";
     llvm::errs() << error << "\n";
@@ -251,7 +254,6 @@ std::unique_ptr<llvm::Module> lowerToLLVMIR(Operation *module,
   // These options should force fused MLA, but they don't. :/
   // Adding unsafe math attribute to functions below do the trick.
   llvm::TargetOptions targetOptions;
-  targetOptions.UnsafeFPMath = true;
   targetOptions.AllowFPOpFusion = llvm::FPOpFusion::FPOpFusionMode::Fast;
   targetMachine.reset(target->createTargetMachine(
       llvm::Triple(targetMachineOptStr.triple), targetMachineOptStr.cpu,

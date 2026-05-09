@@ -36,6 +36,9 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"linalgToLoops", "linalg-to-loops",
            "bool", /*default=*/"false",
            "Skip all TPP transformations. Lower linalg directly to loops.">,
+    Option<"sfcOrder", "sfc-order",
+           "bool", /*default=*/"true",
+           "use sfc order">,
     ListOption<"parallelTaskGrid", "parallel-task-grid",
            "unsigned", "Grid-sizes for parallel tasks.">,
     Option<"linalgToVector", "linalg-to-vector",
@@ -47,6 +50,9 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"vectorToKernel", "vector-to-kernel",
            "bool", /*default=*/"false",
            "Lower vector patterns to micro-kernels.">,
+    Option<"nanoKernel", "nano-kernel",
+           "bool", /*default=*/"false",
+           "Lower vector.contract patterns to nano-kernels.">,
     Option<"defBundleCpuTargetFeature", "target-feature", "std::string", "",
                 "Target feature for a given architecture">,
     Option<"lowerPackUnpackWithoutTranspose", "lower-pack-unpack-without-transpose",
@@ -57,6 +63,8 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
            "Disables VNNI packing for packed types.">,
     ListOption<"registerBlocking", "registerBlocking",
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
+    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
+               "GEMM unroll sizes for the innermost dims: [M, N, K]">,
 
   ];
 }
@@ -226,8 +234,7 @@ def X86Vectorizer : Pass<"x86-vectorizer", "ModuleOp"> {
                            "math::MathDialect",
                            "tensor::TensorDialect",
                            "arith::ArithDialect",
-                           "x86vector::X86VectorDialect",
-                           "amx::AMXDialect",
+                           "x86::X86Dialect",
                            "affine::AffineDialect",
                            "vector::VectorDialect"];
   let options = [

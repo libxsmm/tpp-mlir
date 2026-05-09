@@ -8,18 +8,15 @@
 
 #include "TPP/PassBundles.h"
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
-#include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/AMX/AMXDialect.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Vector/IR/VectorOps.h"
-#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Dialect/X86/X86Dialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -39,7 +36,7 @@ namespace tpp {
 
 // Vectorize ops for x86 targets.
 struct X86Vectorizer : public tpp::impl::X86VectorizerBase<X86Vectorizer>,
-                        PassBundle<ModuleOp> {
+                       PassBundle<ModuleOp> {
   using X86VectorizerBase::X86VectorizerBase;
 
   void runOnOperation() override {

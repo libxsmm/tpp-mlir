@@ -1,5 +1,5 @@
 // RUN: tpp-run %s \
-// RUN:  -e entry -entry-point-result=void -def-parallel --parallel-task-grid=2,8 --print-mlir=late 2>&1 | FileCheck %s
+// RUN:  -e entry -entry-point-result=void --sfc-order=false --def-parallel --parallel-task-grid=2,8 --print-mlir=late 2>&1 | FileCheck %s
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
 #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>

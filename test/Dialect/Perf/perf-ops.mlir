@@ -31,7 +31,7 @@ func.func @perf_matmul_bench(%A: tensor<4x8xf32>,
 
 // CHECK-LABEL: @perf_matmul_loops
 func.func @perf_matmul_loops(%A: tensor<4x8xf32>,
-          %B: tensor<8x4xf32>, %C: tensor<4x4xf32>, %n: index) {
+          %B: tensor<8x4xf32>, %C: tensor<4x4xf32>, %n: index) -> f64 {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
 
@@ -46,7 +46,7 @@ func.func @perf_matmul_loops(%A: tensor<4x8xf32>,
   // CHECK: perf.stop_timer
   %del = perf.stop_timer(%t : !perf.timer) : f64
 
-  return
+  return %del : f64
 }
 
 // -----

@@ -31,11 +31,11 @@ Value expand(OpBuilder &builder, Location loc, Value val, Type newType,
   if (newType == val.getType())
     return val;
   if (isa<RankedTensorType>(newType)) {
-    return builder.create<tensor::ExpandShapeOp>(loc, newType, val,
+    return tensor::ExpandShapeOp::create(builder, loc, newType, val,
                                                  reassociationMap);
   }
   if (isa<MemRefType>(newType)) {
-    return builder.create<memref::ExpandShapeOp>(loc, newType, val,
+    return memref::ExpandShapeOp::create(builder, loc, newType, val,
                                                  reassociationMap);
   }
   assert(false && "expect tensor or memref");
@@ -48,11 +48,11 @@ Value collapse(OpBuilder &builder, Location loc, Value val, Type newType,
   if (newType == val.getType())
     return val;
   if (isa<RankedTensorType>(newType)) {
-    return builder.create<tensor::CollapseShapeOp>(loc, newType, val,
+    return tensor::CollapseShapeOp::create(builder, loc, newType, val,
                                                    reassociationMap);
   }
   if (isa<MemRefType>(newType)) {
-    return builder.create<memref::CollapseShapeOp>(loc, newType, val,
+    return memref::CollapseShapeOp::create(builder, loc, newType, val,
                                                    reassociationMap);
   }
   assert(false && "expect tensor or memref");
@@ -141,8 +141,8 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
   Type reducedType;
   if (linalgOp.hasPureTensorSemantics()) {
     reducedType = tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-        desiredResultRank, cast<RankedTensorType>(operandType), offsets, sizes,
-        strides);
+        desiredResultRank, cast<RankedTensorType>(operandType), sizes);
+        //strides);
   } else {
     reducedType = memref::SubViewOp::inferRankReducedResultType(
         getExpectedResultMemRefShape(sizes, desiredResultRank),
@@ -151,10 +151,10 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
 
   Operation *extractOperation =
       (linalgOp.hasPureTensorSemantics())
-          ? builder.create<tensor::ExtractSliceOp>(
+          ? tensor::ExtractSliceOp::create(builder, 
                 loc, cast<RankedTensorType>(reducedType), operand, offsets,
                 sizes, strides)
-          : builder.create<memref::SubViewOp>(loc,
+          : memref::SubViewOp::create(builder, loc,
                                               cast<MemRefType>(reducedType),
                                               operand, offsets, sizes, strides);
 
@@ -228,34 +228,6 @@ FailureOr<SmallVector<Range>> getLoopsToMaterialize(RewriterBase &rewriter,
     loopRanges.push_back(
         Range{rewriter.getIndexAttr(0), domain[idx], rewriter.getIndexAttr(1)});
   return loopRanges;
-}
-
-bool isBlockedConvolution(Operation *op) {
-  // clang-format off
-  using namespace structured_match;
-  
-  auto isBlockedConv =
-    StructuredOpMatcher::make<linalg::LinalgOp>()
-      .operation(NumDpsInits(EqualsTo(1)))
-      .operation(NumDpsInputs(EqualsTo(2)))
-      .operation(NumAffineMaps(EqualsTo(3)))
-      .operation(NumOfLoops(EqualsTo(9)))
-      .operation(VerifyOpProperty(
-            mlir::linalg::detail::verifyConvolutionInterface))
-      .dim(MatchRange(/*lowerBound=*/0, /*upperBound=*/8),
-          {mlir::utils::IteratorType::reduction, 
-           mlir::utils::IteratorType::reduction,
-           mlir::utils::IteratorType::reduction, 
-           mlir::utils::IteratorType::reduction,
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel,
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel, 
-           mlir::utils::IteratorType::parallel})
-      .region(MatchOne(0),
-            WithOpChain<KindMul, KindAdd>(/*captures=*/nullptr));
-  // clang-format on
-  return isBlockedConv.match(op);
 }
 
 FailureOr<linalg::ContractionDimensions>
@@ -410,7 +382,7 @@ struct ConvertToForAll : public OpRewritePattern<scf::ForOp> {
           assert(insertSlice && "must be an insert slice");
           for (auto &nestedOp : innerLoopBlock->without_terminator()) {
             if (&nestedOp == insertSlice.getOperation()) {
-              auto term = nestedBuilder.create<scf::InParallelOp>(loc);
+              auto term = scf::InParallelOp::create(nestedBuilder, loc);
               nestedBuilder.setInsertionPointToStart(term.getBody());
               Value sourceVal = mapping.lookup(insertSlice.getSource());
               Value destVal = mapping.lookup(insertSlice.getDest());
@@ -438,7 +410,7 @@ struct ConvertToForAll : public OpRewritePattern<scf::ForOp> {
               assert(offsets.size() == sizes.size());
               assert(offsets.size() == strides.size());
 
-              nestedBuilder.create<tensor::ParallelInsertSliceOp>(
+              tensor::ParallelInsertSliceOp::create(nestedBuilder, 
                   loc, sourceVal, destVal, offsets, sizes, strides);
               continue;
             }

@@ -47,7 +47,7 @@ config.tpp_tools_dir = os.path.join(config.tpp_obj_root, "bin")
 llvm_config.with_environment("PATH", config.llvm_tools_dir, append_path=True)
 
 tool_dirs = [config.tpp_tools_dir, config.llvm_tools_dir]
-tools = ["mlir-gen", "tpp-opt", "tpp-run", "fpcmp", "tpp-sched"]
+tools = ["mlir-gen", "tpp-opt", "tpp-run", "fpcmp"]
 
 # Define '*-registered-target' feature for each target for 'REQUIRES' directive
 # to work as expected.

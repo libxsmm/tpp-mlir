@@ -24,10 +24,9 @@
 #map3 = affine_map<(d0, d1) -> ()>
 #map4 = affine_map<(d0, d1) -> (d0, d1)>
 
-func.func @entry(%A: tensor<4x8xf32>,
+func.func @entry(%A: tensor<4x8xf32>, %B: tensor<8x4xf32>,
                  %C: tensor<4x4xf32>, %arg0: tensor<f32>) -> tensor<4x4xf32> {
   // Weight is defined locally as a dense
-  %B = arith.constant dense<1.0> : tensor<8x4xf32>
   %D = linalg.generic {indexing_maps = [#map0, #map1, #map2],
                        iterator_types = ["parallel", "parallel", "reduction"]}
           ins(%A, %B: tensor<4x8xf32>, tensor<8x4xf32>) outs(%C: tensor<4x4xf32>) {
@@ -50,27 +49,29 @@ func.func @entry(%A: tensor<4x8xf32>,
   return %res : tensor<4x4xf32>
 }
 
-// EARLY-DAG: memref.global "private" @__wrapper_0 : memref<4x8xf32> = dense<1.000000e+00>
-// EARLY-DAG: memref.global "private" @__wrapper_1 : memref<4x4xf32> = dense<1.000000e+00>
+// EARLY-DAG: memref.global "private" @__wrapper{{.*}} : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
+// EARLY-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// EARLY-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// EARLY-DAG: memref.global "private" @__wrapper{{.*}} : memref<8x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
 // EARLY-LABEL: @_entry
-// EARLY: arith.constant dense<1.000000e+00> : tensor<8x4xf32>
 // EARLY: linalg.generic
 // EARLY:   arith.mulf
 // EARLY:   arith.addf
 // EARLY: linalg.generic
 // EARLY:   arith.addf
 // EARLY-LABEL: @entry
-// EARLY-DAG: memref.get_global @__wrapper_0
-// EARLY-DAG: memref.get_global @__wrapper_1
-// EARLY: call @_entry({{.*}}) : (tensor<4x8xf32>, tensor<4x4xf32>, tensor<f32>) -> tensor<4x4xf32>
+// EARLY: memref.get_global @__wrapper{{.*}}
+// EARLY: memref.get_global @__wrapper{{.*}}
+// EARLY: memref.get_global @__wrapper{{.*}}
+// EARLY: memref.get_global @__wrapper{{.*}}
+// EARLY: call @_entry({{.*}}) : (tensor<4x8xf32>, tensor<8x4xf32>, tensor<4x4xf32>, tensor<f32>)
 
 
-// MID-DAG: memref.global "private" @__wrapper_2 : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
-// MID-DAG: memref.global "private" @__wrapper_1 : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// MID-DAG: memref.global "private" @__wrapper_0 : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// MID-DAG: memref.global "private" constant @__constant_8x4xf32 : memref<8x4xf32> = dense<1.000000e+00> {alignment = 64 : i64}
+// MID-DAG: memref.global "private" @__wrapper{{.*}} : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
+// MID-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// MID-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// MID-DAG: memref.global "private" @__wrapper{{.*}} : memref<8x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
 // MID-LABEL: @_entry
-// MID: memref.get_global @__constant_8x4xf32 : memref<8x4xf32>
 // MID: call @xsmm_gemm_dispatch
 // MID: call @xsmm_gemm_invoke
 // MID: linalg.generic
@@ -78,18 +79,17 @@ func.func @entry(%A: tensor<4x8xf32>,
 // MID-DAG: @xsmm_gemm_invoke
 // MID-DAG: @xsmm_gemm_dispatch
 // MID-LABEL: @entry
-// MID-DAG: memref.get_global @__wrapper_0 : memref<4x8xf32>
-// MID-DAG: memref.get_global @__wrapper_1 : memref<4x4xf32>
-// MID-DAG: memref.get_global @__wrapper_2 : memref<f32>
-// MID: call @_entry({{.*}}) : (memref<4x8xf32>, memref<4x4xf32>, memref<f32>) -> ()
+// MID-DAG: memref.get_global @__wrapper{{.*}} : memref<4x8xf32>
+// MID-DAG: memref.get_global @__wrapper{{.*}} : memref<4x4xf32>
+// MID-DAG: memref.get_global @__wrapper{{.*}} : memref<f32>
+// MID: call @_entry({{.*}}) : (memref<4x8xf32>, memref<8x4xf32>, memref<4x4xf32>, memref<f32>)
 
 
-// LATE-DAG: memref.global "private" @__wrapper_2 : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LATE-DAG: memref.global "private" @__wrapper_1 : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LATE-DAG: memref.global "private" @__wrapper_0 : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LATE-DAG: memref.global "private" constant @__constant_8x4xf32 : memref<8x4xf32> = dense<1.000000e+00> {alignment = 64 : i64}
+// LATE-DAG: memref.global "private" @__wrapper{{.*}} : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LATE-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LATE-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LATE-DAG: memref.global "private" @__wrapper{{.*}} : memref<8x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
 // LATE-LABEL: @_entry
-// LATE:   memref.get_global @__constant_8x4xf32 : memref<8x4xf32>
 // LATE:   call @xsmm_gemm_dispatch
 // LATE:   call @xsmm_gemm_invoke
 // LATE:   scf.for
@@ -98,16 +98,17 @@ func.func @entry(%A: tensor<4x8xf32>,
 // LATE-DAG: @xsmm_gemm_invoke
 // LATE-DAG: @xsmm_gemm_dispatch
 // LATE-LABEL: @entry
-// LATE-DAG: memref.get_global @__wrapper_0 : memref<4x8xf32>
-// LATE-DAG: memref.get_global @__wrapper_1 : memref<4x4xf32>
-// LATE-DAG: memref.get_global @__wrapper_2 : memref<f32>
-// LATE:   call @_entry({{.*}}) : (memref<4x8xf32>, memref<4x4xf32>, memref<f32>) -> ()
+// LATE-DAG: memref.get_global @__wrapper{{.*}} : memref<4x8xf32>
+// LATE-DAG: memref.get_global @__wrapper{{.*}} : memref<4x4xf32>
+// LATE-DAG: memref.get_global @__wrapper{{.*}} : memref<8x4xf32>
+// LATE-DAG: memref.get_global @__wrapper{{.*}} : memref<f32>
+// LATE:   call @_entry({{.*}}) : (memref<4x8xf32>, memref<8x4xf32>, memref<4x4xf32>, memref<f32>)
 
 
-// LLVM-DAG: private @__wrapper_2(1.000000e+00 : f32) {addr_space = 0 : i32, alignment = 128 : i64} : f32
-// LLVM-DAG: private @__wrapper_1(dense<1.000000e+00> : tensor<4x4xf32>) {addr_space = 0 : i32, alignment = 128 : i64} : !llvm.array<4 x array<4 x f32>>
-// LLVM-DAG: private @__wrapper_0(dense<1.000000e+00> : tensor<4x8xf32>) {addr_space = 0 : i32, alignment = 128 : i64} : !llvm.array<4 x array<8 x f32>>
-// LLVM-DAG: llvm.mlir.global private constant @__constant_8x4xf32(dense<1.000000e+00> : tensor<8x4xf32>) {addr_space = 0 : i32, alignment = 64 : i64} : !llvm.array<8 x array<4 x f32>>
+// LLVM-DAG: private @__wrapper{{.*}}(1.000000e+00 : f32) {addr_space = 0 : i32, alignment = 128 : i64} : f32
+// LLVM-DAG: private @__wrapper{{.*}}(dense<1.000000e+00> : tensor<4x4xf32>) {addr_space = 0 : i32, alignment = 128 : i64} : !llvm.array<4 x array<4 x f32>>
+// LLVM-DAG: private @__wrapper{{.*}}(dense<1.000000e+00> : tensor<4x8xf32>) {addr_space = 0 : i32, alignment = 128 : i64} : !llvm.array<4 x array<8 x f32>>
+// LLVM-DAG: private @__wrapper{{.*}}(dense<1.000000e+00> : tensor<8x4xf32>) {addr_space = 0 : i32, alignment = 128 : i64} : !llvm.array<8 x array<4 x f32>>
 // LLVM-LABEL: @_entry
 // LLVM:   llvm.call @xsmm_gemm_dispatch
 // LLVM:   llvm.call @xsmm_gemm_invoke
@@ -121,12 +122,11 @@ func.func @entry(%A: tensor<4x8xf32>,
 // LLVM-LABEL: @entry
 // LLVM:   llvm.call @_entry
 
-// LOOPS-DAG: memref.global "private" @__wrapper_2 : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LOOPS-DAG: memref.global "private" @__wrapper_1 : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LOOPS-DAG: memref.global "private" @__wrapper_0 : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
-// LOOPS-DAG: memref.global "private" constant @__constant_8x4xf32 : memref<8x4xf32> = dense<1.000000e+00> {alignment = 64 : i64}
+// LOOPS-DAG: memref.global "private" @__wrapper{{.*}} : memref<f32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LOOPS-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LOOPS-DAG: memref.global "private" @__wrapper{{.*}} : memref<4x8xf32> = dense<1.000000e+00> {alignment = 128 : i64}
+// LOOPS-DAG: memref.global "private" @__wrapper{{.*}} : memref<8x4xf32> = dense<1.000000e+00> {alignment = 128 : i64}
 // LOOPS-LABEL: @_entry
-// LOOPS:   memref.get_global @__constant_8x4xf32 : memref<8x4xf32>
 // LOOPS:   scf.for
 // LOOPS:     memref.load
 // LOOPS:     memref.load
@@ -140,7 +140,7 @@ func.func @entry(%A: tensor<4x8xf32>,
 // LOOPS:     arith.addf
 // LOOPS:     memref.store
 // LOOPS-LABEL: @entry
-// LOOPS:   call @_entry({{.*}}) : (memref<4x8xf32>, memref<4x4xf32>, memref<f32>) -> ()
+// LOOPS:   call @_entry({{.*}}) : (memref<4x8xf32>, memref<8x4xf32>, memref<4x4xf32>, memref<f32>)
 
 // BENCH_PRINT-LABEL: @entry
 // BENCH_PRINT: call @_entry

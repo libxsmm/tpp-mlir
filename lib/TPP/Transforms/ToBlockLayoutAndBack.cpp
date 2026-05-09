@@ -34,10 +34,6 @@ namespace tpp {
 #include "TPP/Passes.h.inc"
 #define GEN_PASS_DEF_PACKMATMUL
 #include "TPP/Passes.h.inc"
-#define GEN_PASS_DEF_PACKCONV2DNCHWFCHW
-#include "TPP/Passes.h.inc"
-#define GEN_PASS_DEF_PACKCONV2DNHWCHWCF
-#include "TPP/Passes.h.inc"
 #define GEN_PASS_DEF_PROPAGATEPACKUNPACK
 #include "TPP/Passes.h.inc"
 #define GEN_PASS_DEF_SIMPLIFYANDCANONICALIZEPACK
@@ -50,7 +46,7 @@ namespace tpp {
 //===----------------------------------------------------------------------===//
 
 // Helper function to create the pack operation.
-static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
                               ArrayRef<OpFoldResult> tiles,
                               ArrayRef<int64_t> innerDimsPos,
                               ArrayRef<int64_t> outerDimsPerm) {
@@ -58,29 +54,18 @@ static Value toPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
   SmallVector<int64_t> staticTiles;
   dispatchIndexOpFoldResults(tiles, dynamicTiles, staticTiles);
   RankedTensorType result =
-      linalg::PackOp::inferPackedType(cast<RankedTensorType>(input.getType()),
+      linalg::PackOp::inferPackedTensorType(cast<RankedTensorType>(input.getType()),
                                       staticTiles, innerDimsPos, outerDimsPerm);
   auto inputType = cast<RankedTensorType>(input.getType());
   ArrayRef<int64_t> shape = result.getShape();
   Value output =
-      builder.create<tensor::EmptyOp>(loc, shape, inputType.getElementType());
-  return builder.create<linalg::PackOp>(loc, input, output, innerDimsPos, tiles,
+      tensor::EmptyOp::create(builder, loc, shape, inputType.getElementType());
+  return linalg::PackOp::create(builder, loc, input, output, innerDimsPos, tiles,
                                         /*paddingValue=*/std::nullopt,
                                         outerDimsPerm);
 }
 
-// Helper function to create the unpack operation.
-static Value toUnPackLayoutImpl(OpBuilder &builder, Location loc, Value input,
-                                Value output, ArrayRef<OpFoldResult> tiles,
-                                ArrayRef<int64_t> innerDimPos,
-                                ArrayRef<int64_t> outerDimsPerm) {
-  if (auto fillOp = output.getDefiningOp<linalg::FillOp>())
-    output = fillOp.getOutputs()[0];
-  return builder.create<linalg::UnPackOp>(loc, input, output, innerDimPos,
-                                          tiles, outerDimsPerm);
-}
-
-static Value handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                                ArrayRef<OpFoldResult> tiles, int64_t kDimPos) {
   assert(tiles.size() == 1 && "expect 1 block for VNNI");
   return toPackLayoutImpl(builder, loc, input, tiles,
@@ -88,7 +73,7 @@ static Value handleLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                           /*outerDimsPerm=*/{});
 }
 
-static Value handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
+static linalg::PackOp handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
                                      Value input, ArrayRef<OpFoldResult> tiles,
                                      int64_t kDimPos) {
   assert(tiles.size() == 1 && "expect 1 block for VNNI");
@@ -98,211 +83,16 @@ static Value handleBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
 }
 
 // Helper function to pack from [outer][K][inner] to [outer][K/2][inner][2].
-static Value toPackLayout_VNNI(OpBuilder &builder, Location loc, Value input,
+static linalg::PackOp toPackLayout_VNNI(OpBuilder &builder, Location loc, Value input,
                                ArrayRef<OpFoldResult> tiles, int64_t kDimPos) {
   return handleLayout_VNNI(builder, loc, input, tiles, kDimPos);
 }
 
 // Helper function to pack from [outer][K][inner] to [outer][K/2][inner][2].
-static Value toPackBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
+static linalg::PackOp toPackBRGemmLayout_VNNI(OpBuilder &builder, Location loc,
                                      Value input, ArrayRef<OpFoldResult> tiles,
                                      int64_t kDimPos) {
   return handleBRGemmLayout_VNNI(builder, loc, input, tiles, kDimPos);
-}
-
-static Value handleLayoutNCHW_NCHWc(OpBuilder &builder, Location loc,
-                                    Value input, Value output,
-                                    ArrayRef<OpFoldResult> tiles) {
-  assert(tiles.size() == 1 && "expect one tile size for NCHW_NCHWc");
-  SmallVector<int64_t> innerDimPos = {1};
-  if (!output)
-    return toPackLayoutImpl(builder, loc, input, tiles, innerDimPos,
-                            /*outerDimsPerm=*/{});
-  return toUnPackLayoutImpl(builder, loc, input, output, tiles, innerDimPos,
-                            /*outerDimsPerm=*/{});
-}
-
-// Helper function to pack from NCHW to NCHWc.
-static Value toPackLayoutNCHW_NCHWc(OpBuilder &builder, Location loc,
-                                    Value input, ArrayRef<OpFoldResult> tiles) {
-  return handleLayoutNCHW_NCHWc(builder, loc, input, nullptr, tiles);
-}
-
-// Helper function to unpack from NCHWc to NCHW.
-static Value fromPackLayoutNCHWc_NCHW(OpBuilder &builder, Location loc,
-                                      Value input, Value output,
-                                      ArrayRef<OpFoldResult> tiles) {
-  return handleLayoutNCHW_NCHWc(builder, loc, input, output, tiles);
-}
-
-static Value handleLayoutNPQK_NKPQk(OpBuilder &builder, Location loc,
-                                    Value input, Value output,
-                                    ArrayRef<OpFoldResult> tiles) {
-  assert(tiles.size() == 1 && "expect one tile size for NPQK_NKPQk");
-  SmallVector<int64_t> innerDimsPos = {3};
-  SmallVector<int64_t> outerDimsPerm = {0, 3, 1, 2};
-  if (!output)
-    return toPackLayoutImpl(builder, loc, input, tiles, innerDimsPos,
-                            outerDimsPerm);
-  return toUnPackLayoutImpl(builder, loc, input, output, tiles, innerDimsPos,
-                            outerDimsPerm);
-}
-
-// Helper function to pack NPQK to NKPQk.
-static Value toPackLayoutNPQK_NKPQk(OpBuilder &builder, Location loc,
-                                    Value input, ArrayRef<OpFoldResult> tiles) {
-  return handleLayoutNPQK_NKPQk(builder, loc, input, nullptr, tiles);
-}
-
-// Helper function to unpack NKPQk to NPQK.
-static Value fromPackLayoutNKPQk_NPQK(OpBuilder &builder, Location loc,
-                                      Value input, Value output,
-                                      ArrayRef<OpFoldResult> tiles) {
-  return handleLayoutNPQK_NKPQk(builder, loc, input, output, tiles);
-}
-
-// Helper function to pack from RSCK to KCRSck.
-static Value toPackLayoutRSCK_KCRSck(OpBuilder &builder, Location loc,
-                                     Value input,
-                                     ArrayRef<OpFoldResult> tiles) {
-  assert(tiles.size() == 2 && "expect two tiles for RSCK_KCRSck");
-  SmallVector<int64_t> innerDimsPos = {2, 3};
-  SmallVector<int64_t> outerDimsPerm = {3, 2, 0, 1};
-  return toPackLayoutImpl(builder, loc, input, tiles, innerDimsPos,
-                          outerDimsPerm);
-}
-
-// Helper function to pack from KCRS to KCRSck.
-static Value toPackLayoutKCRS_KCRSck(OpBuilder &builder, Location loc,
-                                     Value input,
-                                     ArrayRef<OpFoldResult> tiles) {
-  assert(tiles.size() == 2 && "expect two tiles size for KCRS_KCRSck");
-  SmallVector<int64_t> innerDimPos = {1, 0};
-  return toPackLayoutImpl(builder, loc, input, tiles, innerDimPos,
-                          /*outerDimsPerm=*/{});
-}
-
-template <typename OpTy>
-static FailureOr<linalg::GenericOp>
-packConvolutions(RewriterBase &rewriter, OpTy convOp,
-                 ArrayRef<OpFoldResult> tiles) {
-  static_assert(llvm::is_one_of<OpTy, linalg::Conv2DNhwcHwcfOp,
-                                linalg::Conv2DNchwFchwOp>::value,
-                "applies to only pack or unpack operations");
-
-  if (tiles.size() != 2)
-    return rewriter.notifyMatchFailure(convOp, "require 2 tile factors");
-  if (convOp.hasDynamicShape())
-    return rewriter.notifyMatchFailure(convOp, "require static shape");
-  if (convOp.hasPureBufferSemantics())
-    return rewriter.notifyMatchFailure(convOp, "require tensor semantics");
-
-  bool isConv2DNhwcHwcfOp =
-      static_cast<bool>(std::is_same<OpTy, linalg::Conv2DNhwcHwcfOp>::value);
-
-  Location loc = convOp.getLoc();
-  MLIRContext *ctx = convOp.getContext();
-
-  SmallVector<Value> inputOperands = convOp.getDpsInputs();
-  SmallVector<Value> outputOperands = convOp.getDpsInits();
-
-  // pack the image and the filter.
-  Value image = inputOperands[0];
-  Value packedImage =
-      (isConv2DNhwcHwcfOp)
-          ? toPackLayoutNPQK_NKPQk(rewriter, loc, image, tiles[0])
-          : toPackLayoutNCHW_NCHWc(rewriter, loc, image, tiles[0]);
-  Value filter = inputOperands[1];
-  Value packedFilter =
-      (isConv2DNhwcHwcfOp)
-          ? toPackLayoutRSCK_KCRSck(rewriter, loc, filter, tiles)
-          : toPackLayoutKCRS_KCRSck(rewriter, loc, filter, tiles);
-  SmallVector<Value, 2> packedInputs = {packedImage, packedFilter};
-
-  // pack the output.
-  Value output = outputOperands[0];
-  Value packedOutput =
-      (isConv2DNhwcHwcfOp)
-          ? toPackLayoutNPQK_NKPQk(rewriter, loc, output, tiles[0])
-          : toPackLayoutNCHW_NCHWc(rewriter, loc, output, tiles[0]);
-
-  SmallVector<int64_t, 2> strides = {1, 1};
-  if (DenseIntElementsAttr stridesAttr = convOp.getStrides()) {
-    auto strideValues = stridesAttr.getValues<int64_t>();
-    assert(strideValues.size() == 2 && "expect two stride values");
-    strides[0] = strideValues[0];
-    strides[1] = strideValues[1];
-  }
-
-  // Swap convolution with generic.
-  //         N   K   P   Q   k   C   R   S   c
-  AffineExpr p1, p2, p3, p4, p5, r1, r2, r3, r4;
-  bindDims(ctx, p1, p2, p3, p4, p5, r1, r2, r3, r4);
-  AffineMap mapOut =
-      AffineMap::get(/*dims=*/9, /*symbols=*/0, {p1, p2, p3, p4, p5}, ctx);
-  AffineMap mapImg = AffineMap::get(
-      /*dims=*/9, /*symbols=*/0,
-      {p1, r1, p3 * strides[0] + r2, p4 * strides[1] + r3, r4}, ctx);
-  AffineMap mapFil =
-      AffineMap::get(/*dims=*/9, /*symbols=*/0, {p2, r1, r2, r3, r4, p5}, ctx);
-  linalg::GenericOp replacementOp = rewriter.create<linalg::GenericOp>(
-      loc, packedOutput.getType(), packedInputs, ValueRange{packedOutput},
-      ArrayRef<AffineMap>{mapImg, mapFil, mapOut},
-      ArrayRef<utils::IteratorType>{
-          utils::IteratorType::parallel, utils::IteratorType::parallel,
-          utils::IteratorType::parallel, utils::IteratorType::parallel,
-          utils::IteratorType::parallel, utils::IteratorType::reduction,
-          utils::IteratorType::reduction, utils::IteratorType::reduction,
-          utils::IteratorType::reduction},
-      /*doc=*/"", /*libraryCall=*/"");
-  rewriter.inlineRegionBefore(convOp->getRegion(0), replacementOp.getRegion(),
-                              replacementOp.getRegion().begin());
-  if (auto metadata = convOp->getAttr("metadata"))
-    replacementOp->setAttr("metadata", metadata);
-
-  // convert back from pack layout.
-  Value outPackedTensor = replacementOp.getResult(0);
-  Value outUnPackedTensor = outputOperands[0];
-  Value outReplacement =
-      (isConv2DNhwcHwcfOp)
-          ? fromPackLayoutNKPQk_NPQK(rewriter, loc, outPackedTensor,
-                                     outUnPackedTensor, tiles[0])
-          : fromPackLayoutNCHWc_NCHW(rewriter, loc, outPackedTensor,
-                                     outUnPackedTensor, tiles[0]);
-  rewriter.replaceOp(convOp, outReplacement);
-  return replacementOp;
-}
-
-//===----------------------------------------------------------------------===//
-// Conv2DNhwcHwcfOp
-//===----------------------------------------------------------------------===//
-// Original layout: [N][P][Q][K] += [N][H][W][C] * [R][S][C][K]
-// New      layout: [N][K'][P][Q][k] += [N][C'][H][W][c] * [K'][C'][R][S][c][k]
-FailureOr<linalg::GenericOp>
-mlir::linalgx::packConv2DNhwcHwcfOp(RewriterBase &rewriter,
-                                    linalg::Conv2DNhwcHwcfOp convOp,
-                                    ArrayRef<OpFoldResult> tiles) {
-  if (!linalgx::utils::validateFullTilesOnDims(
-          cast<TilingInterface>(convOp.getOperation()), tiles,
-          {/*Kidx=*/3, /*Cidx=*/6}))
-    return rewriter.notifyMatchFailure(convOp, "expect full tiles only");
-  return packConvolutions(rewriter, convOp, tiles);
-}
-
-//===----------------------------------------------------------------------===//
-// Conv2DNchwFchwOp
-//===----------------------------------------------------------------------===//
-// Original layout: [N][K][P][Q] += [N][C][H][W] * [K][C][R][S]
-// New      layout: [N][K'][P][Q][k] += [N][C'][H][W][c] + [K'][C'][R][S][c][k]
-FailureOr<linalg::GenericOp>
-mlir::linalgx::packConv2DNchwFchwOp(RewriterBase &rewriter,
-                                    linalg::Conv2DNchwFchwOp convOp,
-                                    ArrayRef<OpFoldResult> tiles) {
-  if (!linalgx::utils::validateFullTilesOnDims(
-          cast<TilingInterface>(convOp.getOperation()), tiles,
-          {/*Kidx=*/1, /*Cidx=*/4}))
-    return rewriter.notifyMatchFailure(convOp, "expect full tiles only");
-  return packConvolutions(rewriter, convOp, tiles);
 }
 
 //===----------------------------------------------------------------------===//
@@ -317,8 +107,8 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
                                 linalg::GenericOp matmulOp) {
   if (matmulOp.getInputs().size() > 0) {
     auto elementType = getElementTypeOrSelf(matmulOp.getInputs()[0].getType());
-    if (!elementType.isBF16())
-      return rewriter.notifyMatchFailure(matmulOp, "require bf16 type");
+    if (!elementType.isBF16() && !elementType.isInteger(8))
+      return rewriter.notifyMatchFailure(matmulOp, "require int8/bf16 type");
   }
 
   if (matmulOp.hasDynamicShape())
@@ -352,16 +142,17 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
     return rewriter.notifyMatchFailure(matmulOp,
                                        "Invalid reduction dim operands");
   // Reshape input A.
-  Value packedMatrixA =
+  linalg::PackOp packedMatrixA =
       toPackLayout_VNNI(rewriter, loc, matmulOp.getInputs()[0], tilesOnSmallK,
                         kOperands[0].second);
   // Reshape input B.
-  Value packedMatrixB = toPackLayout_VNNI(rewriter, loc, operandB.get(),
+  linalg::PackOp packedMatrixB = toPackLayout_VNNI(rewriter, loc, operandB.get(),
                                           tilesOnSmallK, kOperands[1].second);
 
   MLIRContext *ctx = matmulOp.getContext();
   AffineExpr p1, p2, r1, p3, p4, r2, r3;
-  SmallVector<Value> packedInputs = {packedMatrixA, packedMatrixB};
+  SmallVector<Value> packedInputs = {packedMatrixA.getResult(),
+                                     packedMatrixB.getResult()};
   AffineMap mapA, mapB, mapC;
   Value matrixC = matmulOp.getOutputs()[0];
 
@@ -370,7 +161,7 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
   mapA = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p1, r1, p3, r2, r3}, ctx);
   mapB = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p2, r1, r2, p4, r3}, ctx);
   mapC = AffineMap::get(/*dims=*/7, /*symbols=*/0, {p1, p2, p3, p4}, ctx);
-  auto replacementOp = rewriter.create<linalg::GenericOp>(
+  auto replacementOp = linalg::GenericOp::create(rewriter, 
       loc, matrixC.getType(), packedInputs, ValueRange{matrixC},
       ArrayRef<AffineMap>{mapA, mapB, mapC},
       ArrayRef<mlir::utils::IteratorType>{mlir::utils::IteratorType::parallel,
@@ -420,10 +211,10 @@ mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
 
   Location loc = brgemmOp.getLoc();
   // Reshape input A.
-  Value packedMatrixA = toPackBRGemmLayout_VNNI(
+  linalg::PackOp packedMatrixA = toPackBRGemmLayout_VNNI(
       rewriter, loc, brgemmOp.getInputs()[0], tilesOnK, 2);
   // Reshape input B.
-  Value packedMatrixB =
+  linalg::PackOp packedMatrixB =
       toPackBRGemmLayout_VNNI(rewriter, loc, operandB, tilesOnK, 1);
 
   MLIRContext *ctx = brgemmOp.getContext();
@@ -434,9 +225,9 @@ mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
   mapB = AffineMap::get(/*dims=*/5, /*symbols=*/0, {r1, r3, p2, r4}, ctx);
   mapC = AffineMap::get(/*dims=*/5, /*symbols=*/0, {p1, p2}, ctx);
 
-  auto replacementOp = rewriter.create<linalg::GenericOp>(
-      loc, brgemmOp.getOutputs()[0].getType(),
-      ValueRange{packedMatrixA, packedMatrixB},
+  auto replacementOp = linalg::GenericOp::create(
+      rewriter, loc, brgemmOp.getOutputs()[0].getType(),
+      ValueRange{packedMatrixA.getResult(), packedMatrixB.getResult()},
       ValueRange{brgemmOp.getOutputs()[0]},
       ArrayRef<AffineMap>{mapA, mapB, mapC},
       ArrayRef<mlir::utils::IteratorType>{
@@ -460,10 +251,6 @@ static SmallVector<int64_t>
 getDefaultBlockingFactors(linalg::LinalgOp linalgOp) {
   assert(linalgOp && "expect a valid linalgOp");
   auto *op = linalgOp.getOperation();
-  if (isa<linalg::Conv2DNchwFchwOp>(op) ||
-      isa<linalg::Conv2DNhwcHwcfOp>(op)) {
-    return {32, 32};
-  }
   assert(isa<linalg::MatmulOp>(op) ||
          isa<linalg::BatchMatmulOp>(op) ||
          isa<linalg::MatmulTransposeAOp>(op) ||
@@ -564,78 +351,6 @@ struct PackMatmul : public tpp::impl::PackMatmulBase<PackMatmul> {
     linalg::populateBlockPackMatmulPatterns(patterns, packControlFn);
     linalg::populateLinalgDeGeneralizationPatterns(patterns);
 
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
-  }
-};
-
-struct DoItOnConv2DNchwFchw
-    : public OpRewritePattern<linalg::Conv2DNchwFchwOp> {
-  DoItOnConv2DNchwFchw(MLIRContext *context, ArrayRef<int64_t> blockingFactors,
-                       PatternBenefit benefit = 1)
-      : OpRewritePattern<linalg::Conv2DNchwFchwOp>(context, benefit),
-        blockingFactors(blockingFactors) {}
-
-  LogicalResult matchAndRewrite(linalg::Conv2DNchwFchwOp linalgOp,
-                                PatternRewriter &rewriter) const override {
-    if (blockingFactors.empty())
-      blockingFactors = getDefaultBlockingFactors(linalgOp);
-    FailureOr<linalg::GenericOp> genericOp =
-        mlir::linalgx::packConv2DNchwFchwOp(
-            rewriter, linalgOp,
-            getAsOpFoldResult(rewriter.getI64ArrayAttr(blockingFactors)));
-    if (failed(genericOp))
-      return failure();
-    return success();
-  }
-
-private:
-  mutable SmallVector<int64_t> blockingFactors;
-};
-
-struct PackConv2DNchwFchw
-    : public tpp::impl::PackConv2DNchwFchwBase<PackConv2DNchwFchw> {
-  using PackConv2DNchwFchwBase::PackConv2DNchwFchwBase;
-
-  void runOnOperation() override {
-    MLIRContext *ctx = getOperation().getContext();
-    RewritePatternSet patterns(ctx);
-    patterns.add<DoItOnConv2DNchwFchw>(ctx, blockingFactors);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
-  }
-};
-
-struct DoItOnConv2DNhwcHwcf
-    : public OpRewritePattern<linalg::Conv2DNhwcHwcfOp> {
-  DoItOnConv2DNhwcHwcf(MLIRContext *context, ArrayRef<int64_t> blockingFactors,
-                       PatternBenefit benefit = 1)
-      : OpRewritePattern<linalg::Conv2DNhwcHwcfOp>(context, benefit),
-        blockingFactors(blockingFactors) {}
-
-  LogicalResult matchAndRewrite(linalg::Conv2DNhwcHwcfOp linalgOp,
-                                PatternRewriter &rewriter) const override {
-    if (blockingFactors.empty())
-      blockingFactors = getDefaultBlockingFactors(linalgOp);
-    FailureOr<linalg::GenericOp> maybeGeneric =
-        mlir::linalgx::packConv2DNhwcHwcfOp(
-            rewriter, linalgOp,
-            getAsOpFoldResult(rewriter.getI64ArrayAttr(blockingFactors)));
-    if (failed(maybeGeneric))
-      return failure();
-    return success();
-  }
-
-private:
-  mutable SmallVector<int64_t> blockingFactors;
-};
-
-struct PackConv2DNhwcHwcf
-    : tpp::impl::PackConv2DNhwcHwcfBase<PackConv2DNhwcHwcf> {
-  using PackConv2DNhwcHwcfBase::PackConv2DNhwcHwcfBase;
-
-  void runOnOperation() override {
-    MLIRContext *ctx = getOperation().getContext();
-    RewritePatternSet patterns(ctx);
-    patterns.add<DoItOnConv2DNhwcHwcf>(ctx, blockingFactors);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
@@ -743,7 +458,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
       return failure();
 
     newOuts.push_back(newLoopOperand);
-    auto newForallOp = rewriter.create<scf::ForallOp>(
+    auto newForallOp = scf::ForallOp::create(rewriter, 
         forallOp.getLoc(), forallOp.getMixedLowerBound(),
         forallOp.getMixedUpperBound(), forallOp.getMixedStep(), newOuts,
         forallOp.getMapping());
@@ -781,7 +496,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
         auto newMixedSizes = SmallVector<OpFoldResult>(
             mixedSizes.begin() + rank, mixedSizes.end());
 
-        auto newExtractSliceOp = rewriter.create<tensor::ExtractSliceOp>(
+        auto newExtractSliceOp = tensor::ExtractSliceOp::create(rewriter, 
             extractSliceOp.getLoc(), bbArgs.back(), newMixedOffsets,
             newMixedSizes, newMixedStrides);
 
@@ -802,7 +517,7 @@ struct FoldUnPackIntoInsertSlice : public OpRewritePattern<linalg::UnPackOp> {
         auto newMixedSizes = SmallVector<OpFoldResult>(
             mixedSizes.begin() + rank, mixedSizes.end());
 
-        auto newInsertSliceOp = rewriter.create<tensor::ParallelInsertSliceOp>(
+        auto newInsertSliceOp = tensor::ParallelInsertSliceOp::create(rewriter, 
             parallelInsertSlice.getLoc(), parallelInsertSlice.getSource(),
             bbArgs.back(), newMixedOffsets, newMixedSizes, newMixedStrides);
         rewriter.replaceAllUsesWith(parallelInsertSlice->getResults(),

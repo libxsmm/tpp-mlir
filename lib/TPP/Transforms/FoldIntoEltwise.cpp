@@ -94,7 +94,7 @@ struct BroadcastIntoEltwise
     assert(linalgOp->getNumRegions() == 1 &&
            "expect op to have one region attached");
     // Replace the original op with a generic with broadcast folded in.
-    auto genericOp = rewriter.create<linalg::GenericOp>(
+    auto genericOp = linalg::GenericOp::create(rewriter, 
         linalgOp.getLoc(), resultTypes, inputs, outputs, indexingMaps,
         iterators);
     rewriter.inlineRegionBefore(linalgOp->getRegion(0), genericOp.getRegion(),
@@ -167,7 +167,7 @@ struct FillIntoMax : public OpRewritePattern<linalg::MaxOp> {
     SmallVector<Type> resultTypes = TypeRange(ValueRange{outputs});
 
     // Replace the original op with a generic with broadcast folded in.
-    auto genericOp = rewriter.create<linalg::GenericOp>(
+    auto genericOp = linalg::GenericOp::create(rewriter, 
         maxOp.getLoc(), resultTypes, inputs, outputs, indexingMaps, iterators,
         [&](OpBuilder &nestedBuilder, Location nestedLoc,
             ValueRange blockArgs) {
@@ -177,10 +177,10 @@ struct FillIntoMax : public OpRewritePattern<linalg::MaxOp> {
           operands.append(constants);
           Value max;
           if (isa<FloatType>(getElementTypeOrSelf(resultTypes[0])))
-            max = nestedBuilder.create<arith::MaximumFOp>(nestedLoc, operands);
+            max = arith::MaximumFOp::create(nestedBuilder, nestedLoc, operands);
           else
-            max = nestedBuilder.create<arith::MaxSIOp>(nestedLoc, operands);
-          nestedBuilder.create<linalg::YieldOp>(nestedLoc, ValueRange{max});
+            max = arith::MaxSIOp::create(nestedBuilder, nestedLoc, operands);
+          linalg::YieldOp::create(nestedBuilder, nestedLoc, ValueRange{max});
         });
     rewriter.replaceOp(maxOp, genericOp->getResults());
 

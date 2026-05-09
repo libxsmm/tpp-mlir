@@ -101,9 +101,6 @@ if [ "${GPU}" ]; then
   source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
 fi
 
-# Necessary for building Python-bindings.
-pip install --upgrade --user nanobind pybind11
-
 echo "Environment configured successfully"
 
  # Configure LLVM
@@ -115,14 +112,12 @@ if [ ! "${KIND}" ]; then
   KIND=RelWithDebInfo
 fi
 
-# LLVM CUDA setup
+# LLVM GPU setup
 if [[ ${GPU,,} =~ "cuda" ]]; then
   LLVM_BUILD_EXTENSIONS="${LLVM_BUILD_EXTENSIONS} -DCMAKE_CUDA_COMPILER=nvcc -DMLIR_ENABLE_CUDA_RUNNER=ON -DMLIR_ENABLE_CUDA_CONVERSIONS=ON"
   LLVM_TARGETS="${LLVM_TARGETS};NVPTX"
-fi
-# LLVM SPIRV setup
-if [ "${GPU}" ]; then
-  LLVM_BUILD_EXTENSIONS="${LLVM_BUILD_EXTENSIONS} -DMLIR_ENABLE_SPIRV_CPU_RUNNER=ON"
+elif [[ ${GPU,,} =~ "intel" ]]; then
+  LLVM_BUILD_EXTENSIONS="${LLVM_BUILD_EXTENSIONS} -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD="SPIRV" -DMLIR_ENABLE_LEVELZERO_RUNNER=1"
 fi
 
 echo_run cmake -Wno-dev -G Ninja \
@@ -137,7 +132,6 @@ echo_run cmake -Wno-dev -G Ninja \
     -DCMAKE_CXX_COMPILER=${CXX} \
     -DLLVM_USE_LINKER=${LINKER} \
     -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR} \
-    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     ${LLVM_BUILD_EXTENSIONS}
 
 if [ $? != 0 ]; then

@@ -103,6 +103,8 @@ enum class TensorInitType {
   Random,
   Normal,
   Identity,
+  Mixed,
+  Quant,
   Invalid
 };
 
@@ -114,10 +116,11 @@ TensorInitType parseTensorInitType(llvm::StringRef name);
 
 // Return an initializer smart pointer (via init type)
 TensorInitPtr getTensorInit(TensorInitType type, mlir::Type elmType,
-                            int seed = 0);
+                            mlir::Type nextElmType, int seed = 0,
+                            bool isScaleArgument = false);
 
 // Return an initializer smart pointer (via string init)
 TensorInitPtr getTensorInit(llvm::StringRef type, mlir::Type elmType,
-                            int seed = 0);
-
+                            mlir::Type nextElmType, int seed = 0,
+                            bool isScaleArgument = false);
 #endif // TPP_TRANSFORMS_UTILS_TENSORINIT_H

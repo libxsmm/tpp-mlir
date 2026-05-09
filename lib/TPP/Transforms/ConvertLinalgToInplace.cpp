@@ -64,8 +64,8 @@ struct ConvertAddInplace : public OpRewritePattern<linalg::GenericOp> {
     rewriter.replaceOpWithNewOp<linalg::GenericOp>(
         op, op.getResultTypes(), inputs, outputs, indexingMaps, iteratorTypes,
         [&](OpBuilder &builder, Location loc, ValueRange regionArgs) {
-          auto scalarOp = builder.create<arith::AddFOp>(loc, regionArgs);
-          builder.create<linalg::YieldOp>(loc, scalarOp.getResult());
+          auto scalarOp = arith::AddFOp::create(builder, loc, regionArgs);
+          linalg::YieldOp::create(builder, loc, scalarOp.getResult());
         });
     return success();
   }
@@ -112,7 +112,7 @@ struct EltwiseUnaryGenericToInplace
     SmallVector<Type> resultTypes = TypeRange(ValueRange{outputs});
     SmallVector<AffineMap> indexingMaps{maps[1]};
 
-    auto newGeneric = rewriter.create<linalg::GenericOp>(
+    auto newGeneric = linalg::GenericOp::create(rewriter, 
         genericOp.getLoc(), resultTypes, /*inputs=*/ValueRange{}, outputs,
         indexingMaps, genericOp.getIteratorTypesArray());
     rewriter.inlineRegionBefore(genericOp->getRegion(0), newGeneric.getRegion(),

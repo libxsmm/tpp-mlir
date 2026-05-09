@@ -53,14 +53,10 @@ struct TppMapping : public tpp::impl::TppMappingBase<TppMapping>,
 
 private:
   void constructPipeline() override {
-    // Preprocess convolutions.
-    pm.addPass(createConvInitSimplify());
+    // Canonicalize.
     pm.addPass(createCleanup());
 
     // Convert ops to packed layouts.
-    pm.addPass(createPackConv2DNhwcHwcf());
-    pm.addPass(createPackConv2DNchwFchw());
-    pm.addPass(createRewriteConvToMatmulOrBrgemm());
     pm.addPass(createPackMatmul());
 
     if (!disableVnniPacking) {

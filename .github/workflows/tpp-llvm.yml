@@ -30,3 +30,15 @@ jobs:
               ${{ env.SRUN }} --partition=a100 --time=0:30:00 -- \
               'KIND=RelWithDebInfo COMPILER=clang GPU=cuda \
               ${{ github.workspace }}/scripts/github/build_llvm.sh'
+
+
+  TPP-MLIR-LLVM-INTEL:
+    runs-on: pcl-tiergarten
+    steps:
+      - uses: actions/checkout@v4
+      - name: LLVM Intel
+        run: |-
+              GPU=intel scripts/github/check_llvm.sh || \
+              ${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
+              'KIND=RelWithDebInfo COMPILER=clang GPU=intel \
+              ${{ github.workspace }}/scripts/github/build_llvm.sh'

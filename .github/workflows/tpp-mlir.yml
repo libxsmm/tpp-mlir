@@ -53,3 +53,13 @@ jobs:
         run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
                 'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 ONEDNN=1 \
                 ${{ github.workspace }}/scripts/github/build_tpp.sh'"
+
+  TPP-MLIR-SRF:
+    runs-on: pcl-tiergarten
+    needs: Check_LLVM
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clang Release
+        run: "${{ env.SRUN }} --partition=srf --time=0:30:00 -- \
+            'KIND=Release COMPILER=clang LINKER=lld CHECK=1 \
+            ${{ github.workspace }}/scripts/github/build_tpp.sh'"

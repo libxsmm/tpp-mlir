@@ -11,13 +11,12 @@
 
 #include "TPP/Transforms/Transforms.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
-#include "mlir/Dialect/AMX/AMXDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
-#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
+#include "mlir/Dialect/X86/X86Dialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Pass/Pass.h"
@@ -42,42 +41,43 @@ static void downConvertAndCopyResult(OpBuilder &rewriter, Location loc,
                                      Value src, Value dst,
                                      MemRefType bufferType, ShapedType accType,
                                      int64_t m, int64_t n) {
-  auto c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-  auto one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-  auto sixteen = rewriter.create<arith::ConstantIndexOp>(loc, 16);
-  auto mBound = rewriter.create<arith::ConstantIndexOp>(loc, m);
-  auto nBound = rewriter.create<arith::ConstantIndexOp>(loc, n);
-  rewriter.create<scf::ForOp>(
-      loc, c0, mBound, one, ValueRange{},
+  auto c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
+  auto one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+  auto sixteen = arith::ConstantIndexOp::create(rewriter, loc, 16);
+  auto mBound = arith::ConstantIndexOp::create(rewriter, loc, m);
+  auto nBound = arith::ConstantIndexOp::create(rewriter, loc, n);
+  scf::ForOp::create(
+      rewriter, loc, c0, mBound, one, ValueRange{},
       [&](OpBuilder &nestedBuilder, Location loc, Value iv,
           ValueRange iterArgs) {
-        nestedBuilder.create<scf::ForOp>(
-            loc, c0, nBound, sixteen, iterArgs,
+        scf::ForOp::create(
+            nestedBuilder, loc, c0, nBound, sixteen, iterArgs,
             [&](OpBuilder &innerBuilder, Location loc, Value innerIv,
                 ValueRange innerIterArgs) {
               auto elementType = bufferType.getElementType();
               FloatType floatType = cast<FloatType>(elementType);
-              Value f0 = rewriter.create<arith::ConstantFloatOp>(
-                  loc, floatType,
+              Value f0 = arith::ConstantFloatOp::create(
+                  rewriter, loc, floatType,
                   APFloat::getZero(floatType.getFloatSemantics()));
               // Read
-              auto readC = rewriter.create<vector::TransferReadOp>(
-                  loc, VectorType::get({16}, bufferType.getElementType()), src,
+              auto readC = vector::TransferReadOp::create(
+                  rewriter, loc,
+                  VectorType::get({16}, bufferType.getElementType()), src,
                   ValueRange{iv, innerIv}, f0, ArrayRef{true});
               // Convert
-              auto cvtF32ToBf16 = rewriter.create<arith::TruncFOp>(
-                  loc, VectorType::get({16}, accType.getElementType()), readC);
+              auto cvtF32ToBf16 = arith::TruncFOp::create(
+                  rewriter, loc,
+                  VectorType::get({16}, accType.getElementType()), readC);
               // Write
-              rewriter
-                  .create<vector::TransferWriteOp>(loc, cvtF32ToBf16, dst,
-                                                   ValueRange{iv, innerIv},
-                                                   ArrayRef{true})
+              vector::TransferWriteOp::create(rewriter, loc, cvtF32ToBf16, dst,
+                                              ValueRange{iv, innerIv},
+                                              ArrayRef{true})
                   .getResult();
 
-              innerBuilder.create<scf::YieldOp>(loc);
+              scf::YieldOp::create(innerBuilder, loc);
             });
         // Yield results from inner loop to outer loop
-        nestedBuilder.create<scf::YieldOp>(loc);
+        scf::YieldOp::create(nestedBuilder, loc);
       });
 }
 
@@ -87,47 +87,50 @@ static void upConvertAndCopyAccumulator(OpBuilder &rewriter, Location loc,
                                         Type inputElementType,
                                         Type outputElementType, int64_t m,
                                         int64_t n) {
-  auto c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-  auto one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-  auto sixteen = rewriter.create<arith::ConstantIndexOp>(loc, 16);
-  auto mBound = rewriter.create<arith::ConstantIndexOp>(loc, m);
-  auto nBound = rewriter.create<arith::ConstantIndexOp>(loc, n);
-  rewriter.create<scf::ForOp>(
-      loc, c0, mBound, one, ValueRange{},
+  auto c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
+  auto one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+  auto sixteen = arith::ConstantIndexOp::create(rewriter, loc, 16);
+  auto mBound = arith::ConstantIndexOp::create(rewriter, loc, m);
+  auto nBound = arith::ConstantIndexOp::create(rewriter, loc, n);
+  scf::ForOp::create(
+      rewriter, loc, c0, mBound, one, ValueRange{},
       [&](OpBuilder &nestedBuilder, Location loc, Value iv,
           ValueRange iterArgs) {
-        nestedBuilder.create<scf::ForOp>(
-            loc, c0, nBound, sixteen, iterArgs,
+        scf::ForOp::create(
+            nestedBuilder, loc, c0, nBound, sixteen, iterArgs,
             [&](OpBuilder &innerBuilder, Location loc, Value innerIv,
                 ValueRange innerIterArgs) {
               // Read
-              auto readC = rewriter.create<vector::TransferReadOp>(
-                  loc, VectorType::get({16}, inputElementType), src,
+              auto readC = vector::TransferReadOp::create(
+                  rewriter, loc, VectorType::get({16}, inputElementType), src,
                   ValueRange{iv, innerIv}, std::nullopt, ArrayRef{true});
-              auto bitcastLoad = rewriter.create<vector::BitCastOp>(
-                  loc, VectorType::get({16}, rewriter.getI16Type()), readC);
+              auto bitcastLoad = vector::BitCastOp::create(
+                  rewriter, loc, VectorType::get({16}, rewriter.getI16Type()),
+                  readC);
               // Convert
-              auto cvtSIToUI32 = rewriter.create<arith::ExtSIOp>(
-                  loc, VectorType::get({16}, rewriter.getI32Type()),
+              auto cvtSIToUI32 = arith::ExtSIOp::create(
+                  rewriter, loc, VectorType::get({16}, rewriter.getI32Type()),
                   bitcastLoad);
               int8_t bitsToShiftLeft = 16;
-              auto shiftLeft16bit = rewriter.create<arith::ShLIOp>(
-                  loc, cvtSIToUI32,
-                  rewriter.create<arith::ConstantOp>(
-                      loc, DenseElementsAttr::get(
-                               VectorType::get({16}, rewriter.getI32Type()),
-                               rewriter.getI32IntegerAttr(bitsToShiftLeft))));
-              auto bitcast = rewriter.create<arith::BitcastOp>(
-                  loc, VectorType::get({16}, rewriter.getF32Type()),
+              auto shiftLeft16bit = arith::ShLIOp::create(
+                  rewriter, loc, cvtSIToUI32,
+                  arith::ConstantOp::create(
+                      rewriter, loc,
+                      DenseElementsAttr::get(
+                          VectorType::get({16}, rewriter.getI32Type()),
+                          rewriter.getI32IntegerAttr(bitsToShiftLeft))));
+              auto bitcast = arith::BitcastOp::create(
+                  rewriter, loc, VectorType::get({16}, rewriter.getF32Type()),
                   shiftLeft16bit);
               // Write
-              rewriter.create<vector::TransferWriteOp>(
-                  loc, bitcast, dst, ValueRange{iv, innerIv}, ArrayRef{true});
-              innerBuilder.create<scf::YieldOp>(loc);
+              vector::TransferWriteOp::create(rewriter, loc, bitcast, dst,
+                                              ValueRange{iv, innerIv},
+                                              ArrayRef{true});
+              scf::YieldOp::create(innerBuilder, loc);
             });
 
         // Yield results from inner loop to outer loop
-        nestedBuilder.create<scf::YieldOp>(loc);
+        scf::YieldOp::create(nestedBuilder, loc);
       });
 }
 
@@ -137,13 +140,14 @@ static SmallVector<Value> initializeAccumulators(OpBuilder &rewriter,
                                                  Type accElementType, int64_t m,
                                                  int64_t n) {
   SmallVector<Value> initAccs;
-  auto amxTile16x16xF32Ty = mlir::amx::TileType::get({16, 16}, accElementType);
+  auto amxTile16x16xF32Ty =
+      mlir::x86::amx::TileType::get({16, 16}, accElementType);
   for (auto mIndices = 0; mIndices < m; mIndices += 16) {
     for (auto nIndices = 0; nIndices < n; nIndices += 16) {
-      auto acc = rewriter.create<amx::TileLoadOp>(
-          loc, amxTile16x16xF32Ty, buffer,
-          ValueRange{rewriter.create<arith::ConstantIndexOp>(loc, mIndices),
-                     rewriter.create<arith::ConstantIndexOp>(loc, nIndices)});
+      auto acc = x86::amx::TileLoadOp::create(
+          rewriter, loc, amxTile16x16xF32Ty, buffer,
+          ValueRange{arith::ConstantIndexOp::create(rewriter, loc, mIndices),
+                     arith::ConstantIndexOp::create(rewriter, loc, nIndices)});
       initAccs.push_back(acc);
     }
   }
@@ -233,7 +237,7 @@ enum class MatMulType { Standard, Batch, BatchReduce };
 ///
 ///   // Down-convert local buffer and store back to C matrix
 ///   vector.transfer_read
-///   x86vector.avx512.intr.cvtneps2bf16.512
+///   x86.avx512.intr.cvtneps2bf16.512
 ///   vector.transfer_write
 ///  .............
 ///  ............
@@ -351,12 +355,12 @@ static Value collapseInnerDims(OpBuilder &builder, mlir::Location loc,
   for (int64_t i = firstDimToCollapse; i < inputType.getRank(); ++i)
     collapsedIndices.push_back(i);
   reassociation.push_back(collapsedIndices);
-  return builder.create<memref::CollapseShapeOp>(loc, input, reassociation);
+  return memref::CollapseShapeOp::create(builder, loc, input, reassociation);
 }
 
 // Helper to create collapse_shape and tile_load ops for the input tiles.
 static SmallVector<Value, 4> createTileLoads(OpBuilder &builder, Location loc,
-                                             amx::TileType resType,
+                                             x86::amx::TileType resType,
                                              Value subview, int dimSize,
                                              Value c0, bool isLHS = true) {
   SmallVector<Value, 4> loadTiles;
@@ -367,13 +371,13 @@ static SmallVector<Value, 4> createTileLoads(OpBuilder &builder, Location loc,
                      : subviewType.getElementType().isBF16() ? 32
                                                              : 64;
   for (int i = 0; i < dimSize; i += dimStep) {
-    auto mIndex = isLHS ? builder.create<arith::ConstantIndexOp>(loc, i) : c0;
-    auto nIndex = isLHS ? c0 : builder.create<arith::ConstantIndexOp>(loc, i);
+    auto mIndex = isLHS ? arith::ConstantIndexOp::create(builder, loc, i) : c0;
+    auto nIndex = isLHS ? c0 : arith::ConstantIndexOp::create(builder, loc, i);
     auto subviewRank = subviewType.getRank();
     auto collapsedOpnd =
         collapseInnerDims(builder, loc, subview, subviewRank - 2);
-    auto elem = builder.create<amx::TileLoadOp>(loc, resType, collapsedOpnd,
-                                                ValueRange{c0, mIndex, nIndex});
+    auto elem = x86::amx::TileLoadOp::create(
+        builder, loc, resType, collapsedOpnd, ValueRange{c0, mIndex, nIndex});
     loadTiles.push_back(elem);
   }
   return loadTiles;
@@ -381,7 +385,7 @@ static SmallVector<Value, 4> createTileLoads(OpBuilder &builder, Location loc,
 
 // Helper to create tile mul ops for the input tiles.
 static SmallVector<Value> createTileMuls(OpBuilder &builder, Location loc,
-                                         amx::TileType resType,
+                                         x86::amx::TileType resType,
                                          SmallVector<Value, 4> aLoadTiles,
                                          SmallVector<Value, 4> bLoadTiles,
                                          ValueRange iterArgs) {
@@ -391,12 +395,12 @@ static SmallVector<Value> createTileMuls(OpBuilder &builder, Location loc,
     for (unsigned j = 0; j < bLoadTiles.size(); j++) {
       auto amx =
           resType.getElementType().isFloat()
-              ? builder.create<amx::TileMulFOp>(loc, resType, aLoadTiles[i],
-                                                bLoadTiles[j],
-                                                iterArgs[numIterArgs++])
-              : builder.create<amx::TileMulIOp>(loc, resType, aLoadTiles[i],
-                                                bLoadTiles[j],
-                                                iterArgs[numIterArgs++]);
+              ? x86::amx::TileMulFOp::create(builder, loc, resType,
+                                             aLoadTiles[i], bLoadTiles[j],
+                                             iterArgs[numIterArgs++])
+              : x86::amx::TileMulIOp::create(builder, loc, resType,
+                                             aLoadTiles[i], bLoadTiles[j],
+                                             iterArgs[numIterArgs++]);
       results.push_back(amx->getResult(0));
     }
   }
@@ -527,7 +531,7 @@ struct VectorContractToAMXPattern
     rewriter.setInsertionPoint(insertAt->getBlock(),
                                std::next(insertAt->getIterator(), 1));
 
-    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
     Type accElementType;
     Type outputElementType = accType.getElementType();
     outputElementType.isFloat() ? accElementType = rewriter.getF32Type()
@@ -539,7 +543,7 @@ struct VectorContractToAMXPattern
     if (outputElementType.isBF16()) {
       // Create a new buffer to hold the accumulator at higher precision.
       bufferType = MemRefType::get({M, N}, accElementType);
-      accBuffer = rewriter.create<memref::AllocaOp>(loc, bufferType);
+      accBuffer = memref::AllocaOp::create(rewriter, loc, bufferType);
 
       // Up Convert and copy the original accumulator to the buffer.
       upConvertAndCopyAccumulator(rewriter, loc, accSubview, accBuffer,
@@ -554,10 +558,10 @@ struct VectorContractToAMXPattern
 
     SmallVector<Value, 4> results;
     auto amxTile16x16xF32Ty =
-        mlir::amx::TileType::get({16, 16}, accElementType);
+        mlir::x86::amx::TileType::get({16, 16}, accElementType);
     auto inputTileElemType = lhsType.getElementType();
     auto amxInputTilesOf16xColxTy =
-        mlir::amx::TileType::get({16, 16 * vnniFactor}, inputTileElemType);
+        mlir::x86::amx::TileType::get({16, 16 * vnniFactor}, inputTileElemType);
 
     // Lamda to create inner loop body.
     auto createLoopBody = [&](OpBuilder &innerBuilder, Location loc, Value iv,
@@ -566,14 +570,13 @@ struct VectorContractToAMXPattern
       // Update index of LHS matrix subview for batch dimension if corresponding
       // loop is needed.
       if (iv)
-        mapping.map(lhsDefiningOp.getBase().getDefiningOp()->getOperand(1),
-                    iv);
+        mapping.map(lhsDefiningOp.getBase().getDefiningOp()->getOperand(1), iv);
       // Update index of LHS matrix subview for K dimension.
       mapping.map(
           lhsDefiningOp.getBase().getDefiningOp()->getOperand(iv ? 3 : 1),
           innerIv);
-      auto lhsClone = innerBuilder.clone(
-          *lhsDefiningOp.getBase().getDefiningOp(), mapping);
+      auto lhsClone =
+          innerBuilder.clone(*lhsDefiningOp.getBase().getDefiningOp(), mapping);
       // Load matrix A tile
       SmallVector<Value, 4> aLoadTiles =
           createTileLoads(innerBuilder, loc, amxInputTilesOf16xColxTy,
@@ -602,15 +605,15 @@ struct VectorContractToAMXPattern
                                aLoadTiles, bLoadTiles, innerIterArgs);
 
       // Yield all results
-      innerBuilder.create<scf::YieldOp>(loc, results);
+      scf::YieldOp::create(innerBuilder, loc, results);
     };
 
     // Lamda to create inner loop with loop body.
     auto createInnerLoop = [&](OpBuilder &nestedBuilder, Location loc, Value iv,
                                ValueRange iterArgs) {
-      return nestedBuilder.create<scf::ForOp>(
-          loc, ctx.innerForOp.getLowerBound(), ctx.innerForOp.getUpperBound(),
-          ctx.innerForOp.getStep(), iterArgs,
+      return scf::ForOp::create(
+          nestedBuilder, loc, ctx.innerForOp.getLowerBound(),
+          ctx.innerForOp.getUpperBound(), ctx.innerForOp.getStep(), iterArgs,
           [&](OpBuilder &innerBuilder, Location loc, Value innerIv,
               ValueRange innerIterArgs) {
             createLoopBody(innerBuilder, loc, iv, innerIv, innerIterArgs);
@@ -623,20 +626,21 @@ struct VectorContractToAMXPattern
     // to create a new outer.
     if (ctx.outerForOp && hasIterArg(ctx.outerForOp)) {
       // Create new outer loop with M/blocking-factor different accumulators.
-      newOuterForOp = rewriter.create<scf::ForOp>(
-          loc, ctx.outerForOp.getLowerBound(), ctx.outerForOp.getUpperBound(),
-          ctx.outerForOp.getStep(), initAccs,
+      newOuterForOp = scf::ForOp::create(
+          rewriter, loc, ctx.outerForOp.getLowerBound(),
+          ctx.outerForOp.getUpperBound(), ctx.outerForOp.getStep(), initAccs,
           [&](OpBuilder &nestedBuilder, Location loc, Value iv,
               ValueRange iterArgs) {
             auto newInnerForOp =
                 createInnerLoop(nestedBuilder, loc, iv, iterArgs);
-            nestedBuilder.create<scf::YieldOp>(loc, newInnerForOp.getResults());
+            scf::YieldOp::create(nestedBuilder, loc,
+                                 newInnerForOp.getResults());
           });
     } else {
       // Create single loop with M/blocking-factor different accumulators.
-      newOuterForOp = rewriter.create<scf::ForOp>(
-          loc, ctx.innerForOp.getLowerBound(), ctx.innerForOp.getUpperBound(),
-          ctx.innerForOp.getStep(), initAccs,
+      newOuterForOp = scf::ForOp::create(
+          rewriter, loc, ctx.innerForOp.getLowerBound(),
+          ctx.innerForOp.getUpperBound(), ctx.innerForOp.getStep(), initAccs,
           [&](OpBuilder &innerBuilder, Location loc, Value innerIv,
               ValueRange innerIterArgs) {
             createLoopBody(innerBuilder, loc, nullptr, innerIv, innerIterArgs);
@@ -658,11 +662,12 @@ struct VectorContractToAMXPattern
       int numIterArgs = 0;
       for (auto mIndices = 0; mIndices < M; mIndices += 16) {
         for (auto nIndices = 0; nIndices < N; nIndices += 16) {
-          rewriter.create<amx::TileStoreOp>(
-              loc, outputElementType.isBF16() ? accBuffer : accSubview,
+          x86::amx::TileStoreOp::create(
+              rewriter, loc,
+              outputElementType.isBF16() ? accBuffer : accSubview,
               ValueRange{
-                  rewriter.create<arith::ConstantIndexOp>(loc, mIndices),
-                  rewriter.create<arith::ConstantIndexOp>(loc, nIndices)},
+                  arith::ConstantIndexOp::create(rewriter, loc, mIndices),
+                  arith::ConstantIndexOp::create(rewriter, loc, nIndices)},
               newOuterForOp.getResult(numIterArgs++));
         }
       }

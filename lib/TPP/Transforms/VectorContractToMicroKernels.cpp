@@ -5,7 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements lowering of vector contraction using x86vector ops
+// This file implements lowering of vector contraction using x86 ops
 // to micro kernels.
 // Target types: f32, bf16, i8, and f16
 //
@@ -20,7 +20,7 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
-#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
+#include "mlir/Dialect/X86/X86Dialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -213,13 +213,14 @@ static memref::AllocOp createMask(Location loc, PatternRewriter &rewriter,
 
   auto intAttr = rewriter.getI32IntegerAttr(0xFFFF0000);
   auto maskConst =
-      rewriter.create<mlir::arith::ConstantOp>(loc, i32Type, intAttr);
-  auto mBcst = rewriter.create<vector::BroadcastOp>(
-      loc, VectorType::get(sizeFactor, i32Type), maskConst);
-  auto memrefMask = rewriter.create<mlir::memref::AllocOp>(
-      loc, MemRefType::get({1}, VectorType::get(sizeFactor, i32Type)));
-  rewriter.create<memref::StoreOp>(loc, mBcst, memrefMask,
-                                   ValueRange{indexOp_c0});
+      mlir::arith::ConstantOp::create(rewriter, loc, i32Type, intAttr);
+  auto mBcst = vector::BroadcastOp::create(
+      rewriter, loc, VectorType::get(sizeFactor, i32Type), maskConst);
+  auto memrefMask = mlir::memref::AllocOp::create(
+      rewriter, loc,
+      MemRefType::get({1}, VectorType::get(sizeFactor, i32Type)));
+  memref::StoreOp::create(rewriter, loc, mBcst, memrefMask,
+                          ValueRange{indexOp_c0});
   return memrefMask;
 }
 
@@ -227,12 +228,13 @@ static Value performBroadcast(Location loc, PatternRewriter &rewriter,
                               Value vector, int64_t sizeFactor, int64_t vnni,
                               Type elementType, Type i32Type) {
 
-  auto bitcastValue_i32 = rewriter.create<vector::BitCastOp>(
-      loc, VectorType::get({1}, i32Type), vector);
-  auto bcst_i32 = rewriter.create<vector::BroadcastOp>(
-      loc, VectorType::get(sizeFactor, i32Type), bitcastValue_i32);
-  auto value = rewriter.create<vector::BitCastOp>(
-      loc, VectorType::get({sizeFactor * vnni}, elementType), bcst_i32);
+  auto bitcastValue_i32 = vector::BitCastOp::create(
+      rewriter, loc, VectorType::get({1}, i32Type), vector);
+  auto bcst_i32 = vector::BroadcastOp::create(
+      rewriter, loc, VectorType::get(sizeFactor, i32Type), bitcastValue_i32);
+  auto value = vector::BitCastOp::create(
+      rewriter, loc, VectorType::get({sizeFactor * vnni}, elementType),
+      bcst_i32);
   return value;
 }
 
@@ -241,16 +243,17 @@ static Value performBitcast(Location loc, PatternRewriter &rewriter,
                             Type elementType, Type i32Type, Type i16Type,
                             Value cst16) {
 
-  auto bitcast_i16 = rewriter.create<vector::BitCastOp>(
-      loc, VectorType::get(sizeFactor, i16Type), vector);
-  auto extend_i32 = rewriter.create<arith::ExtUIOp>(
-      loc, VectorType::get(sizeFactor, i32Type), bitcast_i16);
+  auto bitcast_i16 = vector::BitCastOp::create(
+      rewriter, loc, VectorType::get(sizeFactor, i16Type), vector);
+  auto extend_i32 = arith::ExtUIOp::create(
+      rewriter, loc, VectorType::get(sizeFactor, i32Type), bitcast_i16);
   auto vectType = VectorType::get(sizeFactor, i32Type);
-  auto shiftOp = rewriter.create<arith::ShLIOp>(
-      loc, vectType, extend_i32,
-      rewriter.create<vector::BroadcastOp>(loc, vectType, cst16));
-  auto value = rewriter.create<vector::BitCastOp>(
-      loc, VectorType::get(sizeFactor, rewriter.getF32Type()), shiftOp);
+  auto shiftOp = arith::ShLIOp::create(
+      rewriter, loc, vectType, extend_i32,
+      vector::BroadcastOp::create(rewriter, loc, vectType, cst16));
+  auto value = vector::BitCastOp::create(
+      rewriter, loc, VectorType::get(sizeFactor, rewriter.getF32Type()),
+      shiftOp);
 
   return value;
 }
@@ -261,8 +264,9 @@ static SmallVector<Value> performShuffle(Location loc,
                                          int64_t sizeFactor, int64_t vnni) {
   SmallVector<Value> vectors;
   if (elementSize == 16) {
-    auto shuffle = rewriter.create<vector::ShuffleOp>(
-        loc, VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
+    auto shuffle = vector::ShuffleOp::create(
+        rewriter, loc,
+        VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
         vec2, ArrayRef<int64_t>{0,  16, 1,  17, 2,  18, 3,  19, 4,  20, 5,
                                 21, 6,  22, 7,  23, 8,  24, 9,  25, 10, 26,
                                 11, 27, 12, 28, 13, 29, 14, 30, 15, 31});
@@ -271,14 +275,16 @@ static SmallVector<Value> performShuffle(Location loc,
   }
 
   if (elementSize == 32) {
-    auto shuffle1 = rewriter.create<vector::ShuffleOp>(
-        loc, VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
+    auto shuffle1 = vector::ShuffleOp::create(
+        rewriter, loc,
+        VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
         vec2, ArrayRef<int64_t>{0,  32, 1,  33, 2,  34, 3,  35, 8,  40, 9,
                                 41, 10, 42, 11, 43, 16, 48, 17, 49, 18, 50,
                                 19, 51, 24, 56, 25, 57, 26, 58, 27, 59});
     vectors.push_back(shuffle1);
-    auto shuffle2 = rewriter.create<vector::ShuffleOp>(
-        loc, VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
+    auto shuffle2 = vector::ShuffleOp::create(
+        rewriter, loc,
+        VectorType::get({sizeFactor * vnni}, rewriter.getBF16Type()), vec1,
         vec2, ArrayRef<int64_t>{4,  36, 5,  37, 6,  38, 7,  39, 12, 44, 13,
                                 45, 14, 46, 15, 47, 20, 52, 21, 53, 22, 54,
                                 23, 55, 28, 60, 29, 61, 30, 62, 31, 63});
@@ -365,13 +371,14 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
     if (sizeFactor == 0)
       return rewriter.notifyMatchFailure(
-          contractOp, "AVX512 or AVX2 or SVE512/256 instruction set is not available or "
-                      "lowering is not available for this target machine.");
+          contractOp,
+          "AVX512 or AVX2 or SVE512/256 instruction set is not available or "
+          "lowering is not available for this target machine.");
 
     if ((sve256 || sve512) && isPackedType)
       return rewriter.notifyMatchFailure(
-            contractOp,
-            "only FP32 type lowering is supported for AARCH64(ARM) machines.");
+          contractOp,
+          "only FP32 type lowering is supported for AARCH64(ARM) machines.");
 
     int64_t vnniFactor = (isBF16 || isF16) ? 2 : isI8 ? 4 : 1;
     bool isSplat = false;
@@ -528,11 +535,12 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     auto i32Type = rewriter.getIntegerType(32);
     auto i16Type = rewriter.getIntegerType(16);
     Value indexOp_c0 =
-        rewriter.create<arith::ConstantIndexOp>(reductionForOp.getLoc(), 0);
+        arith::ConstantIndexOp::create(rewriter, reductionForOp.getLoc(), 0);
     Value indexOp_c1 =
-        rewriter.create<arith::ConstantIndexOp>(reductionForOp.getLoc(), 1);
-    auto cst16 = rewriter.create<arith::ConstantOp>(
-        reductionForOp.getLoc(), rewriter.getIntegerAttr(i32Type, 16));
+        arith::ConstantIndexOp::create(rewriter, reductionForOp.getLoc(), 1);
+    auto cst16 =
+        arith::ConstantOp::create(rewriter, reductionForOp.getLoc(),
+                                  rewriter.getIntegerAttr(i32Type, 16));
 
     // Creating the mask for doing bitwise `and` operation + store them
     // in memory(target: fallback)
@@ -548,27 +556,27 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     if (outsElementType.isBF16() && !isSplat) {
       for (int j = 0; j < N; j = j + sizeFactor) {
         for (int i = 0; i < M; i++) {
-          Value indexOp_A = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), i);
-          Value indexOp_B = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j);
-          auto valueCRow = rewriter.create<vector::LoadOp>(
-              reductionForOp.getLoc(),
+          Value indexOp_A = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), i);
+          Value indexOp_B = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j);
+          auto valueCRow = vector::LoadOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
               ValueRange{indexOp_A, indexOp_B});
-          auto bitcast_i16 = rewriter.create<vector::BitCastOp>(
-              reductionForOp.getLoc(), VectorType::get(sizeFactor, i16Type),
-              valueCRow);
-          auto extend_i32 = rewriter.create<arith::ExtUIOp>(
-              reductionForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-              bitcast_i16);
+          auto bitcast_i16 = vector::BitCastOp::create(
+              rewriter, reductionForOp.getLoc(),
+              VectorType::get(sizeFactor, i16Type), valueCRow);
+          auto extend_i32 = arith::ExtUIOp::create(
+              rewriter, reductionForOp.getLoc(),
+              VectorType::get(sizeFactor, i32Type), bitcast_i16);
           auto vectType = VectorType::get(sizeFactor, i32Type);
-          auto shiftOp = rewriter.create<arith::ShLIOp>(
-              reductionForOp.getLoc(), vectType, extend_i32,
-              rewriter.create<vector::BroadcastOp>(reductionForOp.getLoc(),
-                                                   vectType, cst16));
-          auto f32CVector = rewriter.create<vector::BitCastOp>(
-              reductionForOp.getLoc(),
+          auto shiftOp = arith::ShLIOp::create(
+              rewriter, reductionForOp.getLoc(), vectType, extend_i32,
+              vector::BroadcastOp::create(rewriter, reductionForOp.getLoc(),
+                                          vectType, cst16));
+          auto f32CVector = vector::BitCastOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, rewriter.getF32Type()), shiftOp);
           loopItrArgs.push_back(f32CVector);
         }
@@ -578,18 +586,18 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     if (outsElementType.isF16() && !isSplat) {
       for (int j = 0; j < N; j = j + sizeFactor) {
         for (int i = 0; i < M; i++) {
-          Value indexOp_A = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), i);
-          Value indexOp_B = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j);
-          auto valueCRow = rewriter.create<vector::LoadOp>(
-              reductionForOp.getLoc(),
+          Value indexOp_A = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), i);
+          Value indexOp_B = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j);
+          auto valueCRow = vector::LoadOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
               ValueRange{indexOp_A, indexOp_B});
-          auto f32CVector = rewriter.create<arith::ExtFOp>(
-              reductionForOp.getLoc(),
-              VectorType::get({8}, rewriter.getF32Type()),
-              valueCRow.getResult());
+          auto f32CVector =
+              arith::ExtFOp::create(rewriter, reductionForOp.getLoc(),
+                                    VectorType::get({8}, rewriter.getF32Type()),
+                                    valueCRow.getResult());
           loopItrArgs.push_back(f32CVector);
         }
       }
@@ -599,12 +607,12 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
         !isSplat) {
       for (int j = 0; j < N; j = j + sizeFactor) {
         for (int i = 0; i < M; i++) {
-          Value indexOp_A = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), i);
-          Value indexOp_B = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j);
-          auto valueCRow = rewriter.create<vector::LoadOp>(
-              reductionForOp.getLoc(),
+          Value indexOp_A = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), i);
+          Value indexOp_B = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j);
+          auto valueCRow = vector::LoadOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
               ValueRange{indexOp_A, indexOp_B});
           loopItrArgs.push_back(valueCRow);
@@ -619,8 +627,8 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
         for (int i = 0; i < M; i++) {
           auto zeroAttr = DenseElementsAttr::get(
               VectorType::get({sizeFactor}, rewriter.getF32Type()), 0.0f);
-          auto cst = rewriter.create<arith::ConstantOp>(
-              reductionForOp.getLoc(),
+          auto cst = arith::ConstantOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get({sizeFactor}, rewriter.getF32Type()), zeroAttr);
           loopItrArgs.push_back(cst);
         }
@@ -632,14 +640,15 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     SmallVector<Value> matf32;
 
     // Code to re-create the reduction and k loop with iter args
-    auto newReductionForOp = rewriter.create<scf::ForOp>(
-        reductionForOp.getLoc(), reductionForOp.getLowerBound(),
+    auto newReductionForOp = scf::ForOp::create(
+        rewriter, reductionForOp.getLoc(), reductionForOp.getLowerBound(),
         reductionForOp.getUpperBound(), reductionForOp.getStep(), loopItrArgs,
         [&](OpBuilder &rewriterNewReductionForOp, Location locNewReductionForOp,
             Value ivNewReductionForOp, ValueRange iterArgsNewReductionForOp) {
-          auto newKForOp = rewriter.create<scf::ForOp>(
-              kForOp.getLoc(), kForOp.getLowerBound(), kForOp.getUpperBound(),
-              kForOp.getStep(), iterArgsNewReductionForOp,
+          auto newKForOp = scf::ForOp::create(
+              rewriter, kForOp.getLoc(), kForOp.getLowerBound(),
+              kForOp.getUpperBound(), kForOp.getStep(),
+              iterArgsNewReductionForOp,
               [&](OpBuilder &rewriterNewKForOp, Location locNewKForOp,
                   Value ivNewKForOp, ValueRange iterArgsNewKForOp) {
                 IRMapping mapping;
@@ -663,9 +672,10 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     *vectorReadOpRhs.getBase().getDefiningOp(), rhsMapping);
 
                 // Load i32 mask that is created and stored in memory earlier
-                auto maskBcst = rewriter.create<memref::LoadOp>(
-                    kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                    memrefMask, ValueRange{indexOp_c0});
+                auto maskBcst =
+                    memref::LoadOp::create(rewriter, kForOp.getLoc(),
+                                           VectorType::get(sizeFactor, i32Type),
+                                           memrefMask, ValueRange{indexOp_c0});
 
                 // i1 type mask
                 auto boolAttr_16 = DenseElementsAttr::get(
@@ -673,15 +683,15 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     ArrayRef<bool>{false, true, false, true, false, true, false,
                                    true, false, true, false, true, false, true,
                                    false, true});
-                auto i1Mask_16 = rewriter.create<arith::ConstantOp>(
-                    kForOp.getLoc(),
+                auto i1Mask_16 = arith::ConstantOp::create(
+                    rewriter, kForOp.getLoc(),
                     VectorType::get({16}, rewriter.getI1Type()), boolAttr_16);
                 auto boolAttr_2 = DenseElementsAttr::get(
                     VectorType::get(2, rewriter.getI1Type()),
                     ArrayRef<bool>{false, true});
-                auto i1Mask_2 = rewriter.create<arith::ConstantOp>(
-                    kForOp.getLoc(), VectorType::get(2, rewriter.getI1Type()),
-                    boolAttr_2);
+                auto i1Mask_2 = arith::ConstantOp::create(
+                    rewriter, kForOp.getLoc(),
+                    VectorType::get(2, rewriter.getI1Type()), boolAttr_2);
 
                 // ZeroAttr is not needed for i8 type lowering on ARL machine,
                 // may be need in future for lowering on other machine.
@@ -709,10 +719,10 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                   if (isF32 && mDriven) {
                     // Load elements of B matrix and store in a DS
                     for (int j = 0; j < N; j = j + sizeFactor) {
-                      Value indexOp_j = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), j);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(),
+                      Value indexOp_j = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
                           VectorType::get(sizeFactor, elementType),
                           rhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
@@ -721,23 +731,23 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                     // Load elements of A matrix, do FMA, and store FMA in a DS
                     for (int i = 0; i < M; i++) {
-                      Value indexOp_i = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), i);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get({vnni}, elementType),
+                      Value indexOp_i = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get({vnni}, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_i, indexOp_c0});
-                      auto bcst_i32 =
-                          rewriterNewKForOp.create<vector::BroadcastOp>(
-                              kForOp.getLoc(),
-                              VectorType::get(sizeFactor,
-                                              rewriterNewKForOp.getF32Type()),
-                              valueRow);
+                      auto bcst_i32 = vector::BroadcastOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get(sizeFactor,
+                                          rewriterNewKForOp.getF32Type()),
+                          valueRow);
 
                       // Iterate through the stored elements of B and do FMA
                       for (int j = 0; j < (N / sizeFactor); j++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), bcst_i32, matf32[j],
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), bcst_i32, matf32[j],
                             iterArgsNewKForOp[i + (j * M)]);
                         oddFMAs.push_back(fmaOdd);
                       }
@@ -755,27 +765,27 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                   } else if (isF32 && !mDriven) { // N -> M.
                     // Load elements of A matrix and store in a DS
                     for (int i = 0; i < M; i++) {
-                      Value indexOp_i = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), i);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get({vnni}, elementType),
+                      Value indexOp_i = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get({vnni}, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_i, indexOp_c0});
-                      auto bcst_i32 =
-                          rewriterNewKForOp.create<vector::BroadcastOp>(
-                              kForOp.getLoc(),
-                              VectorType::get(sizeFactor,
-                                              rewriterNewKForOp.getF32Type()),
-                              valueRow);
+                      auto bcst_i32 = vector::BroadcastOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get(sizeFactor,
+                                          rewriterNewKForOp.getF32Type()),
+                          valueRow);
                       matf32.push_back(bcst_i32);
                     }
 
                     // Load elements of B matrix, do FMA, and store FMA in a DS
                     for (int j = 0, k = 0; j < N; j = j + sizeFactor) {
-                      Value indexOp_j = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), j);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(),
+                      Value indexOp_j = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
                           VectorType::get(sizeFactor, elementType),
                           rhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
@@ -783,8 +793,8 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                       // Iterate through the stored elements of B and do FMA
                       for (int i = 0; i < M; i++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), matf32[i], valueRow,
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), matf32[i], valueRow,
                             iterArgsNewKForOp[k]);
                         k++;
                         evenFMAs.push_back(fmaOdd);
@@ -799,66 +809,55 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     if (mDriven) { // M -> N
                       // Load elements of B matrix and store in a DS
                       for (int j = 0; j < N; j = j + sizeFactor) {
-                        Value indexOp_j =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), j);
-                        auto valueRow =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * vnni},
-                                                elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j,
-                                           indexOp_c0});
+                        Value indexOp_j = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), j);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * vnni}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j,
+                                       indexOp_c0});
                         matf32.push_back(valueRow);
                       }
 
                       // Load elements of A matrix, do FMA, and store in a DS
                       for (int i = 0; i < M; i++) {
-                        Value indexOp_i =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), i);
-                        auto valueRow =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({vnni}, elementType),
-                                lhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_i, indexOp_c0,
-                                           indexOp_c0});
-                        auto bitcastValue_i32 =
-                            rewriterNewKForOp.create<vector::BitCastOp>(
-                                kForOp.getLoc(), VectorType::get({1}, i32Type),
-                                valueRow);
-                        auto bcst_i32 =
-                            rewriterNewKForOp.create<vector::BroadcastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, i32Type),
-                                bitcastValue_i32);
-                        auto valuef32 =
-                            rewriterNewKForOp.create<vector::BitCastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * vnni},
-                                                elementType),
-                                bcst_i32);
+                        Value indexOp_i = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), i);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({vnni}, elementType),
+                            lhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_i, indexOp_c0,
+                                       indexOp_c0});
+                        auto bitcastValue_i32 = vector::BitCastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({1}, i32Type), valueRow);
+                        auto bcst_i32 = vector::BroadcastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, i32Type),
+                            bitcastValue_i32);
+                        auto valuef32 = vector::BitCastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * vnni}, elementType),
+                            bcst_i32);
 
                         if (isBF16) {
                           for (int j = 0; j < (N / sizeFactor); j++) {
-                            auto dp =
-                                rewriter.create<mlir::x86vector::DotBF16Op>(
-                                    kForOp.getLoc(), dstType,
-                                    iterArgsNewKForOp[i + (j * M)], valuef32,
-                                    matf32[j]);
+                            auto dp = x86::avx512::DotBF16Op::create(
+                                rewriter, kForOp.getLoc(), dstType,
+                                iterArgsNewKForOp[i + (j * M)], valuef32,
+                                matf32[j]);
                             oddFMAs.push_back(dp);
                           }
                         }
 
                         if (isI8) {
                           for (int j = 0; j < (N / sizeFactor); j++) {
-                            auto dp =
-                                rewriter.create<mlir::x86vector::DotInt8Op>(
-                                    kForOp.getLoc(), dstType,
-                                    iterArgsNewKForOp[i + (j * M)], valuef32,
-                                    matf32[j]);
+                            auto dp = x86::avx::DotInt8Op::create(
+                                rewriter, kForOp.getLoc(), dstType,
+                                iterArgsNewKForOp[i + (j * M)], valuef32,
+                                matf32[j]);
                             oddFMAs.push_back(dp);
                           }
                         }
@@ -877,53 +876,43 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                     } else { // N -> M
                       for (int i = 0; i < M; i++) {
-                        Value indexOp_i =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), i);
-                        auto valueRow =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({vnni}, elementType),
-                                lhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_i, indexOp_c0,
-                                           indexOp_c0});
-                        auto bitcastValue_i32 =
-                            rewriterNewKForOp.create<vector::BitCastOp>(
-                                kForOp.getLoc(), VectorType::get({1}, i32Type),
-                                valueRow);
-                        auto bcst_i32 =
-                            rewriterNewKForOp.create<vector::BroadcastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, i32Type),
-                                bitcastValue_i32);
-                        auto valuef32 =
-                            rewriterNewKForOp.create<vector::BitCastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * vnni},
-                                                elementType),
-                                bcst_i32);
+                        Value indexOp_i = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), i);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({vnni}, elementType),
+                            lhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_i, indexOp_c0,
+                                       indexOp_c0});
+                        auto bitcastValue_i32 = vector::BitCastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({1}, i32Type), valueRow);
+                        auto bcst_i32 = vector::BroadcastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, i32Type),
+                            bitcastValue_i32);
+                        auto valuef32 = vector::BitCastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * vnni}, elementType),
+                            bcst_i32);
                         matf32.push_back(valuef32);
                       }
 
                       for (int j = 0, k = 0; j < N; j = j + sizeFactor) {
-                        Value indexOp_j =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), j);
-                        auto valueRow =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * vnni},
-                                                elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j,
-                                           indexOp_c0});
+                        Value indexOp_j = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), j);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * vnni}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j,
+                                       indexOp_c0});
 
                         if (isBF16) {
                           for (int i = 0; i < M; i++) {
-                            auto dp =
-                                rewriter.create<mlir::x86vector::DotBF16Op>(
-                                    kForOp.getLoc(), dstType,
-                                    iterArgsNewKForOp[k], matf32[i], valueRow);
+                            auto dp = x86::avx512::DotBF16Op::create(
+                                rewriter, kForOp.getLoc(), dstType,
+                                iterArgsNewKForOp[k], matf32[i], valueRow);
                             k++;
                             evenFMAs.push_back(dp);
                           }
@@ -931,10 +920,9 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                         if (isI8) {
                           for (int i = 0; i < M; i++) {
-                            auto dp =
-                                rewriter.create<mlir::x86vector::DotInt8Op>(
-                                    kForOp.getLoc(), dstType,
-                                    iterArgsNewKForOp[k], matf32[i], valueRow);
+                            auto dp = x86::avx::DotInt8Op::create(
+                                rewriter, kForOp.getLoc(), dstType,
+                                iterArgsNewKForOp[k], matf32[i], valueRow);
                             k++;
                             evenFMAs.push_back(dp);
                           }
@@ -948,21 +936,21 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                   if (fallback && avx512) {
                     // Load odd elements of B Matrix and store in a DS
                     for (int j = 0; j < N; j = j + sizeFactor) {
-                      Value indexOp_cj =
-                          rewriter.create<arith::ConstantIndexOp>(
-                              reductionForOp.getLoc(), j);
-                      auto valueRow = rewriter.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get(32, elementType),
+                      Value indexOp_cj = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(32, elementType),
                           rhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_c0, indexOp_cj,
                                      indexOp_c0});
-                      auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                          valueRow);
-                      auto andOpB = rewriter.create<arith::AndIOp>(
-                          kForOp.getLoc(), bitcast_i32, maskBcst);
-                      auto oddB = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(),
+                      auto bitcast_i32 = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(sizeFactor, i32Type), valueRow);
+                      auto andOpB = arith::AndIOp::create(
+                          rewriter, kForOp.getLoc(), bitcast_i32, maskBcst);
+                      auto oddB = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
                           VectorType::get(sizeFactor, rewriter.getF32Type()),
                           andOpB);
                       matf32.push_back(oddB);
@@ -971,34 +959,34 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     // Load odd elements of A Matrix, perform fma (odd), and
                     // store to a DS
                     for (int i = 0; i < M; i++) {
-                      Value indexOp_ci =
-                          rewriter.create<arith::ConstantIndexOp>(
-                              reductionForOp.getLoc(), i);
+                      Value indexOp_ci = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
                       auto denseAttr = DenseElementsAttr::get(
                           VectorType::get(vnni, elementType), zeroAttr);
-                      auto passThru = rewriter.create<arith::ConstantOp>(
-                          kForOp.getLoc(), VectorType::get(vnni, elementType),
-                          denseAttr);
-                      auto maskedLoad = rewriter.create<vector::MaskedLoadOp>(
-                          kForOp.getLoc(), VectorType::get(vnni, elementType),
+                      auto passThru = arith::ConstantOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(vnni, elementType), denseAttr);
+                      auto maskedLoad = vector::MaskedLoadOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(vnni, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_ci, indexOp_c0,
                                      indexOp_c0},
                           i1Mask_2, passThru);
-                      auto bitcast_f32 = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(),
+                      auto bitcast_f32 = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
                           VectorType::get(1, rewriter.getF32Type()),
                           maskedLoad);
-                      auto oddA = rewriterNewKForOp.create<vector::BroadcastOp>(
-                          kForOp.getLoc(),
+                      auto oddA = vector::BroadcastOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
                           VectorType::get(sizeFactor,
                                           rewriterNewKForOp.getF32Type()),
                           bitcast_f32);
 
                       // Odd FMAs
                       for (int j = 0; j < (N / sizeFactor); j++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), oddA, matf32[j],
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), oddA, matf32[j],
                             iterArgsNewKForOp[i + (j * M)]);
                         oddFMAs.push_back(fmaOdd);
                       }
@@ -1009,25 +997,25 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                     // Load even elements of B Matrix and store in a DS
                     for (int j = 0; j < N; j = j + sizeFactor) {
-                      Value indexOp_cj =
-                          rewriter.create<arith::ConstantIndexOp>(
-                              reductionForOp.getLoc(), j);
-                      auto valueRow = rewriter.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get(32, elementType),
+                      Value indexOp_cj = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(32, elementType),
                           rhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_c0, indexOp_cj,
                                      indexOp_c0});
-                      auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                          valueRow);
-                      auto shiftOpB = rewriter.create<arith::ShLIOp>(
-                          kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                          bitcast_i32,
-                          rewriter.create<vector::BroadcastOp>(
-                              kForOp.getLoc(),
+                      auto bitcast_i32 = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(sizeFactor, i32Type), valueRow);
+                      auto shiftOpB = arith::ShLIOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(sizeFactor, i32Type), bitcast_i32,
+                          vector::BroadcastOp::create(
+                              rewriter, kForOp.getLoc(),
                               VectorType::get(sizeFactor, i32Type), cst16));
-                      auto evenB = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(),
+                      auto evenB = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
                           VectorType::get(sizeFactor, rewriter.getF32Type()),
                           shiftOpB);
                       matf32.push_back(evenB);
@@ -1037,37 +1025,36 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     // Load even elements of A Matrix, perform fma (even), and
                     // store to a DS
                     for (int i = 0, k = 0; i < M; i++) {
-                      Value indexOp_ci =
-                          rewriter.create<arith::ConstantIndexOp>(
-                              reductionForOp.getLoc(), i);
-                      auto valueRow = rewriter.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get(vnni, elementType),
+                      Value indexOp_ci = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(vnni, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_ci, indexOp_c0,
                                      indexOp_c0});
-                      auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(), VectorType::get(1, i32Type),
-                          valueRow);
-                      auto bcstValue =
-                          rewriterNewKForOp.create<vector::BroadcastOp>(
-                              kForOp.getLoc(),
-                              VectorType::get(sizeFactor, i32Type),
-                              bitcast_i32);
-                      auto shiftOp = rewriter.create<arith::ShLIOp>(
-                          kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                          bcstValue,
-                          rewriter.create<vector::BroadcastOp>(
-                              kForOp.getLoc(),
+                      auto bitcast_i32 = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(1, i32Type), valueRow);
+                      auto bcstValue = vector::BroadcastOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get(sizeFactor, i32Type), bitcast_i32);
+                      auto shiftOp = arith::ShLIOp::create(
+                          rewriter, kForOp.getLoc(),
+                          VectorType::get(sizeFactor, i32Type), bcstValue,
+                          vector::BroadcastOp::create(
+                              rewriter, kForOp.getLoc(),
                               VectorType::get(sizeFactor, i32Type), cst16));
-                      auto evenA = rewriter.create<vector::BitCastOp>(
-                          kForOp.getLoc(),
+                      auto evenA = vector::BitCastOp::create(
+                          rewriter, kForOp.getLoc(),
                           VectorType::get(sizeFactor, rewriter.getF32Type()),
                           shiftOp);
 
                       // Even FMAs
                       for (int j = 0; j < (N / sizeFactor); j++) {
-                        auto fmaEven = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), evenA, matf32[j], oddFMAs[k]);
+                        auto fmaEven =
+                            vector::FMAOp::create(rewriter, kForOp.getLoc(),
+                                                  evenA, matf32[j], oddFMAs[k]);
                         evenFMAs_swap.push_back(fmaEven);
                         k++;
                       }
@@ -1093,26 +1080,24 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                       Value oddA;
 
                       if (fallback) {
-                        Value indexOp_ci =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), i);
-                        auto valueRow = rewriter.create<vector::LoadOp>(
-                            kForOp.getLoc(), VectorType::get(2, elementType),
+                        Value indexOp_ci = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), i);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(2, elementType),
                             lhsClone->getResult(0),
                             ValueRange{indexOp_c0, indexOp_ci, indexOp_c0,
                                        indexOp_c0});
-                        auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(), VectorType::get(1, i32Type),
-                            valueRow);
-                        auto bcst_i32 =
-                            rewriterNewKForOp.create<vector::BroadcastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, i32Type),
-                                bitcast_i32);
-                        auto andOpA = rewriter.create<arith::AndIOp>(
-                            kForOp.getLoc(), bcst_i32, maskBcst);
-                        oddA = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(),
+                        auto bitcast_i32 = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(1, i32Type), valueRow);
+                        auto bcst_i32 = vector::BroadcastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, i32Type), bitcast_i32);
+                        auto andOpA = arith::AndIOp::create(
+                            rewriter, kForOp.getLoc(), bcst_i32, maskBcst);
+                        oddA = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get(sizeFactor, rewriter.getF32Type()),
                             andOpA);
                       }
@@ -1124,12 +1109,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                             rewriter.getIndexAttr(0),
                             rewriter.getIndexAttr(1),
                         };
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), lhsClone->getResult(0), offsets,
-                            sizes, strides);
-                        oddA =
-                            rewriter.create<mlir::x86vector::BcstToPackedF32Op>(
-                                kForOp.getLoc(), dstType, subview);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), lhsClone->getResult(0),
+                            offsets, sizes, strides);
+                        oddA = x86::avx::BcstToPackedF32Op::create(
+                            rewriter, kForOp.getLoc(), dstType, subview);
                       }
 
                       matf32.push_back(oddA);
@@ -1141,26 +1125,26 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                       Value oddB;
 
                       if (fallback) {
-                        Value indexOp_cj =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), j);
-                        auto valueRow = rewriter.create<vector::LoadOp>(
-                            kForOp.getLoc(), VectorType::get(16, elementType),
+                        Value indexOp_cj = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), j);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(16, elementType),
                             rhsClone->getResult(0),
                             ValueRange{indexOp_c0, indexOp_c0, indexOp_cj,
                                        indexOp_c0});
-                        auto bitcast_i16 = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(), VectorType::get(16, i16Type),
-                            valueRow);
-                        auto bitcast_i16_andOpA =
-                            rewriter.create<vector::BitCastOp>(
-                                kForOp.getLoc(), VectorType::get(16, i16Type),
-                                matf32[0]);
-                        auto selectOp = rewriter.create<arith::SelectOp>(
-                            kForOp.getLoc(), VectorType::get({16}, i16Type),
-                            i1Mask_16, bitcast_i16, bitcast_i16_andOpA);
-                        oddB = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(),
+                        auto bitcast_i16 = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(16, i16Type), valueRow);
+                        auto bitcast_i16_andOpA = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(16, i16Type), matf32[0]);
+                        auto selectOp = arith::SelectOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get({16}, i16Type), i1Mask_16,
+                            bitcast_i16, bitcast_i16_andOpA);
+                        oddB = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get(sizeFactor, rewriter.getF32Type()),
                             selectOp);
                       }
@@ -1175,18 +1159,17 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                         llvm::SmallVector<OpFoldResult> sizes = {
                             rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                             rewriter.getIndexAttr(8), rewriter.getIndexAttr(2)};
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                            sizes, strides);
-                        oddB = rewriter.create<
-                            mlir::x86vector::CvtPackedOddIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                            offsets, sizes, strides);
+                        oddB = x86::avx::CvtPackedOddIndexedToF32Op::create(
+                            rewriter, kForOp.getLoc(), dstType, subview);
                       }
 
                       // Odd FMAs
                       for (int i = 0; i < M; i++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), matf32[i], oddB,
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), matf32[i], oddB,
                             iterArgsNewKForOp[k]);
                         k++;
                         oddFMAs.push_back(fmaOdd);
@@ -1201,29 +1184,28 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                       Value evenA;
 
                       if (fallback) {
-                        Value indexOp_ci =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), i);
-                        auto valueRow = rewriter.create<vector::LoadOp>(
-                            kForOp.getLoc(), VectorType::get(2, elementType),
+                        Value indexOp_ci = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), i);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(2, elementType),
                             lhsClone->getResult(0),
                             ValueRange{indexOp_c0, indexOp_ci, indexOp_c0,
                                        indexOp_c0});
-                        auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(), VectorType::get(1, i32Type),
-                            valueRow);
-                        auto shift = rewriter.create<arith::ShLIOp>(
-                            kForOp.getLoc(), VectorType::get(1, i32Type),
-                            bitcast_i32,
-                            rewriter.create<vector::BroadcastOp>(
-                                kForOp.getLoc(), VectorType::get(1, i32Type),
-                                cst16));
-                        auto bcstShift =
-                            rewriterNewKForOp.create<vector::BroadcastOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, i32Type), shift);
-                        evenA = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(),
+                        auto bitcast_i32 = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(1, i32Type), valueRow);
+                        auto shift = arith::ShLIOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(1, i32Type), bitcast_i32,
+                            vector::BroadcastOp::create(
+                                rewriter, kForOp.getLoc(),
+                                VectorType::get(1, i32Type), cst16));
+                        auto bcstShift = vector::BroadcastOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, i32Type), shift);
+                        evenA = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get(sizeFactor, rewriter.getF32Type()),
                             bcstShift);
                       }
@@ -1236,12 +1218,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                             rewriter.getIndexAttr(0),
                         };
 
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), lhsClone->getResult(0), offsets,
-                            sizes, strides);
-                        evenA =
-                            rewriter.create<mlir::x86vector::BcstToPackedF32Op>(
-                                kForOp.getLoc(), dstType, subview);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), lhsClone->getResult(0),
+                            offsets, sizes, strides);
+                        evenA = x86::avx::BcstToPackedF32Op::create(
+                            rewriter, kForOp.getLoc(), dstType, subview);
                       }
 
                       matf32.push_back(evenA);
@@ -1254,25 +1235,25 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                     if (fallback) {
                       for (int j = 0, k = 0; j < N; j = j + 16) {
 
-                        Value indexOp_cj =
-                            rewriter.create<arith::ConstantIndexOp>(
-                                reductionForOp.getLoc(), j);
-                        auto valueRow = rewriter.create<vector::LoadOp>(
-                            kForOp.getLoc(), VectorType::get(32, elementType),
+                        Value indexOp_cj = arith::ConstantIndexOp::create(
+                            rewriter, reductionForOp.getLoc(), j);
+                        auto valueRow = vector::LoadOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(32, elementType),
                             rhsClone->getResult(0),
                             ValueRange{indexOp_c0, indexOp_c0, indexOp_cj,
                                        indexOp_c0});
-                        auto bitcast_i32 = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(), VectorType::get(16, i32Type),
-                            valueRow);
-                        auto shift = rewriter.create<arith::ShLIOp>(
-                            kForOp.getLoc(), VectorType::get(16, i32Type),
-                            bitcast_i32,
-                            rewriter.create<vector::BroadcastOp>(
-                                kForOp.getLoc(), VectorType::get(16, i32Type),
-                                cst16));
-                        auto evenB_16 = rewriter.create<vector::BitCastOp>(
-                            kForOp.getLoc(),
+                        auto bitcast_i32 = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(16, i32Type), valueRow);
+                        auto shift = arith::ShLIOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(16, i32Type), bitcast_i32,
+                            vector::BroadcastOp::create(
+                                rewriter, kForOp.getLoc(),
+                                VectorType::get(16, i32Type), cst16));
+                        auto evenB_16 = vector::BitCastOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get(16, rewriter.getF32Type()), shift);
 
                         auto offsetsAttr = rewriter.getI64ArrayAttr({0});
@@ -1280,31 +1261,28 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                             rewriter.getI64ArrayAttr({sizeFactor});
                         auto sizesAttr = rewriter.getI64ArrayAttr({sizeFactor});
                         auto stridesAttr = rewriter.getI64ArrayAttr({1});
-                        auto evenB1 =
-                            rewriter.create<vector::ExtractStridedSliceOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor,
-                                                rewriter.getF32Type()),
-                                evenB_16, offsetsAttr, sizesAttr, stridesAttr);
-                        auto evenB2 =
-                            rewriter.create<vector::ExtractStridedSliceOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor,
-                                                rewriter.getF32Type()),
-                                evenB_16, offsetsAttr_8, sizesAttr,
-                                stridesAttr);
+                        auto evenB1 = vector::ExtractStridedSliceOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, rewriter.getF32Type()),
+                            evenB_16, offsetsAttr, sizesAttr, stridesAttr);
+                        auto evenB2 = vector::ExtractStridedSliceOp::create(
+                            rewriter, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, rewriter.getF32Type()),
+                            evenB_16, offsetsAttr_8, sizesAttr, stridesAttr);
 
                         // Even FMAs
                         for (int i = 0; i < M; i++) {
-                          auto fmaEven = rewriter.create<vector::FMAOp>(
-                              kForOp.getLoc(), matf32[i], evenB1, oddFMAs[k]);
+                          auto fmaEven = vector::FMAOp::create(
+                              rewriter, kForOp.getLoc(), matf32[i], evenB1,
+                              oddFMAs[k]);
                           k++;
                           evenFMAs.push_back(fmaEven);
                         }
 
                         for (int i = 0; i < M; i++) {
-                          auto fmaEven = rewriter.create<vector::FMAOp>(
-                              kForOp.getLoc(), matf32[i], evenB2, oddFMAs[k]);
+                          auto fmaEven = vector::FMAOp::create(
+                              rewriter, kForOp.getLoc(), matf32[i], evenB2,
+                              oddFMAs[k]);
                           k++;
                           evenFMAs.push_back(fmaEven);
                         }
@@ -1323,17 +1301,18 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                         llvm::SmallVector<OpFoldResult> sizes = {
                             rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                             rewriter.getIndexAttr(8), rewriter.getIndexAttr(2)};
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                            sizes, strides);
-                        auto evenB = rewriter.create<
-                            mlir::x86vector::CvtPackedEvenIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                            offsets, sizes, strides);
+                        auto evenB =
+                            x86::avx::CvtPackedEvenIndexedToF32Op::create(
+                                rewriter, kForOp.getLoc(), dstType, subview);
 
                         // Even FMAs
                         for (int i = 0; i < M; i++) {
-                          auto fmaEven = rewriter.create<vector::FMAOp>(
-                              kForOp.getLoc(), matf32[i], evenB, oddFMAs[k]);
+                          auto fmaEven = vector::FMAOp::create(
+                              rewriter, kForOp.getLoc(), matf32[i], evenB,
+                              oddFMAs[k]);
                           k++;
                           evenFMAs.push_back(fmaEven);
                         }
@@ -1366,23 +1345,23 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                             rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                             rewriter.getIndexAttr(8)};
 
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                            sizes, strides_splat);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                            offsets, sizes, strides_splat);
 
                         mlir::VectorType dstType = mlir::VectorType::get(
                             {sizeFactor / 2}, rewriter.getF32Type());
 
-                        auto evenB = rewriter.create<
-                            mlir::x86vector::CvtPackedEvenIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto evenB =
+                            x86::avx::CvtPackedEvenIndexedToF32Op::create(
+                                rewriter, kForOp.getLoc(), dstType, subview);
 
-                        auto oddB = rewriter.create<
-                            mlir::x86vector::CvtPackedOddIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto oddB =
+                            x86::avx::CvtPackedOddIndexedToF32Op::create(
+                                rewriter, kForOp.getLoc(), dstType, subview);
 
-                        auto shuffle = rewriter.create<vector::ShuffleOp>(
-                            kForOp.getLoc(),
+                        auto shuffle = vector::ShuffleOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get({sizeFactor},
                                             rewriter.getF32Type()),
                             evenB, oddB,
@@ -1395,23 +1374,22 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                       llvm::SmallVector<OpFoldResult> sizes = {
                           rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                           rewriter.getIndexAttr(16)};
-                      auto subview = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                          sizes, strides_splat);
+                      auto subview = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                          offsets, sizes, strides_splat);
 
-                      auto evenB = rewriter.create<
-                          mlir::x86vector::CvtPackedEvenIndexedToF32Op>(
-                          kForOp.getLoc(), dstType, subview);
+                      auto evenB =
+                          x86::avx::CvtPackedEvenIndexedToF32Op::create(
+                              rewriter, kForOp.getLoc(), dstType, subview);
 
                       matf32.push_back(evenB);
 
-                      auto subview1 = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                          sizes, strides_splat);
+                      auto subview1 = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                          offsets, sizes, strides_splat);
 
-                      auto oddB = rewriter.create<
-                          mlir::x86vector::CvtPackedOddIndexedToF32Op>(
-                          kForOp.getLoc(), dstType, subview1);
+                      auto oddB = x86::avx::CvtPackedOddIndexedToF32Op::create(
+                          rewriter, kForOp.getLoc(), dstType, subview1);
 
                       // Odd FMAs
                       matf32.push_back(oddB);
@@ -1424,16 +1402,15 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                           rewriter.getIndexAttr(i),
                           rewriter.getIndexAttr(0),
                       };
-                      auto subview = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), lhsClone->getResult(0), offsets,
-                          sizes_splat, strides_splat);
-                      auto oddA =
-                          rewriter.create<mlir::x86vector::BcstToPackedF32Op>(
-                              kForOp.getLoc(), dstType, subview);
+                      auto subview = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), lhsClone->getResult(0),
+                          offsets, sizes_splat, strides_splat);
+                      auto oddA = x86::avx::BcstToPackedF32Op::create(
+                          rewriter, kForOp.getLoc(), dstType, subview);
 
                       for (int j = 0; j < (N / sizeFactor); j++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), oddA, matf32[j],
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), oddA, matf32[j],
                             iterArgsNewKForOp[k]);
                         k++;
                         evenFMAs.push_back(fmaOdd);
@@ -1447,12 +1424,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                           rewriter.getIndexAttr(i),
                           rewriter.getIndexAttr(0),
                       };
-                      auto subview = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), lhsClone->getResult(0), offsets,
-                          sizes_splat, strides_splat);
-                      auto oddA =
-                          rewriter.create<mlir::x86vector::BcstToPackedF32Op>(
-                              kForOp.getLoc(), dstType, subview);
+                      auto subview = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), lhsClone->getResult(0),
+                          offsets, sizes_splat, strides_splat);
+                      auto oddA = x86::avx::BcstToPackedF32Op::create(
+                          rewriter, kForOp.getLoc(), dstType, subview);
 
                       matf32.push_back(oddA);
                     }
@@ -1471,31 +1447,31 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                             rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                             rewriter.getIndexAttr(8)};
 
-                        auto subview = rewriter.create<memref::SubViewOp>(
-                            kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                            sizes, strides_splat);
+                        auto subview = memref::SubViewOp::create(
+                            rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                            offsets, sizes, strides_splat);
 
                         mlir::VectorType dstType = mlir::VectorType::get(
                             {sizeFactor / 2}, rewriter.getF32Type());
 
-                        auto evenB = rewriter.create<
-                            mlir::x86vector::CvtPackedEvenIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto evenB =
+                            x86::avx::CvtPackedEvenIndexedToF32Op::create(
+                                rewriter, kForOp.getLoc(), dstType, subview);
 
-                        auto oddB = rewriter.create<
-                            mlir::x86vector::CvtPackedOddIndexedToF32Op>(
-                            kForOp.getLoc(), dstType, subview);
+                        auto oddB =
+                            x86::avx::CvtPackedOddIndexedToF32Op::create(
+                                rewriter, kForOp.getLoc(), dstType, subview);
 
-                        auto shuffle = rewriter.create<vector::ShuffleOp>(
-                            kForOp.getLoc(),
+                        auto shuffle = vector::ShuffleOp::create(
+                            rewriter, kForOp.getLoc(),
                             VectorType::get({sizeFactor},
                                             rewriter.getF32Type()),
                             evenB, oddB,
                             ArrayRef<int64_t>{0, 4, 1, 5, 2, 6, 3, 7});
 
                         for (int i = 0; i < M; i++) {
-                          auto fmaOdd = rewriter.create<vector::FMAOp>(
-                              kForOp.getLoc(), matf32[i], shuffle,
+                          auto fmaOdd = vector::FMAOp::create(
+                              rewriter, kForOp.getLoc(), matf32[i], shuffle,
                               iterArgsNewKForOp[(j / sizeFactor) +
                                                 (i * (N / sizeFactor))]);
                           oddFMAs.push_back(fmaOdd);
@@ -1507,34 +1483,33 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                       llvm::SmallVector<OpFoldResult> sizes = {
                           rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                           rewriter.getIndexAttr(16)};
-                      auto subview = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                          sizes, strides_splat);
+                      auto subview = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                          offsets, sizes, strides_splat);
 
-                      auto evenB = rewriter.create<
-                          mlir::x86vector::CvtPackedEvenIndexedToF32Op>(
-                          kForOp.getLoc(), dstType, subview);
+                      auto evenB =
+                          x86::avx::CvtPackedEvenIndexedToF32Op::create(
+                              rewriter, kForOp.getLoc(), dstType, subview);
 
                       for (int i = 0; i < M; i++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), matf32[i], evenB,
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), matf32[i], evenB,
                             iterArgsNewKForOp[(j / sizeFactor) +
                                               (i * (N / sizeFactor))]);
                         oddFMAs.push_back(fmaOdd);
                       }
 
-                      auto subview1 = rewriter.create<memref::SubViewOp>(
-                          kForOp.getLoc(), rhsClone->getResult(0), offsets,
-                          sizes, strides_splat);
+                      auto subview1 = memref::SubViewOp::create(
+                          rewriter, kForOp.getLoc(), rhsClone->getResult(0),
+                          offsets, sizes, strides_splat);
 
-                      auto oddB = rewriter.create<
-                          mlir::x86vector::CvtPackedOddIndexedToF32Op>(
-                          kForOp.getLoc(), dstType, subview1);
+                      auto oddB = x86::avx::CvtPackedOddIndexedToF32Op::create(
+                          rewriter, kForOp.getLoc(), dstType, subview1);
 
                       // Odd FMAs
                       for (int i = 0; i < M; i++) {
-                        auto fmaOdd = rewriter.create<vector::FMAOp>(
-                            kForOp.getLoc(), matf32[i], oddB,
+                        auto fmaOdd = vector::FMAOp::create(
+                            rewriter, kForOp.getLoc(), matf32[i], oddB,
                             iterArgsNewKForOp[((j + sizeFactor) / sizeFactor) +
                                               (i * (N / sizeFactor))]);
                         oddFMAs.push_back(fmaOdd);
@@ -1553,26 +1528,24 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                 if (isSplat && bf16dp) {
                   if (mDriven) { // M -> N
                     for (int j = 0; j < N; j = j + 32) {
-                      Value indexOp_j = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), j);
+                      Value indexOp_j = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
 
                       // B Matrix load.
                       // For case where `B` is one vector<32xbf16>, we do
                       // interleaving with two vector<16xbf16>
                       if ((N - j) <= 16) {
-                        auto valueRow1 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
+                        auto valueRow1 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
 
-                        auto valueRow2 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
+                        auto valueRow2 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
 
                         SmallVector<Value> shuffle =
                             performShuffle(kForOp.getLoc(), rewriter, valueRow1,
@@ -1581,19 +1554,17 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                         matf32.push_back(shuffle[0]);
 
                       } else { // For two vector<32xbf16>, we do two shuffle.
-                        auto valueRow1 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * 2}, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
+                        auto valueRow1 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * 2}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
 
-                        auto valueRow2 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * 2}, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
+                        auto valueRow2 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * 2}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
 
                         SmallVector<Value> shuffle =
                             performShuffle(kForOp.getLoc(), rewriter, valueRow1,
@@ -1606,10 +1577,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                     // Load elements of A matrix, do dp, and store in a DS
                     for (int i = 0, k = 0; i < M; i++) {
-                      Value indexOp_i = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), i);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get(2, elementType),
+                      Value indexOp_i = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get(2, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_i, indexOp_c0});
 
@@ -1618,9 +1590,9 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                           elementType, i32Type);
 
                       for (int j = 0; j < (N / sizeFactor); j++) {
-                        auto dp = rewriter.create<mlir::x86vector::DotBF16Op>(
-                            kForOp.getLoc(), dstType, iterArgsNewKForOp[k],
-                            valuef32, matf32[j]);
+                        auto dp = x86::avx512::DotBF16Op::create(
+                            rewriter, kForOp.getLoc(), dstType,
+                            iterArgsNewKForOp[k], valuef32, matf32[j]);
                         k++;
                         evenFMAs.push_back(dp);
                       }
@@ -1629,10 +1601,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                   } else { // N -> M
                     // Load A matrix
                     for (int i = 0; i < M; i++) {
-                      Value indexOp_i = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), i);
-                      auto valueRow = rewriterNewKForOp.create<vector::LoadOp>(
-                          kForOp.getLoc(), VectorType::get(2, elementType),
+                      Value indexOp_i = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), i);
+                      auto valueRow = vector::LoadOp::create(
+                          rewriterNewKForOp, kForOp.getLoc(),
+                          VectorType::get(2, elementType),
                           lhsClone->getResult(0),
                           ValueRange{indexOp_c0, indexOp_i, indexOp_c0});
                       auto valuef32 = performBroadcast(
@@ -1643,31 +1616,29 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
                     // Load B Matrix
                     for (int j = 0; j < N; j = j + (sizeFactor * 2)) {
-                      Value indexOp_j = rewriter.create<arith::ConstantIndexOp>(
-                          reductionForOp.getLoc(), j);
+                      Value indexOp_j = arith::ConstantIndexOp::create(
+                          rewriter, reductionForOp.getLoc(), j);
 
                       if ((N - j) <= 16) {
-                        auto valueRow1 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
+                        auto valueRow1 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
 
-                        auto valueRow2 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get(sizeFactor, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
+                        auto valueRow2 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get(sizeFactor, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
 
                         SmallVector<Value> shuffle =
                             performShuffle(kForOp.getLoc(), rewriter, valueRow1,
                                            valueRow2, 16, sizeFactor, vnni);
 
                         for (int i = 0; i < M; i++) {
-                          auto dp = rewriter.create<mlir::x86vector::DotBF16Op>(
-                              kForOp.getLoc(), dstType,
+                          auto dp = x86::avx512::DotBF16Op::create(
+                              rewriter, kForOp.getLoc(), dstType,
                               iterArgsNewKForOp[(j / sizeFactor) +
                                                 (i * (N / sizeFactor))],
                               matf32[i], shuffle[0]);
@@ -1675,27 +1646,25 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                         }
 
                       } else {
-                        auto valueRow1 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * 2}, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
+                        auto valueRow1 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * 2}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c0, indexOp_j});
 
-                        auto valueRow2 =
-                            rewriterNewKForOp.create<vector::LoadOp>(
-                                kForOp.getLoc(),
-                                VectorType::get({sizeFactor * 2}, elementType),
-                                rhsClone->getResult(0),
-                                ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
+                        auto valueRow2 = vector::LoadOp::create(
+                            rewriterNewKForOp, kForOp.getLoc(),
+                            VectorType::get({sizeFactor * 2}, elementType),
+                            rhsClone->getResult(0),
+                            ValueRange{indexOp_c0, indexOp_c1, indexOp_j});
 
                         SmallVector<Value> shuffle =
                             performShuffle(kForOp.getLoc(), rewriter, valueRow1,
                                            valueRow2, 32, sizeFactor, vnni);
 
                         for (int i = 0; i < M; i++) {
-                          auto dp = rewriter.create<mlir::x86vector::DotBF16Op>(
-                              kForOp.getLoc(), dstType,
+                          auto dp = x86::avx512::DotBF16Op::create(
+                              rewriter, kForOp.getLoc(), dstType,
                               iterArgsNewKForOp[(j / sizeFactor) +
                                                 (i * (N / sizeFactor))],
                               matf32[i], shuffle[0]);
@@ -1703,8 +1672,8 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                         }
 
                         for (int i = 0; i < M; i++) {
-                          auto dp = rewriter.create<mlir::x86vector::DotBF16Op>(
-                              kForOp.getLoc(), dstType,
+                          auto dp = x86::avx512::DotBF16Op::create(
+                              rewriter, kForOp.getLoc(), dstType,
                               iterArgsNewKForOp[((j + sizeFactor) /
                                                  sizeFactor) +
                                                 (i * (N / sizeFactor))],
@@ -1723,11 +1692,11 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                   }
                 }
 
-                rewriterNewKForOp.create<scf::YieldOp>(locNewKForOp, evenFMAs);
+                scf::YieldOp::create(rewriterNewKForOp, locNewKForOp, evenFMAs);
               });
 
-          rewriterNewReductionForOp.create<scf::YieldOp>(
-              locNewReductionForOp, newKForOp.getResults());
+          scf::YieldOp::create(rewriterNewReductionForOp, locNewReductionForOp,
+                               newKForOp.getResults());
         });
 
     SmallVector<Value> FMAs = newReductionForOp.getResults();
@@ -1737,16 +1706,16 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
       for (int i = 0, k = 0; i < M; i++) {
         for (int j = 0; j < N; j = j + (sizeFactor * 2)) {
-          Value indexOp = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), i);
-          Value indexOp_B1 = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j);
-          Value indexOp_B2 = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j + sizeFactor);
+          Value indexOp = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), i);
+          Value indexOp_B1 = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j);
+          Value indexOp_B2 = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j + sizeFactor);
 
           if ((N - j) <= 8) {
-            Value valueCRow1 = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
+            Value valueCRow1 = vector::LoadOp::create(
+                rewriter, reductionForOp.getLoc(),
                 VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
                 ValueRange{indexOp, indexOp_B1});
 
@@ -1756,25 +1725,25 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                           elementType, i32Type, i16Type, cst16);
             }
 
-            Value addOp1 = rewriter.create<arith::AddFOp>(
-                reductionForOp.getLoc(), FMAs[k], valueCRow1);
+            Value addOp1 = arith::AddFOp::create(
+                rewriter, reductionForOp.getLoc(), FMAs[k], valueCRow1);
             splatFMAs.push_back(addOp1);
             k++;
             continue;
           }
 
-          auto shuffle1 = rewriter.create<vector::ShuffleOp>(
-              kForOp.getLoc(),
+          auto shuffle1 = vector::ShuffleOp::create(
+              rewriter, kForOp.getLoc(),
               VectorType::get({sizeFactor}, rewriter.getF32Type()), FMAs[k],
               FMAs[k + 1], ArrayRef<int64_t>{0, 8, 1, 9, 2, 10, 3, 11});
 
-          auto shuffle2 = rewriter.create<vector::ShuffleOp>(
-              kForOp.getLoc(),
+          auto shuffle2 = vector::ShuffleOp::create(
+              rewriter, kForOp.getLoc(),
               VectorType::get({sizeFactor}, rewriter.getF32Type()), FMAs[k],
               FMAs[k + 1], ArrayRef<int64_t>{4, 12, 5, 13, 6, 14, 7, 15});
 
-          Value valueCRow1 = rewriter.create<vector::LoadOp>(
-              reductionForOp.getLoc(),
+          Value valueCRow1 = vector::LoadOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
               ValueRange{indexOp, indexOp_B1});
 
@@ -1784,12 +1753,12 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                         elementType, i32Type, i16Type, cst16);
           }
 
-          Value addOp1 = rewriter.create<arith::AddFOp>(reductionForOp.getLoc(),
-                                                        shuffle1, valueCRow1);
+          Value addOp1 = arith::AddFOp::create(
+              rewriter, reductionForOp.getLoc(), shuffle1, valueCRow1);
           splatFMAs.push_back(addOp1);
 
-          Value valueCRow2 = rewriter.create<vector::LoadOp>(
-              reductionForOp.getLoc(),
+          Value valueCRow2 = vector::LoadOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
               ValueRange{indexOp, indexOp_B2});
 
@@ -1799,8 +1768,8 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                         elementType, i32Type, i16Type, cst16);
           }
 
-          Value addOp2 = rewriter.create<arith::AddFOp>(reductionForOp.getLoc(),
-                                                        shuffle2, valueCRow2);
+          Value addOp2 = arith::AddFOp::create(
+              rewriter, reductionForOp.getLoc(), shuffle2, valueCRow2);
           splatFMAs.push_back(addOp2);
 
           k = k + 2;
@@ -1823,16 +1792,16 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
       for (int i = 0, k = 0; i < M; i++) {
         for (int j = 0; j < N; j = j + (sizeFactor * 2)) {
-          Value indexOp = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), i);
-          Value indexOp_B1 = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j);
-          Value indexOp_B2 = rewriter.create<arith::ConstantIndexOp>(
-              reductionForOp.getLoc(), j + sizeFactor);
+          Value indexOp = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), i);
+          Value indexOp_B1 = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j);
+          Value indexOp_B2 = arith::ConstantIndexOp::create(
+              rewriter, reductionForOp.getLoc(), j + sizeFactor);
 
           if ((N - j) <= 16) { // Case: one vector<32xbf16>
-            Value valueCRow1 = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
+            Value valueCRow1 = vector::LoadOp::create(
+                rewriter, reductionForOp.getLoc(),
                 VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
                 ValueRange{indexOp, indexOp_B1});
 
@@ -1842,28 +1811,28 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                           elementType, i32Type, i16Type, cst16);
             }
 
-            Value addOp = rewriter.create<arith::AddFOp>(
-                reductionForOp.getLoc(), FMAs[k], valueCRow1);
+            Value addOp = arith::AddFOp::create(
+                rewriter, reductionForOp.getLoc(), FMAs[k], valueCRow1);
             splatFMAs.push_back(addOp);
             k++;
 
           } else { // Case: two vector<32xbf16>
-            auto shuffle1 = rewriter.create<vector::ShuffleOp>(
-                kForOp.getLoc(),
+            auto shuffle1 = vector::ShuffleOp::create(
+                rewriter, kForOp.getLoc(),
                 VectorType::get({sizeFactor}, rewriter.getF32Type()), FMAs[k],
                 FMAs[k + 1],
                 ArrayRef<int64_t>{0, 1, 2, 3, 16, 17, 18, 19, 4, 5, 6, 7, 20,
                                   21, 22, 23});
 
-            auto shuffle2 = rewriter.create<vector::ShuffleOp>(
-                kForOp.getLoc(),
+            auto shuffle2 = vector::ShuffleOp::create(
+                rewriter, kForOp.getLoc(),
                 VectorType::get({sizeFactor}, rewriter.getF32Type()), FMAs[k],
                 FMAs[k + 1],
                 ArrayRef<int64_t>{8, 9, 10, 11, 24, 25, 26, 27, 12, 13, 14, 15,
                                   28, 29, 30, 31});
 
-            Value valueCRow1 = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
+            Value valueCRow1 = vector::LoadOp::create(
+                rewriter, reductionForOp.getLoc(),
                 VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
                 ValueRange{indexOp, indexOp_B1});
 
@@ -1873,12 +1842,12 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                           elementType, i32Type, i16Type, cst16);
             }
 
-            Value addOp1 = rewriter.create<arith::AddFOp>(
-                reductionForOp.getLoc(), shuffle1, valueCRow1);
+            Value addOp1 = arith::AddFOp::create(
+                rewriter, reductionForOp.getLoc(), shuffle1, valueCRow1);
             splatFMAs.push_back(addOp1);
 
-            Value valueCRow2 = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
+            Value valueCRow2 = vector::LoadOp::create(
+                rewriter, reductionForOp.getLoc(),
                 VectorType::get(sizeFactor, outsElementType), subviewOpAcc,
                 ValueRange{indexOp, indexOp_B2});
 
@@ -1888,8 +1857,8 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
                                           elementType, i32Type, i16Type, cst16);
             }
 
-            Value addOp2 = rewriter.create<arith::AddFOp>(
-                reductionForOp.getLoc(), shuffle2, valueCRow2);
+            Value addOp2 = arith::AddFOp::create(
+                rewriter, reductionForOp.getLoc(), shuffle2, valueCRow2);
             splatFMAs.push_back(addOp2);
 
             k = k + 2;
@@ -1915,18 +1884,19 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
     auto zeroAttr = rewriter.getFloatAttr(rewriter.getF32Type(), 0.0);
     auto denseAttr = DenseElementsAttr::get(
         VectorType::get(sizeFactor, rewriter.getF32Type()), zeroAttr);
-    auto cst_zero = rewriter.create<arith::ConstantOp>(
-        reductionForOp.getLoc(),
+    auto cst_zero = arith::ConstantOp::create(
+        rewriter, reductionForOp.getLoc(),
         VectorType::get(sizeFactor, rewriter.getF32Type()), denseAttr);
-    auto c1 = rewriter.create<arith::ConstantOp>(
-        kForOp.getLoc(),
+    auto c1 = arith::ConstantOp::create(
+        rewriter, kForOp.getLoc(),
         DenseIntElementsAttr::get(VectorType::get(sizeFactor, i32Type), 1));
-    auto c16 = rewriter.create<arith::ConstantOp>(
-        kForOp.getLoc(),
+    auto c16 = arith::ConstantOp::create(
+        rewriter, kForOp.getLoc(),
         DenseIntElementsAttr::get(VectorType::get(sizeFactor, i32Type), 16));
-    auto c7fff = rewriter.create<arith::ConstantOp>(
-        kForOp.getLoc(), DenseIntElementsAttr::get(
-                             VectorType::get(sizeFactor, i32Type), 0x7fff));
+    auto c7fff = arith::ConstantOp::create(
+        rewriter, kForOp.getLoc(),
+        DenseIntElementsAttr::get(VectorType::get(sizeFactor, i32Type),
+                                  0x7fff));
 
     // We first retrive the source of the C matrix
     auto subview_itr = subviewOpAcc.getSource();
@@ -1996,10 +1966,10 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
 
     for (int j = 0, k = 0; j < N; j = j + sizeFactor) {
       for (int i = 0; i < M; i++) {
-        Value indexOp =
-            rewriter.create<arith::ConstantIndexOp>(reductionForOp.getLoc(), i);
-        Value indexOp_B =
-            rewriter.create<arith::ConstantIndexOp>(reductionForOp.getLoc(), j);
+        Value indexOp = arith::ConstantIndexOp::create(
+            rewriter, reductionForOp.getLoc(), i);
+        Value indexOp_B = arith::ConstantIndexOp::create(
+            rewriter, reductionForOp.getLoc(), j);
         Type type;
         if (elementType.isBF16())
           type = rewriter.getBF16Type();
@@ -2012,24 +1982,24 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
         if (addOp && maxOp && !isF32 && !isI8) {
           Value add_row;
           if (global_readOp) {
-            auto index_mlp = rewriter.create<arith::AddIOp>(
-                reductionForOp.getLoc(), rewriter.getIndexType(), nInductionVar,
-                indexOp_B);
-            add_row = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
-                VectorType::get(sizeFactor, elementType), global_readOp,
-                ValueRange{index_mlp});
+            auto index_mlp = arith::AddIOp::create(
+                rewriter, reductionForOp.getLoc(), rewriter.getIndexType(),
+                nInductionVar, indexOp_B);
+            add_row =
+                vector::LoadOp::create(rewriter, reductionForOp.getLoc(),
+                                       VectorType::get(sizeFactor, elementType),
+                                       global_readOp, ValueRange{index_mlp});
           }
 
           if (subview_readOp) {
-            auto index_mlp = rewriter.create<arith::AddIOp>(
-                reductionForOp.getLoc(), rewriter.getIndexType(), nInductionVar,
-                indexOp_B);
+            auto index_mlp = arith::AddIOp::create(
+                rewriter, reductionForOp.getLoc(), rewriter.getIndexType(),
+                nInductionVar, indexOp_B);
             auto offsetsVec = subview_readOp.getMixedOffsets();
             llvm::ArrayRef<mlir::OpFoldResult> offsets = offsetsVec;
             auto val_offset = offsets[0].dyn_cast<mlir::Value>();
-            add_row = rewriter.create<vector::LoadOp>(
-                reductionForOp.getLoc(),
+            add_row = vector::LoadOp::create(
+                rewriter, reductionForOp.getLoc(),
                 VectorType::get(sizeFactor, elementType),
                 subview_readOp.getSource(), ValueRange{val_offset, index_mlp});
           }
@@ -2038,35 +2008,35 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
           if (add_row) {
             Value f32MLPVector;
             if (elementType.isBF16()) {
-              auto bitcast_i16 = rewriter.create<vector::BitCastOp>(
-                  reductionForOp.getLoc(), VectorType::get(sizeFactor, i16Type),
-                  add_row);
-              auto extend_i32 = rewriter.create<arith::ExtUIOp>(
-                  reductionForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                  bitcast_i16);
-              auto shiftOp = rewriter.create<arith::ShLIOp>(
-                  reductionForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
-                  extend_i32,
-                  rewriter.create<vector::BroadcastOp>(
-                      reductionForOp.getLoc(),
+              auto bitcast_i16 = vector::BitCastOp::create(
+                  rewriter, reductionForOp.getLoc(),
+                  VectorType::get(sizeFactor, i16Type), add_row);
+              auto extend_i32 = arith::ExtUIOp::create(
+                  rewriter, reductionForOp.getLoc(),
+                  VectorType::get(sizeFactor, i32Type), bitcast_i16);
+              auto shiftOp = arith::ShLIOp::create(
+                  rewriter, reductionForOp.getLoc(),
+                  VectorType::get(sizeFactor, i32Type), extend_i32,
+                  vector::BroadcastOp::create(
+                      rewriter, reductionForOp.getLoc(),
                       VectorType::get(sizeFactor, i32Type), cst16));
-              f32MLPVector = rewriter.create<vector::BitCastOp>(
-                  reductionForOp.getLoc(),
+              f32MLPVector = vector::BitCastOp::create(
+                  rewriter, reductionForOp.getLoc(),
                   VectorType::get(sizeFactor, rewriter.getF32Type()), shiftOp);
             }
 
             if (elementType.isF16()) {
-              f32MLPVector = rewriter.create<arith::ExtFOp>(
-                  reductionForOp.getLoc(),
+              f32MLPVector = arith::ExtFOp::create(
+                  rewriter, reductionForOp.getLoc(),
                   VectorType::get(sizeFactor, rewriter.getF32Type()), add_row);
             }
 
-            auto add = rewriter.create<arith::AddFOp>(
-                reductionForOp.getLoc(),
+            auto add = arith::AddFOp::create(
+                rewriter, reductionForOp.getLoc(),
                 mlir::VectorType::get(sizeFactor, rewriter.getF32Type()),
                 acc_value, f32MLPVector);
-            auto max = rewriter.create<arith::MaximumFOp>(
-                reductionForOp.getLoc(),
+            auto max = arith::MaximumFOp::create(
+                rewriter, reductionForOp.getLoc(),
                 mlir::VectorType::get(sizeFactor, rewriter.getF32Type()), add,
                 cst_zero);
             acc_value = max;
@@ -2078,37 +2048,38 @@ struct MicroKernelsOp : OpRewritePattern<vector::ContractionOp> {
         // We do f32 -> bf16 downconvert using rshift, truncate and rounding
         // the lsb for the fallback case.
         if (fallback && isBF16 && !outsElementType.isF32()) {
-          auto vec = rewriter.create<vector::BitCastOp>(
-              kForOp.getLoc(), VectorType::get(sizeFactor, i32Type), acc_value);
-          auto rshift = rewriter.create<arith::ShRUIOp>(
-              kForOp.getLoc(), VectorType::get(sizeFactor, i32Type), vec, c16);
-          auto leastSB = rewriter.create<arith::AndIOp>(reductionForOp.getLoc(),
-                                                        rshift, c1);
-          auto roundBias = rewriter.create<arith::AddIOp>(
-              reductionForOp.getLoc(), c7fff, leastSB);
-          auto rounded_vec = rewriter.create<arith::AddIOp>(
-              reductionForOp.getLoc(), vec, roundBias);
-          auto shift = rewriter.create<arith::ShRUIOp>(reductionForOp.getLoc(),
-                                                       rounded_vec, c16);
-          auto truncate = rewriter.create<arith::TruncIOp>(
-              reductionForOp.getLoc(), VectorType::get(sizeFactor, i16Type),
-              shift);
-          vec_final = rewriter.create<vector::BitCastOp>(
-              reductionForOp.getLoc(),
+          auto vec = vector::BitCastOp::create(
+              rewriter, kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
+              acc_value);
+          auto rshift = arith::ShRUIOp::create(
+              rewriter, kForOp.getLoc(), VectorType::get(sizeFactor, i32Type),
+              vec, c16);
+          auto leastSB = arith::AndIOp::create(
+              rewriter, reductionForOp.getLoc(), rshift, c1);
+          auto roundBias = arith::AddIOp::create(
+              rewriter, reductionForOp.getLoc(), c7fff, leastSB);
+          auto rounded_vec = arith::AddIOp::create(
+              rewriter, reductionForOp.getLoc(), vec, roundBias);
+          auto shift = arith::ShRUIOp::create(rewriter, reductionForOp.getLoc(),
+                                              rounded_vec, c16);
+          auto truncate = arith::TruncIOp::create(
+              rewriter, reductionForOp.getLoc(),
+              VectorType::get(sizeFactor, i16Type), shift);
+          vec_final = vector::BitCastOp::create(
+              rewriter, reductionForOp.getLoc(),
               VectorType::get(sizeFactor, rewriter.getBF16Type()), truncate);
         }
 
         // We do arith.tuncf for f32 -> bf16 in SRF/ARL/SPR kind of machines
         if ((srf || bf16dp) && !outsElementType.isF32() && !isI8) {
-          vec_final = rewriter.create<arith::TruncFOp>(
-              reductionForOp.getLoc(), VectorType::get(sizeFactor, type),
-              acc_value);
+          vec_final = arith::TruncFOp::create(rewriter, reductionForOp.getLoc(),
+                                              VectorType::get(sizeFactor, type),
+                                              acc_value);
         }
 
         // Final store back the accumulate value into c matrix
-        rewriter.create<vector::StoreOp>(reductionForOp.getLoc(), vec_final,
-                                         subviewOpAcc,
-                                         ValueRange{indexOp, indexOp_B});
+        vector::StoreOp::create(rewriter, reductionForOp.getLoc(), vec_final,
+                                subviewOpAcc, ValueRange{indexOp, indexOp_B});
       }
     }
 
