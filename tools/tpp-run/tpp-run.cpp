@@ -160,7 +160,7 @@ TargetMachineOptions getTargetMachineOptions(StringRef option) {
 #elif defined(__riscv) && 64 == (__riscv_xlen)
   defaultTriple = "riscv64-linux-gnu";
   defaultCpu = "";
-  defaultFeature = "64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b";
+  defaultFeature = "+64bit,+m,+a,+f,+d,+c,+b,+zba,+zbb,+zbc,+zbs,+v,+zvl256b,+zicsr,+zifencei,+zicbom,+zicbop,+zicboz,+zicntr,+zicond,+zihintpause,+zihpm,+zfh,+zkt,+zvfh,+zvkt,+sscofpmf,+sstc,+svinval,+svnapot,+svpbmt";
 #else
 #error Unsupported architecture
 #endif
@@ -175,7 +175,7 @@ TargetMachineOptions getTargetMachineOptions(StringRef option) {
       .Case("amx_tile", {"x86_64-linux-gnu", "sapphirerapids", "+amx_tile"})
       .Case("neon", {"armv8a-linux-gnu", "cortex-a53", "+neon"})
       .Case("sve", {"armv8a-linux-gnu", "a64fx", "+sve"})
-      .Case("rvv", {"riscv64-linux-gnu", "", "64bit,+m,+a,+f,+d,+v,+zicsr,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl256b,+zvl128b,+zvl32b,+zvl64b"})
+      .Case("rvv", {"riscv64-linux-gnu", "", "+64bit,+m,+a,+f,+d,+c,+b,+zba,+zbb,+zbc,+zbs,+v,+zvl256b,+zicsr,+zifencei,+zicbom,+zicbop,+zicboz,+zicntr,+zicond,+zihintpause,+zihpm,+zfh,+zkt,+zvfh,+zvkt,+sscofpmf,+sstc,+svinval,+svnapot,+svpbmt"})
       .Case("testfeature", {"x86_64-linux-gnu", "sandybridge", "+testfeature"})
       .Default({defaultTriple, defaultCpu, defaultFeature});
 }
