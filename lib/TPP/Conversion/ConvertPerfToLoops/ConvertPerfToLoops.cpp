@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TPP/Dialect/Perf/PerfOps.h"
+#include "TPP/Dialect/Xsmm/XsmmOps.h"
 #include "TPP/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -51,12 +52,44 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
         rewriter, loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
     memref::StoreOp::create(rewriter, loc, zeroF64, acc, ValueRange{});
 
+    // Allocate cache-nuke buffers on the heap (too large for the stack).
+    // A<16384x512xf32>, B<512x16384xf32>, C<16384x16384xf32>.
+    // These will be used to run a large GEMM before each timed iteration to
+    // flush all cache levels, ensuring the benchmark measures cold-cache
+    // performance.
+    constexpr int64_t nukeM = 16384, nukeN = 16384, nukeK = 512;
+    auto f32Type = rewriter.getF32Type();
+    auto nukeA = memref::AllocOp::create(
+        rewriter, loc, MemRefType::get({nukeM, nukeK}, f32Type));
+    auto nukeB = memref::AllocOp::create(
+        rewriter, loc, MemRefType::get({nukeK, nukeN}, f32Type));
+    auto nukeC = memref::AllocOp::create(
+        rewriter, loc, MemRefType::get({nukeM, nukeN}, f32Type));
+
+    // Dispatch the cache-nuke GEMM once.
+    auto integer64 = IntegerType::get(rewriter.getContext(), 64);
+    auto dtype =
+        xsmm::DataTypeAttr::get(rewriter.getContext(), xsmm::DataType::F32);
+    auto nukeFlags = rewriter.getArrayAttr(
+        xsmm::GemmFlagsAttr::get(rewriter.getContext(), xsmm::GemmFlags::NONE));
+    auto nukeDims = DenseI64ArrayAttr::get(
+        rewriter.getContext(),
+        ArrayRef<int64_t>{nukeM, nukeN, nukeK, /*lda=*/nukeK, /*ldb=*/nukeN,
+                          /*ldc=*/nukeN});
+    Value nukeDispatch = xsmm::GemmDispatchOp::create(
+        rewriter, loc, integer64, nukeDims, nukeFlags, dtype);
+
     // Create benchmark loop up to perf.bench numIters.
     auto loop = scf::ForOp::create(rewriter, loc, zero, numIters, one,
                                    benchOp.getIterArgs());
 
     // Load the total accumulated time after the loop – this becomes the delta.
     auto finalVal = memref::LoadOp::create(rewriter, loc, acc, ValueRange{});
+
+    // Free the cache-nuke buffers after the loop.
+    memref::DeallocOp::create(rewriter, loc, nukeA);
+    memref::DeallocOp::create(rewriter, loc, nukeB);
+    memref::DeallocOp::create(rewriter, loc, nukeC);
 
     if (benchOp.getIterArgs().empty()) {
       // Erase the default loop yield, it will be inserted later.
@@ -77,11 +110,18 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
          llvm::zip_equal(benchOp.getIterArgs(), loop.getRegionIterArgs()))
       replaceAllUsesInRegionWith(benchArg, loopArg, loop.getRegion());
 
-    // Insert timer start at the beginning of the loop body, before the kernel.
+    // Insert cache-nuke GEMM at the start of the loop body to flush all cache
+    // levels, then start the timer immediately after so GEMM time is excluded.
     Value timerVal;
     {
       OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(loop.getBody());
+      auto nukeGemm = xsmm::GemmOp::create(
+          rewriter, loc, dtype,
+          ValueRange{nukeDispatch, nukeA.getResult(), nukeB.getResult(),
+                     nukeC.getResult()});
+      // Advance past the GEMM so the timer is inserted after it.
+      rewriter.setInsertionPointAfter(nukeGemm);
       timerVal = perf::StartTimerOp::create(
                      rewriter, loc, TimerType::get(rewriter.getContext()))
                      .getTimer();

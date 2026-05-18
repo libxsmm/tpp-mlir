@@ -11,5 +11,6 @@ add_mlir_conversion_library(TPPPerfToLoop
   MLIRIR
   MLIRPass
   TPPPerfDialect
+  TPPXsmmDialect
   MLIRSCFDialect
   )

@@ -59,5 +59,6 @@ private:
     pm.addNestedPass<func::FuncOp>(createConvertCheckToLoops());
     pm.addNestedPass<func::FuncOp>(createConvertPerfToLoops());
     pm.addPass(createConvertPerfToFunc());
+    pm.addPass(createConvertXsmmToFunc());
   }
 };

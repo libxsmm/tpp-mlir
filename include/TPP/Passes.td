@@ -231,7 +231,8 @@ def ConvertPerfToLoops : Pass<"convert-perf-to-loops", "func::FuncOp"> {
     Convert perf operations to SCF loops.
   }];
   let dependentDialects = ["scf::SCFDialect",
-                           "memref::MemRefDialect"];
+                           "memref::MemRefDialect",
+                           "xsmm::XsmmDialect"];
 }
 
 def ConvertPerfToFunc : Pass<"convert-perf-to-func", "ModuleOp"> {
