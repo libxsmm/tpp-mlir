@@ -363,6 +363,17 @@ def ElementWiseFusion : Pass<"element-wise-fusion", "func::FuncOp"> {
   let summary = "Run linalg element-wise fusion";
 }
 
+def TileElementWiseOps : Pass<"tile-elementwise-ops", "func::FuncOp"> {
+  let summary = "Tile elementwise linalg.generic operations";
+  let description = [{
+    Tile elementwise linalg.generic operations to enable better vectorization.
+  }];
+  let dependentDialects = ["linalg::LinalgDialect", "scf::SCFDialect"];
+  let options = [
+    ListOption<"tileSizes", "tile-sizes", "int64_t", "Tile sizes">,
+  ];
+}
+
 def Bufferize : Pass<"bufferize", "ModuleOp"> {
   let summary = "Bufferize tensor to memref for the entire module";
   let options = [

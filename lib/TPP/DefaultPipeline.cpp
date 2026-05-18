@@ -93,6 +93,11 @@ llvm::cl::opt<bool>
                        llvm::cl::desc("Disables VNNI packing for packed types"),
                        llvm::cl::init(false));
 
+llvm::cl::opt<bool> disableTileElementwiseOps(
+    "disable-tile-elementwise-ops",
+    llvm::cl::desc("Disables tiling of elementwise operations"),
+    llvm::cl::init(false));
+
 llvm::cl::list<unsigned> registerBlocking(
     "registerBlocking",
     llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
@@ -184,6 +189,7 @@ private:
       tppDefaultOptions.lowerPackUnpackWithoutTranspose =
           lowerPackUnpackWithoutTranspose;
       tppDefaultOptions.disableVnniPacking = disableVnniPacking;
+      tppDefaultOptions.disableTileElementwiseOps = disableTileElementwiseOps;
       tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
           registerBlocking.begin(), registerBlocking.end()};
       tppDefaultOptions.vectorToKernel = vectorToKernel;

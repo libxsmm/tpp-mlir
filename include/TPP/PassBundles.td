@@ -61,6 +61,9 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"disableVnniPacking", "disable-vnni-packing",
            "bool", /*default=*/"false",
            "Disables VNNI packing for packed types.">,
+    Option<"disableTileElementwiseOps", "disable-tile-elementwise-ops",
+           "bool", /*default=*/"false",
+           "Disables tiling of elementwise operations.">,
     ListOption<"registerBlocking", "registerBlocking",
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
     ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
@@ -85,7 +88,10 @@ def TppMapping : Pass<"tpp-mapping", "ModuleOp"> {
            "Lower non-constant packs and unpacks reverting any dim permutations.">,
     Option<"disableVnniPacking", "disable-vnni-packing",
            "bool", /*default=*/"false",
-           "Disables VNNI packing for packed types.">
+           "Disables VNNI packing for packed types.">,
+    Option<"disableTileElementwiseOps", "disable-tile-elementwise-ops",
+           "bool", /*default=*/"false",
+           "Disables tiling of elementwise operations.">,
   ];
 }
 
