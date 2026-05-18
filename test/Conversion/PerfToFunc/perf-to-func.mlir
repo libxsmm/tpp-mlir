@@ -69,18 +69,25 @@ func.func @perf_example(%A: tensor<4x8xf32>,
   // CHECK-DAG: %[[lb:.*]] = arith.constant 0 : index
   // CHECK-DAG: %[[step:.*]] = arith.constant 1 : index
   // CHECK-DAG: %[[output:.*]] = arith.constant 0 : i64
+  // CHECK-DAG: %[[zero:.*]] = arith.constant 0.000000e+00 : f64
   %output = arith.constant 0 : i64
 
   // CHECK: %[[ub:.*]] = arith.index_cast %arg3 : i64 to index
-  // CHECK: %[[timer:.*]] = call @perf_start_timer()
+  // CHECK: %[[acc:.*]] = memref.alloca() : memref<f64>
+  // CHECK: memref.store %[[zero]], %[[acc]][] : memref<f64>
   // CHECK: %[[res:.*]] = scf.for %[[i:.*]] = %[[lb]] to %[[ub]] step %[[step]] iter_args(%[[iarg0:.*]] = %[[output]]) -> (i64) {
+  // CHECK:   %[[timer:.*]] = func.call @perf_start_timer()
   // CHECK:   %[[mulres:.*]] = linalg.matmul
   // CHECK:   %[[tcast0:.*]] = tensor.cast %[[mulres]]
-  // CHECK:   call @perf_sink_tensor_f32(%[[tcast0]])
+  // CHECK:   func.call @perf_sink_tensor_f32(%[[tcast0]])
   // CHECK:   %[[sum:.*]] = arith.addi
+  // CHECK:   %[[delta:.*]] = func.call @perf_stop_timer(%[[timer]])
+  // CHECK:   %[[curr:.*]] = memref.load %[[acc]][]
+  // CHECK:   %[[newval:.*]] = arith.addf %[[curr]], %[[delta]]
+  // CHECK:   memref.store %[[newval]], %[[acc]][]
   // CHECK:   scf.yield %[[sum]]
   // CHECK: }
-  // CHECK: %[[stats:.*]] = call @perf_stop_timer(%[[timer]])
+  // CHECK: %[[stats:.*]] = memref.load %[[acc]][]
   %stats, %res = perf.bench (%n : i64) iter_args(%arg0 = %output) -> (f64, i64) {
     %D = linalg.matmul ins(%A, %B: tensor<4x8xf32>, tensor<8x4xf32>)
                        outs(%C: tensor<4x4xf32>) -> tensor<4x4xf32>

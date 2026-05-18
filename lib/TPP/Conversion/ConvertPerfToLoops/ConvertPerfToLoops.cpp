@@ -39,17 +39,24 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
 
     auto zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
     auto one = arith::ConstantIndexOp::create(rewriter, loc, 1);
-    auto numIters = arith::IndexCastOp::create(rewriter, 
-        loc, rewriter.getIndexType(), benchOp.getNumIters());
+    auto numIters = arith::IndexCastOp::create(
+        rewriter, loc, rewriter.getIndexType(), benchOp.getNumIters());
+
+    // Allocate a scalar f64 accumulator on the stack and zero-initialize it.
+    // Per-iteration timings accumulate here so that any extra ops inserted
+    // between iterations are excluded from measurement.
+    auto acc = memref::AllocaOp::create(
+        rewriter, loc, MemRefType::get({}, rewriter.getF64Type()));
+    auto zeroF64 = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+    memref::StoreOp::create(rewriter, loc, zeroF64, acc, ValueRange{});
 
     // Create benchmark loop up to perf.bench numIters.
-    // Wrap the benchmark kernel in timer calls.
-    auto timer = perf::StartTimerOp::create(rewriter, 
-        loc, TimerType::get(rewriter.getContext()));
     auto loop = scf::ForOp::create(rewriter, loc, zero, numIters, one,
-                                            benchOp.getIterArgs());
-    auto delta = perf::StopTimerOp::create(rewriter, loc, rewriter.getF64Type(),
-                                                    timer.getTimer());
+                                   benchOp.getIterArgs());
+
+    // Load the total accumulated time after the loop – this becomes the delta.
+    auto finalVal = memref::LoadOp::create(rewriter, loc, acc, ValueRange{});
 
     if (benchOp.getIterArgs().empty()) {
       // Erase the default loop yield, it will be inserted later.
@@ -70,22 +77,45 @@ struct ConvertBenchToLoops : public OpRewritePattern<perf::BenchOp> {
          llvm::zip_equal(benchOp.getIterArgs(), loop.getRegionIterArgs()))
       replaceAllUsesInRegionWith(benchArg, loopArg, loop.getRegion());
 
+    // Insert timer start at the beginning of the loop body, before the kernel.
+    Value timerVal;
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(loop.getBody());
+      timerVal = perf::StartTimerOp::create(
+                     rewriter, loc, TimerType::get(rewriter.getContext()))
+                     .getTimer();
+    }
+
+    // Insert timer stop and time accumulation just before the perf.yield.
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPoint(benchYield);
+      auto iterDelta = perf::StopTimerOp::create(
+          rewriter, loc, rewriter.getF64Type(), timerVal);
+      auto currVal = memref::LoadOp::create(rewriter, loc, acc, ValueRange{});
+      auto newVal = arith::AddFOp::create(rewriter, loc, currVal, iterDelta);
+      memref::StoreOp::create(rewriter, loc, newVal, acc, ValueRange{});
+    }
+
     // Pass perf.yield values through the scf.yield.
-    OpBuilder::InsertionGuard guard(rewriter);
-    rewriter.setInsertionPointToEnd(loop.getBody());
-    scf::YieldOp::create(rewriter, loc, benchYield->getOperands());
-    rewriter.eraseOp(benchYield);
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToEnd(loop.getBody());
+      scf::YieldOp::create(rewriter, loc, benchYield->getOperands());
+      rewriter.eraseOp(benchYield);
+    }
 
     // Swap bench results with loop results.
     assert((benchOp.getBodyResults().size() == loop.getResults().size() + 1) &&
            "expect equal number of return variables");
 
-    // First, we add the timer delta as a loop result
+    // Use finalVal (total accumulated time) as the delta result.
     SmallVector<Value> loopResults;
-    loopResults.push_back(delta);
-    // Then we add the rest of the iter args
+    loopResults.push_back(finalVal);
+    // Then add the iter_args results.
     loopResults.append(loop.getResults().begin(), loop.getResults().end());
-    // And replace everything
+    // Replace everything.
     for (auto [benchRes, loopRes] :
          llvm::zip_equal(benchOp.getBodyResults(), loopResults))
       benchRes.replaceAllUsesWith(loopRes);

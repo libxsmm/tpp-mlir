@@ -39,8 +39,8 @@ func.func @perf_dialect(%A: tensor<4x8xf32>,
 
 // CHECK-LABEL: func.func @perf_dialect(
 // CHECK-NOT: perf.bench
-// CHECK: {{[\w]*\.?}}call @perf_start_timer
 // CHECK: scf.for
+// CHECK: {{[\w]*\.?}}call @perf_start_timer
 // CHECK: {{[\w]*\.?}}call @perf_stop_timer
 
 // -----
