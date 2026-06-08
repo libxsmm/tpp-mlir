@@ -590,20 +590,6 @@ static void prefetchTiles(PatternRewriter &rewriter, Location loc,
   }
 }
 
-// Update all tensor descriptors offsets with the fixed offsets.
-/*static SmallVector<Value> updateTilesOffsets(PatternRewriter &rewriter,
-                                             Location loc, ValueRange tiles,
-                                             ArrayRef<int64_t> offsets) {
-  SmallVector<Value> updatedTiles;
-  for (auto tile : tiles) {
-    auto updatedTile = xegpu::UpdateNdOffsetOp::create(rewriter, loc,
-tile.getType(), tile, ValueRange{}, offsets) .getResult();
-    updatedTiles.push_back(updatedTile);
-  }
-
-  return updatedTiles;
-}*/
-
 // Split a source into a series of descriptor tiles.
 //
 // The descriptors collectively load a 2D shape at the specified offsets from
@@ -638,12 +624,10 @@ static SmallVector<Value> createDescriptorTiles(PatternRewriter &rewriter,
 
       Value row =
           arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[0] + i);
-
       Value col =
           arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[1] + j);
 
       SmallVector<OpFoldResult> offsets{row, col};
-
       auto tile = xegpu::CreateNdDescOp::create(
           rewriter, loc, descType, dyn_cast<TypedValue<MemRefType>>(src),
           offsets, ArrayRef<OpFoldResult>{});
@@ -979,10 +963,6 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
       for (int i = 0; i < prefetchStages; i++) {
         prefetchTiles(rewriter, loc, ValueRange{prefetchA}, readCacheHint);
         prefetchTiles(rewriter, loc, ValueRange{prefetchB}, readCacheHint);
-        // prefetchA = updateTilesOffsets(rewriter, loc, ValueRange{prefetchA},
-        //                              {0, kTile})[0];
-        // prefetchB = updateTilesOffsets(rewriter, loc, ValueRange{prefetchB},
-        //                              {kTile, 0})[0];
       }
     } else {
       // Disable coop prefetching on failure.
@@ -1067,10 +1047,6 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
     // Prefetch all block/workgroup tiles cooperatively.
     prefetchTiles(rewriter, loc, ValueRange{prefetchA}, readCacheHint);
     prefetchTiles(rewriter, loc, ValueRange{prefetchB}, readCacheHint);
-    // prefetchA =
-    // updateTilesOffsets(rewriter, loc, ValueRange{prefetchA}, {0, kTile})[0];
-    // prefetchB =
-    // updateTilesOffsets(rewriter, loc, ValueRange{prefetchB}, {kTile, 0})[0];
   } else {
     // Apply naive prefetching for each subgroup separately.
     prefetchTiles(rewriter, loc, tilesA, readCacheHint);
@@ -1158,10 +1134,10 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   SmallVector<xegpu::StoreNdOp> storeOps;
   for (size_t i = 0; i < tilesC.size(); i++) {
     auto storeOp = xegpu::StoreNdOp::create(
-        rewriter, loc, results[i], tilesC[i], ValueRange(), DenseI64ArrayAttr(),
+        rewriter, loc, results[i], tilesC[i], ValueRange(), nullptr,
         /*l1_hint=*/writeCacheHint,
         /*l2_hint=*/writeCacheHint,
-        /*l3_hint=*/writeCacheHint, DistributeLayoutAttr());
+        /*l3_hint=*/writeCacheHint, nullptr);
     storeOps.push_back(storeOp);
   }
 
@@ -1238,11 +1214,10 @@ LogicalResult createEltwiseKernel(linalg::LinalgOp linalgOp,
       xegpu::CachePolicyAttr::get(ctx, xegpu::CachePolicy::WRITE_BACK);
   for (size_t i = 0; i < outputTiles.size(); i++) {
     xegpu::StoreNdOp::create(rewriter, loc, TypeRange(), results[i],
-                             outputTiles[i], ValueRange(), DenseI64ArrayAttr(),
+                             outputTiles[i], ValueRange(), nullptr,
                              /*l1_hint=*/writeCacheHint,
                              /*l2_hint=*/writeCacheHint,
-                             /*l3_hint=*/writeCacheHint,
-                             xegpu::DistributeLayoutAttr());
+                             /*l3_hint=*/writeCacheHint, nullptr);
   }
 
   rewriter.eraseOp(linalgOp);
