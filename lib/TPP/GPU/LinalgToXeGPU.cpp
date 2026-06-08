@@ -186,11 +186,13 @@ static std::optional<Value> lowerGenericOp(linalg::GenericOp genericOp,
 
     if (isa<FloatType>(eltType)) {
       auto floatType = cast<FloatType>(eltType);
-      zeroConst = arith::ConstantFloatOp::create(rewriter, 
-          loc, floatType, APFloat::getZero(floatType.getFloatSemantics()));
+      zeroConst = arith::ConstantFloatOp::create(
+          rewriter, loc, floatType,
+          APFloat::getZero(floatType.getFloatSemantics()));
     } else if (isa<IntegerType>(eltType)) {
       auto intType = llvm::dyn_cast<mlir::IntegerType>(eltType);
-      zeroConst = arith::ConstantIntOp::create(rewriter, loc, 0, intType.getWidth());
+      zeroConst =
+          arith::ConstantIntOp::create(rewriter, loc, 0, intType.getWidth());
     } else {
       // Unhandled type. Bail out.
       return std::nullopt;
@@ -199,14 +201,16 @@ static std::optional<Value> lowerGenericOp(linalg::GenericOp genericOp,
     auto zeroVec =
         vector::BroadcastOp::create(rewriter, loc, resType, zeroConst);
 
-    return arith::MaximumFOp::create(rewriter, loc, resType, operands[0], zeroVec)
+    return arith::MaximumFOp::create(rewriter, loc, resType, operands[0],
+                                     zeroVec)
         .getResult();
   }
 
   if (structured_match::utils::isTwoDAddOp(genericOp, /*operands=*/nullptr)) {
     assert(operands.size() == 2 &&
            "Invalid number of operands for generic 2D add");
-    return arith::AddFOp::create(rewriter, loc, resType, operands[0], operands[1])
+    return arith::AddFOp::create(rewriter, loc, resType, operands[0],
+                                 operands[1])
         .getResult();
   }
 
@@ -254,11 +258,13 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::AddOp addOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for add");
         if (isa<FloatType>(eltType)) {
-          return arith::AddFOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::AddFOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return arith::AddIOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::AddIOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -272,11 +278,13 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::DivOp divOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for div");
         if (isa<FloatType>(eltType)) {
-          return arith::DivFOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::DivFOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return arith::DivSIOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::DivSIOp::create(rewriter, loc, resType, operands[0],
+                                        operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -286,7 +294,8 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
         assert(operands.size() == 2 &&
                "Invalid number of operands for unsigned div");
         if (isa<IntegerType>(eltType)) {
-          return arith::DivUIOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::DivUIOp::create(rewriter, loc, resType, operands[0],
+                                        operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -305,15 +314,18 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::MaxOp maxOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for max");
         if (isa<FloatType>(eltType)) {
-          return arith::MaximumFOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::MaximumFOp::create(rewriter, loc, resType, operands[0],
+                                           operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
           if (eltType.isUnsignedInteger()) {
-            return arith::MaxUIOp::create(rewriter, loc, resType, operands[0], operands[1])
+            return arith::MaxUIOp::create(rewriter, loc, resType, operands[0],
+                                          operands[1])
                 .getResult();
           } else {
-            return arith::MaxSIOp::create(rewriter, loc, resType, operands[0], operands[1])
+            return arith::MaxSIOp::create(rewriter, loc, resType, operands[0],
+                                          operands[1])
                 .getResult();
           }
         }
@@ -323,11 +335,13 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::MulOp mulOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for mul");
         if (isa<FloatType>(eltType)) {
-          return arith::MulFOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::MulFOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return arith::MulIOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::MulIOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -341,11 +355,13 @@ static std::optional<Value> lowerEltwiseOp(linalg::LinalgOp linalgOp,
       .Case([&](linalg::SubOp subOp) -> std::optional<Value> {
         assert(operands.size() == 2 && "Invalid number of operands for sub");
         if (isa<FloatType>(eltType)) {
-          return arith::SubFOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::SubFOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         if (isa<IntegerType>(eltType)) {
-          return arith::SubIOp::create(rewriter, loc, resType, operands[0], operands[1])
+          return arith::SubIOp::create(rewriter, loc, resType, operands[0],
+                                       operands[1])
               .getResult();
         }
         // Unhandled type. Bail out.
@@ -556,9 +572,9 @@ createGemmCoopPrefetchTile(PatternRewriter &rewriter, linalg::LinalgOp linalgOp,
 
   SmallVector<mlir::OpFoldResult> prefetchOffsets{eltRowOffset, eltColOffset};
 
-  return xegpu::CreateNdDescOp::create(rewriter, 
-      loc, prefetchType, dyn_cast<TypedValue<MemRefType>>(src),
-      prefetchOffsets);
+  return xegpu::CreateNdDescOp::create(
+      rewriter, loc, prefetchType, dyn_cast<TypedValue<MemRefType>>(src),
+      prefetchOffsets, llvm::ArrayRef<OpFoldResult>());
 }
 
 // Insert prefetches for the given tensor descriptors.
@@ -567,27 +583,26 @@ static void prefetchTiles(PatternRewriter &rewriter, Location loc,
                           xegpu::CachePolicyAttr readCacheHint) {
   // Prefetch the next set of input tiles.
   for (auto tile : prefetchTiles) {
-    xegpu::PrefetchNdOp::create(rewriter, loc, tile,
-                                         /*l1_hint=*/readCacheHint,
-                                         /*l2_hint=*/readCacheHint,
-                                         /*l3_hint=*/readCacheHint);
+    xegpu::PrefetchNdOp::create(rewriter, loc, tile, ValueRange(), nullptr,
+                                /*l1_hint=*/readCacheHint,
+                                /*l2_hint=*/readCacheHint,
+                                /*l3_hint=*/readCacheHint, nullptr);
   }
 }
 
 // Update all tensor descriptors offsets with the fixed offsets.
-static SmallVector<Value> updateTilesOffsets(PatternRewriter &rewriter,
+/*static SmallVector<Value> updateTilesOffsets(PatternRewriter &rewriter,
                                              Location loc, ValueRange tiles,
                                              ArrayRef<int64_t> offsets) {
   SmallVector<Value> updatedTiles;
   for (auto tile : tiles) {
-    auto updatedTile = xegpu::UpdateNdOffsetOp::create(rewriter, loc, tile.getType(), tile,
-                                             /*offsets=*/ValueRange{}, offsets)
-            .getResult();
+    auto updatedTile = xegpu::UpdateNdOffsetOp::create(rewriter, loc,
+tile.getType(), tile, ValueRange{}, offsets) .getResult();
     updatedTiles.push_back(updatedTile);
   }
 
   return updatedTiles;
-}
+}*/
 
 // Split a source into a series of descriptor tiles.
 //
@@ -616,24 +631,24 @@ static SmallVector<Value> createDescriptorTiles(PatternRewriter &rewriter,
   // offsets compared to creating separate descriptors.
   // The original tile is split into contiguous sub-tiles so, the first tile
   // can be used as an anchor.
-  Value rootOffsetRow =
-      arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[0]);
-  Value rootOffsetCol =
-      arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[1]);
-
-  mlir::SmallVector<mlir::OpFoldResult> offsets{rootOffsetRow, rootOffsetCol};
-  auto rootTile = xegpu::CreateNdDescOp::create(rewriter, 
-              loc, descType, dyn_cast<TypedValue<MemRefType>>(src), offsets)
-          .getResult();
 
   SmallVector<Value> tiles;
   for (int i = 0; i < loadShape[0]; i += descTile[0]) {
     for (int j = 0; j < loadShape[1]; j += descTile[1] * arrayLength) {
-      auto tile = xegpu::UpdateNdOffsetOp::create(rewriter, 
-                          loc, descType, rootTile,
-                          /*offsets=*/ValueRange{}, SmallVector<int64_t>{i, j})
-                      .getResult();
-      tiles.push_back(tile);
+
+      Value row =
+          arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[0] + i);
+
+      Value col =
+          arith::ConstantIndexOp::create(rewriter, loc, loadOffsets[1] + j);
+
+      SmallVector<OpFoldResult> offsets{row, col};
+
+      auto tile = xegpu::CreateNdDescOp::create(
+          rewriter, loc, descType, dyn_cast<TypedValue<MemRefType>>(src),
+          offsets, ArrayRef<OpFoldResult>{});
+
+      tiles.push_back(tile.getResult());
     }
   }
 
@@ -718,10 +733,11 @@ loadNdDescTiles(PatternRewriter &rewriter, Location loc, ValueRange loadTiles,
 
   SmallVector<Value> loadVec;
   for (auto tile : loadTiles) {
-    auto loadOp = xegpu::LoadNdOp::create(rewriter, 
-        loc, vecLoadType, tile, vnniPackedAttr, transpose,
-        /*l1_hint=*/hint,
-        /*l2_hint=*/hint, /*l3_hint=*/hint);
+    auto loadOp =
+        xegpu::LoadNdOp::create(rewriter, loc, vecLoadType, tile, ValueRange(),
+                                nullptr, vnniPackedAttr, transpose,
+                                /*l1_hint=*/hint,
+                                /*l2_hint=*/hint, /*l3_hint=*/hint, nullptr);
     loadVec.push_back(loadOp);
   }
   // TODO: Add split over the array_length > 1.
@@ -750,8 +766,8 @@ extractVecSubTiles(PatternRewriter &rewriter, Location loc,
                         return cast<VectorType>(tile.getType()) == vecLoadType;
                       }) &&
          "All loaded vectors must have the same type.");
-  assert((vecLoadType.getShape().size() == 2 ||
-          vnniConf) && "Requires VNNI config for non 2D loaded tiles");
+  assert((vecLoadType.getShape().size() == 2 || vnniConf) &&
+         "Requires VNNI config for non 2D loaded tiles");
 
   // Accumulate all dimensions as the vector might have extra VNNI
   // dimensions.
@@ -794,8 +810,8 @@ extractVecSubTiles(PatternRewriter &rewriter, Location loc,
           int dpasIdx = i * subTilePerLoadCol + j;
           int offset = dpasIdx * subTileSize;
 
-          auto slice = vector::ExtractStridedSliceOp::create(rewriter, 
-              loc, castFlat, /*offsets=*/ArrayRef<int64_t>{offset},
+          auto slice = vector::ExtractStridedSliceOp::create(
+              rewriter, loc, castFlat, /*offsets=*/ArrayRef<int64_t>{offset},
               /*sizes=*/ArrayRef<int64_t>{subTileSize},
               /*strides=*/ArrayRef<int64_t>{1});
           auto castTile =
@@ -963,10 +979,10 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
       for (int i = 0; i < prefetchStages; i++) {
         prefetchTiles(rewriter, loc, ValueRange{prefetchA}, readCacheHint);
         prefetchTiles(rewriter, loc, ValueRange{prefetchB}, readCacheHint);
-        prefetchA = updateTilesOffsets(rewriter, loc, ValueRange{prefetchA},
-                                       {0, kTile})[0];
-        prefetchB = updateTilesOffsets(rewriter, loc, ValueRange{prefetchB},
-                                       {kTile, 0})[0];
+        // prefetchA = updateTilesOffsets(rewriter, loc, ValueRange{prefetchA},
+        //                              {0, kTile})[0];
+        // prefetchB = updateTilesOffsets(rewriter, loc, ValueRange{prefetchB},
+        //                              {kTile, 0})[0];
       }
     } else {
       // Disable coop prefetching on failure.
@@ -992,8 +1008,9 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   tilesA =
       SmallVector<Value>{iterValues.begin() + loadVecC.size(),
                          iterValues.begin() + loadVecC.size() + tilesA.size()};
-  tilesB = SmallVector<Value>{iterValues.begin() + loadVecC.size() + tilesA.size(),
-                              iterValues.begin() + loadVecC.size() + tilesA.size() + tilesB.size()};
+  tilesB = SmallVector<Value>{
+      iterValues.begin() + loadVecC.size() + tilesA.size(),
+      iterValues.begin() + loadVecC.size() + tilesA.size() + tilesB.size()};
   if (isCoopPrefetch) {
     prefetchA = *(iterValues.end() - 2);
     prefetchB = *(iterValues.end() - 1);
@@ -1008,12 +1025,12 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   int maxSyncStep = 1024;
   int syncStep = std::min(std::max(dimK / syncFreq, maxSyncStep), maxSyncStep);
   auto syncStepConst = arith::ConstantIndexOp::create(rewriter, loc, syncStep);
-  auto loopStepMod = arith::RemUIOp::create(rewriter, 
-      loc, kDimLoop.getInductionVar(), syncStepConst);
-  auto syncBlockCond = arith::CmpIOp::create(rewriter, 
-      loc, arith::CmpIPredicate::eq, loopStepMod, zero);
-  scf::IfOp::create(rewriter, 
-      loc, syncBlockCond,
+  auto loopStepMod = arith::RemUIOp::create(
+      rewriter, loc, kDimLoop.getInductionVar(), syncStepConst);
+  auto syncBlockCond = arith::CmpIOp::create(
+      rewriter, loc, arith::CmpIPredicate::eq, loopStepMod, zero);
+  scf::IfOp::create(
+      rewriter, loc, syncBlockCond,
       /*thenBuilder=*/
       [](OpBuilder &b, Location loc) {
         gpu::BarrierOp::create(b, loc);
@@ -1042,18 +1059,18 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
 
   // Update offsets of the input tiles.
   // Shift along the reduction dimension.
-  tilesA = updateTilesOffsets(rewriter, loc, tilesA, {0, kTile});
-  tilesB = updateTilesOffsets(rewriter, loc, tilesB, {kTile, 0});
+  // tilesA = updateTilesOffsets(rewriter, loc, tilesA, {0, kTile});
+  // tilesB = updateTilesOffsets(rewriter, loc, tilesB, {kTile, 0});
 
   // Prefetch the next set of input tiles.
   if (isCoopPrefetch) {
     // Prefetch all block/workgroup tiles cooperatively.
     prefetchTiles(rewriter, loc, ValueRange{prefetchA}, readCacheHint);
     prefetchTiles(rewriter, loc, ValueRange{prefetchB}, readCacheHint);
-    prefetchA =
-        updateTilesOffsets(rewriter, loc, ValueRange{prefetchA}, {0, kTile})[0];
-    prefetchB =
-        updateTilesOffsets(rewriter, loc, ValueRange{prefetchB}, {kTile, 0})[0];
+    // prefetchA =
+    // updateTilesOffsets(rewriter, loc, ValueRange{prefetchA}, {0, kTile})[0];
+    // prefetchB =
+    // updateTilesOffsets(rewriter, loc, ValueRange{prefetchB}, {kTile, 0})[0];
   } else {
     // Apply naive prefetching for each subgroup separately.
     prefetchTiles(rewriter, loc, tilesA, readCacheHint);
@@ -1084,10 +1101,11 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
       for (int n = 0; n < numTilesN; n++) {
         int cIdx = m * numTilesN + n;
 
-        Value result = xegpu::DpasOp::create(rewriter, loc, TypeRange{dpasResType},
-                                       ValueRange{dpasVecA.getTile(m, k),
-                                                  dpasVecB.getTile(k, n),
-                                                  dpasResults[cIdx]})
+        Value result =
+            xegpu::DpasOp::create(rewriter, loc, TypeRange{dpasResType},
+                                  ValueRange{dpasVecA.getTile(m, k),
+                                             dpasVecB.getTile(k, n),
+                                             dpasResults[cIdx]})
                 .getResult();
 
         // Update sub-tile partial result.
@@ -1139,11 +1157,11 @@ static LogicalResult createDPASKernel(linalg::LinalgOp linalgOp,
   // Write back the final C sub-tiles results to the output buffer.
   SmallVector<xegpu::StoreNdOp> storeOps;
   for (size_t i = 0; i < tilesC.size(); i++) {
-    auto storeOp =
-        xegpu::StoreNdOp::create(rewriter, loc, results[i], tilesC[i],
-                                          /*l1_hint=*/writeCacheHint,
-                                          /*l2_hint=*/writeCacheHint,
-                                          /*l3_hint=*/writeCacheHint);
+    auto storeOp = xegpu::StoreNdOp::create(
+        rewriter, loc, results[i], tilesC[i], ValueRange(), DenseI64ArrayAttr(),
+        /*l1_hint=*/writeCacheHint,
+        /*l2_hint=*/writeCacheHint,
+        /*l3_hint=*/writeCacheHint, DistributeLayoutAttr());
     storeOps.push_back(storeOp);
   }
 
@@ -1219,10 +1237,12 @@ LogicalResult createEltwiseKernel(linalg::LinalgOp linalgOp,
   auto writeCacheHint =
       xegpu::CachePolicyAttr::get(ctx, xegpu::CachePolicy::WRITE_BACK);
   for (size_t i = 0; i < outputTiles.size(); i++) {
-    xegpu::StoreNdOp::create(rewriter, loc, results[i], outputTiles[i],
-                                      /*l1_hint=*/writeCacheHint,
-                                      /*l2_hint=*/writeCacheHint,
-                                      /*l3_hint=*/writeCacheHint);
+    xegpu::StoreNdOp::create(rewriter, loc, TypeRange(), results[i],
+                             outputTiles[i], ValueRange(), DenseI64ArrayAttr(),
+                             /*l1_hint=*/writeCacheHint,
+                             /*l2_hint=*/writeCacheHint,
+                             /*l3_hint=*/writeCacheHint,
+                             xegpu::DistributeLayoutAttr());
   }
 
   rewriter.eraseOp(linalgOp);
