@@ -29,6 +29,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/InitAllDialects.h"
@@ -51,6 +52,7 @@
 #include "mlir/Transforms/Passes.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 using namespace mlir;
@@ -62,6 +64,7 @@ MLIRBench::MLIRBench(mlir::Operation *op, const MLIRBenchConfig &config)
   backend = config.backend;
   initType = config.initType;
   offloadToDevice = config.offloadToDevice;
+  replicationTargetGiB = config.replicationTargetGiB;
 
   module = dyn_cast<ModuleOp>(op);
   assert(module && "expected a 'builtin.Module' op");
@@ -226,6 +229,49 @@ LogicalResult MLIRBench::createKernelArgs() {
   auto funcType = kernel.getFunctionType();
   std::vector<Type> argTypes(funcType.getInputs().begin(),
                              funcType.getInputs().end());
+
+  // When replication is requested, compute how many copies of the kernel
+  // arguments are needed so that their combined footprint reaches the target
+  // size. The actual replication (extra outer dimension + inner loop over the
+  // replicas) is performed later, after bufferization, by the
+  // `replicate-bench-args` pass operating on memrefs (so the replicas become
+  // plain subviews without per-iteration allocations or copies). Here we only
+  // compute the factor, record it for that pass, and keep it for the timing
+  // normalization in getTimerStats(). This mirrors the "n_layers" replication
+  // used by libxsmm's sfc_ca_gemm benchmark to defeat large L3 caches and
+  // measure cold-cache GEMM performance.
+  replicationFactor = 1;
+  if (replicationTargetGiB > 0.0) {
+    double footprintBytes = 0.0;
+    for (auto argTy : argTypes) {
+      auto shaped = dyn_cast<ShapedType>(argTy);
+      if (!shaped)
+        continue;
+      if (!isa<TensorType>(argTy))
+        return module.emitError(
+            "Replication benchmarking only supports tensor kernel arguments");
+      if (!shaped.hasStaticShape())
+        return module.emitError(
+            "Replication benchmarking requires statically shaped arguments");
+      int64_t numElements = 1;
+      for (auto d : shaped.getShape())
+        numElements *= d;
+      int64_t eltBytes =
+          (shaped.getElementType().getIntOrFloatBitWidth() + 7) / 8;
+      footprintBytes += static_cast<double>(numElements) *
+                        static_cast<double>(eltBytes);
+    }
+    if (footprintBytes > 0.0) {
+      double targetBytes = replicationTargetGiB * 1024.0 * 1024.0 * 1024.0;
+      replicationFactor = std::max<int64_t>(
+          1, static_cast<int64_t>(std::ceil(targetBytes / footprintBytes)));
+    }
+    // Record the factor for the post-bufferization replication pass.
+    if (replicationFactor > 1)
+      module->setAttr("tpp.bench_replication_factor",
+                      builder.getI64IntegerAttr(replicationFactor));
+  }
+
   for (unsigned i = 0; i < argTypes.size(); i++) {
     auto argTy = argTypes[i];
     auto nextArgTy = (i + 1 < argTypes.size()) ? argTypes[i + 1] : nullptr;
@@ -274,7 +320,7 @@ LogicalResult MLIRBench::createKernelArgs() {
               // Create a memref global and cast it to a tensor
               // to ensure that the buffer is writable and
               // bufferization does not insert extra
-              // allocations + copies
+              // allocations + copies.
               auto memrefType = MemRefType::get(tensorTy.getShape(),
                                                 tensorTy.getElementType());
               auto nextShapedType =
@@ -331,7 +377,10 @@ Value MLIRBench::createTimerLoop(unsigned iters) {
   auto bench = perf::BenchOp::create(builder, unkLoc, count, ValueRange{});
   builder.setInsertionPointToStart(bench.getBody());
 
-  // Call the kernel, ignore output
+  // Call the kernel, ignore output. When replication benchmarking is active
+  // (replicationFactor > 1), the post-bufferization `replicate-bench-args` pass
+  // wraps this call in a loop over the replicated argument buffers; here we just
+  // emit the single call.
   [[maybe_unused]] auto *call = callKernel();
   assert(call && "Failed to generate a kernel call");
 
@@ -349,8 +398,21 @@ Value MLIRBench::getTimerStats(Value deltas) {
   auto iters = cast<perf::BenchOp>(bench)->getOperand(0);
 
   // Mean is deltas / iters
-  auto fIters =
+  Value fIters =
       arith::UIToFPOp::create(builder, unkLoc, builder.getF64Type(), iters);
+
+  // Each timed iteration runs `replicationFactor` kernel calls (one per
+  // replica), so normalize by that factor to report the per-call time. This
+  // keeps the reported throughput correct for the per-call BENCH_TOTAL_FLOPS,
+  // matching the C benchmark where the flop count is scaled by the number of
+  // replicas.
+  if (replicationFactor > 1) {
+    auto factor = arith::ConstantOp::create(
+        builder, unkLoc,
+        builder.getF64FloatAttr(static_cast<double>(replicationFactor)));
+    fIters = arith::MulFOp::create(builder, unkLoc, fIters, factor);
+  }
+
   auto div = arith::DivFOp::create(builder, unkLoc, deltas, fIters);
   return div.getResult();
 }

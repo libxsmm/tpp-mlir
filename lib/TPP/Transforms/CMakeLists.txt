@@ -5,6 +5,7 @@ add_mlir_library(TPPTransforms
   ConstantFoldPack.cpp
   ConvertForAllToParallelOp.cpp
   DecomposeAggregatedOps.cpp
+  ReplicateBenchArgs.cpp
   LinalgDeGeneralize.cpp
   LowerPacksAndUnpacks.cpp
   LowerPacksAndUnpacksWithoutTranspose.cpp

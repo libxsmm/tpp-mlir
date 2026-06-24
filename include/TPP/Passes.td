@@ -392,6 +392,33 @@ def Bufferize : Pass<"bufferize", "ModuleOp"> {
   ];
 }
 
+def ReplicateBenchArgs : Pass<"replicate-bench-args", "ModuleOp"> {
+  let summary = "Replicate benchmark kernel arguments for cold-cache timing";
+  let description = [{
+    Operates after bufferization on the benchmark wrapper produced by tpp-run.
+    For each `perf.bench` region, the (single) kernel call is wrapped in an
+    `scf.for` loop that iterates over a new outer "replica" dimension. Each
+    kernel argument is backed by a freshly allocated, value-initialized global
+    memref whose leading dimension is the replication factor; every iteration
+    feeds the kernel a distinct `memref.subview` (pure pointer arithmetic, no
+    allocation or copy). This mirrors the "n_layers" replication used by
+    libxsmm's cold-cache GEMM benchmark: the same problem is run on different
+    memory so the caches stay cold.
+
+    The replication factor is taken from the `replication-factor` option when
+    positive, otherwise from the `tpp.bench_replication_factor` module attribute
+    set by the benchmark producer. A factor <= 1 disables the pass.
+  }];
+  let options = [
+    Option<"replicationFactor", "replication-factor", "int64_t",
+           /*default=*/"0",
+           "Number of replicas (0 = read from module attribute).">,
+  ];
+  let dependentDialects = ["memref::MemRefDialect",
+                           "scf::SCFDialect",
+                           "func::FuncDialect"];
+}
+
 def DuplicateFill : Pass<"duplicate-fill", "func::FuncOp"> {
   let summary = "Duplicate fill operations";
   let description = [{
@@ -599,6 +626,12 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
     Option<"identity", "identity", "int64_t",
             /*default=*/"-1",
            "Identity square argument (-1=none, 0=a, 1=b, ...).">,
+    Option<"benchReplicationGiB", "bench-replication-gb", "double",
+            /*default=*/"0.0",
+           "Replicate kernel tensor arguments along a new outer dimension so "
+           "that their overall memory footprint reaches the given size in GiB, "
+           "and iterate over the replicas inside the timing loop to benchmark "
+           "out of cold caches (0 = disabled).">,
   ];
 }
 

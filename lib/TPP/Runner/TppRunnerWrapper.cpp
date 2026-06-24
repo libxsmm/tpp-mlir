@@ -56,7 +56,13 @@ struct TppRunnerWrapper
     }
 
     // Benchmark object.
-    MLIRBenchConfig config(seed, tensorInitType, identity, backend, offloadToDevice);
+    // Replication only makes sense in the benchmarking path, where the kernel
+    // is invoked from inside the timing loop. Disable it for single runs so the
+    // kernel arguments keep their original shapes.
+    double replicationTargetGiB =
+        (numBenchLoops > 1) ? benchReplicationGiB : 0.0;
+    MLIRBenchConfig config(seed, tensorInitType, identity, backend,
+                           offloadToDevice, replicationTargetGiB);
     MLIRBench bench(module, config);
 
     // Can only either print or run benchmarks, make this clear before we try to

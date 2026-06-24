@@ -41,15 +41,17 @@ class FuncOp;
 struct MLIRBenchConfig {
   MLIRBenchConfig() = default;
   MLIRBenchConfig(int seed, TensorInitType initType, int identity, std::string backend,
-                  bool offloadToDevice)
+                  bool offloadToDevice, double replicationTargetGiB = 0.0)
       : seed(seed), initType(initType), identity(identity), backend(backend),
-        offloadToDevice(offloadToDevice) {}
+        offloadToDevice(offloadToDevice),
+        replicationTargetGiB(replicationTargetGiB) {}
 
   int seed = 0;
   TensorInitType initType = TensorInitType::Auto;
   int identity = -1;
   std::string backend = "cpu";
   bool offloadToDevice = true;
+  double replicationTargetGiB = 0.0;
 };
 
 /// MLIRBench - Creates wrapper for calling kernel methods.
@@ -102,6 +104,14 @@ class MLIRBench {
 
   /// Allocate arguments on target device
   bool offloadToDevice;
+
+  /// Target footprint (in GiB) used to replicate kernel tensor arguments along
+  /// a new outer dimension for cold-cache benchmarking (0 = disabled).
+  double replicationTargetGiB;
+
+  /// Number of replicas added as a new outer dimension to each tensor argument.
+  /// 1 means replication is disabled.
+  int64_t replicationFactor = 1;
 
   /// Gets module's main block
   Block &getModuleBlock();

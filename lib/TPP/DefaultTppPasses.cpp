@@ -140,6 +140,11 @@ private:
         pm.addPass(createBufferize());
       }
 
+      // Replicate benchmark kernel arguments for cold-cache timing. Runs on
+      // bufferized memrefs so replicas are plain subviews (no allocs/copies).
+      // No-op unless the benchmark producer requested replication.
+      pm.addPass(createReplicateBenchArgs());
+
       // Lower Linalg to XSMM.
       pm.addNestedPass<func::FuncOp>(
           createLinalgLowering(LinalgLoweringOptions{skipOperations}));

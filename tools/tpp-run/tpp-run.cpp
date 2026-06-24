@@ -70,6 +70,17 @@ llvm::cl::opt<unsigned>
     benchNumLoops("n", llvm::cl::desc("Number of loops for benchmarks"),
                   llvm::cl::value_desc("int"), llvm::cl::init(1));
 
+// Replicate kernel tensor arguments to reach the given footprint (in GiB) and
+// iterate over the replicas inside the timing loop to measure cold-cache
+// performance. Zero disables replication.
+llvm::cl::opt<double> benchReplicationGiB(
+    "bench-replication-gb",
+    llvm::cl::desc("Replicate kernel tensor arguments along a new outer "
+                   "dimension until their footprint reaches the given size in "
+                   "GiB and loop over the replicas inside the timing loop "
+                   "(0 = disabled)"),
+    llvm::cl::value_desc("GiB"), llvm::cl::init(0.0));
+
 // Print result
 llvm::cl::opt<bool> printKernelResult("print",
                                       llvm::cl::desc("Print kernel result"),
@@ -197,6 +208,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   wrapperOpts.wrapperCpuTargetFeature = runnerCpuTargetFeature;
   wrapperOpts.offloadToDevice = defGpuArgs;
   wrapperOpts.numBenchLoops = benchNumLoops;
+  wrapperOpts.benchReplicationGiB = benchReplicationGiB;
   // Warmup on GPUs are currently breaking buffer allocation on GPUs
   wrapperOpts.benchWarmup = defGpuBackend.empty();
   wrapperOpts.printResult = printKernelResult;
