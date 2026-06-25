@@ -36,10 +36,10 @@ export LIBXSMM_X86_AMX_GEMM_STREAMING_B=1
 #==============================================================================
 # Configuration
 #==============================================================================
-# Path to the libxsmm sfc_ca_gemm reference binary (default: ./sfc_ca_gemm).
-SFC_BIN="${SFC_BIN:-./sfc_ca_gemm}"
 # Directory for this script (used to locate postprocess.py).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Path to the libxsmm sfc_ca_gemm reference binary (default: ./sfc_ca_gemm).
+SFC_BIN="${SFC_BIN:-${SCRIPT_DIR}/sfc_ca_gemm-main/sfc_ca_gemm}"
 # Output directory for the result CSVs.
 OUT_DIR="${OUT_DIR:-$(pwd)/sfc_ca_gemm_gold_results}"
 # GEMM block tiles (bm, bn, bk). K-blocking and K-layers are fixed to 1 since
@@ -73,13 +73,52 @@ if [[ -n "${NUMACTL}" ]]; then
 fi
 
 # GEMM dimensions to sweep (full cross-product), matching run_sfc_ca_gemm.sh.
-SIZES=(512 1024 2048 4096)
+SIZES=(512 1024 2048 4096 8192)
 
 #==============================================================================
-# Sanity checks
+# Sanity checks / auto-build
 #==============================================================================
+# If the sfc_ca_gemm binary is missing, fetch the upstream sources into this
+# script's directory, build LIBXSMM and the benchmark with icx, and point
+# SFC_BIN at the freshly built binary.
 if [[ ! -x "${SFC_BIN}" ]]; then
-  echo "error: cannot find executable '${SFC_BIN}'." >&2
+  echo "sfc_ca_gemm binary not found at '${SFC_BIN}'; building from source." >&2
+
+  SFC_SRC_URL="https://github.com/libxsmm/sfc_ca_gemm/archive/refs/heads/main.zip"
+  SFC_SRC_DIR="${SCRIPT_DIR}/sfc_ca_gemm-main"
+  SFC_ZIP="${SCRIPT_DIR}/sfc_ca_gemm-main.zip"
+
+  if [[ ! -d "${SFC_SRC_DIR}" ]]; then
+    echo "  Downloading ${SFC_SRC_URL}" >&2
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "${SFC_SRC_URL}" -o "${SFC_ZIP}"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q "${SFC_SRC_URL}" -O "${SFC_ZIP}"
+    else
+      echo "error: need 'curl' or 'wget' to download the sfc_ca_gemm sources." >&2
+      exit 1
+    fi
+
+    echo "  Unpacking $(basename "${SFC_ZIP}")" >&2
+    unzip -q -o "${SFC_ZIP}" -d "${SCRIPT_DIR}"
+    rm -f "${SFC_ZIP}"
+  fi
+
+  echo "  Preparing LIBXSMM (SFC_CA_GEMM_COMPILER=clang)" >&2
+  ( cd "${SFC_SRC_DIR}" && SFC_CA_GEMM_COMPILER=clang ./prepare_libxsmm.sh )
+
+  echo "  Building sfc_ca_gemm (SFC_CA_GEMM_COMPILER=clang make)" >&2
+  ( cd "${SFC_SRC_DIR}" && SFC_CA_GEMM_COMPILER=clang make )
+
+  SFC_BIN="${SFC_SRC_DIR}/sfc_ca_gemm"
+
+  # Make the freshly built LIBXSMM shared library visible for this run only.
+  SFC_LIBXSMM_LIB="${SFC_SRC_DIR}/libxsmm/lib"
+  export LD_LIBRARY_PATH="${SFC_LIBXSMM_LIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
+if [[ ! -x "${SFC_BIN}" ]]; then
+  echo "error: cannot find executable '${SFC_BIN}' after build attempt." >&2
   echo "       Build it from https://github.com/libxsmm/sfc_ca_gemm and set" >&2
   echo "       SFC_BIN to its path." >&2
   exit 1

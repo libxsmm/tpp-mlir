@@ -61,7 +61,7 @@ if [[ "${RANDOM_INIT}" != "0" ]]; then
 fi
 
 # GEMM dimensions to sweep (full cross-product), matching benchmark_sample.sh.
-SIZES=(512 1024 2048 4096)
+SIZES=(512 1024 2048 4096 8192)
 
 MLIR_GEN="${BIN_DIR}/mlir-gen"
 TPP_RUN="${BIN_DIR}/tpp-run"
