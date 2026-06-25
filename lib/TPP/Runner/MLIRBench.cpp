@@ -65,6 +65,7 @@ MLIRBench::MLIRBench(mlir::Operation *op, const MLIRBenchConfig &config)
   initType = config.initType;
   offloadToDevice = config.offloadToDevice;
   replicationTargetGiB = config.replicationTargetGiB;
+  replicationRandomInit = config.replicationRandomInit;
 
   module = dyn_cast<ModuleOp>(op);
   assert(module && "expected a 'builtin.Module' op");
@@ -267,9 +268,16 @@ LogicalResult MLIRBench::createKernelArgs() {
           1, static_cast<int64_t>(std::ceil(targetBytes / footprintBytes)));
     }
     // Record the factor for the post-bufferization replication pass.
-    if (replicationFactor > 1)
+    if (replicationFactor > 1) {
       module->setAttr("tpp.bench_replication_factor",
                       builder.getI64IntegerAttr(replicationFactor));
+      // Request runtime random initialization of the replicated buffers so the
+      // FMA units operate on non-trivial data (all-zero inputs run at an
+      // unrealistically high frequency).
+      if (replicationRandomInit)
+        module->setAttr("tpp.bench_replication_random_init",
+                        builder.getUnitAttr());
+    }
   }
 
   for (unsigned i = 0; i < argTypes.size(); i++) {

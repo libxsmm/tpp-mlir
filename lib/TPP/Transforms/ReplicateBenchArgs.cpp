@@ -10,12 +10,25 @@
 //
 // Runs after bufferization on the benchmark wrapper produced by tpp-run. The
 // single kernel call inside every `perf.bench` region is wrapped in an
-// `scf.for` loop over a new outer "replica" dimension. Each kernel argument is
-// backed by a freshly allocated, value-initialized global memref whose leading
-// dimension is the replication factor; every iteration feeds the kernel a
-// distinct `memref.subview` (pure pointer arithmetic, no allocation or copy).
+// `scf.for` loop over a new "replica" dimension. For each kernel argument a
+// flat `i8` global of `factor * sizeof(arg)` bytes is allocated once; every
+// iteration feeds the kernel a distinct `memref.view` into that buffer (pure
+// pointer arithmetic, no allocation or copy). `memref.view` is used instead of
+// `memref.subview` on purpose: it always yields an identity-layout, offset-0
+// result that exactly matches the original (contiguous) argument type, so any
+// layout-sensitive ops inside the kernel (e.g. the `memref.expand_shape`
+// introduced by bf16 VNNI packing) keep verifying. A strided subview with a
+// dynamic offset would instead change the argument layout and break them.
+//
 // This mirrors the "n_layers" replication used by libxsmm's cold-cache GEMM
 // benchmark: the same problem is run on different memory so caches stay cold.
+//
+// The buffers are zero initialized by default. With random initialization
+// enabled (the `random-init` option or the `tpp.bench_replication_random_init`
+// module attribute) each float buffer is instead filled once, before any timed
+// region, with PRNG-generated values in [1, 2). All-zero inputs let the FMA
+// units run at an unrealistically high clock, so random data yields more
+// representative timings.
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,16 +57,50 @@ namespace tpp {
 namespace {
 
 constexpr StringLiteral kReplicationFactorAttr = "tpp.bench_replication_factor";
+constexpr StringLiteral kReplicationRandomInitAttr =
+    "tpp.bench_replication_random_init";
 
-// Build a splat initializer (value 1) for the replicated global. Using a
-// constant non-zero value keeps the buffers free of denormals/garbage that
-// would otherwise distort floating-point timing.
-static TypedAttr getOneScalar(OpBuilder &builder, Type elemTy) {
-  if (isa<FloatType>(elemTy))
-    return builder.getFloatAttr(elemTy, 1.0);
-  if (auto intTy = dyn_cast<IntegerType>(elemTy))
-    return builder.getIntegerAttr(elemTy, 1);
-  return nullptr;
+// Emit a cheap counter-based PRNG that maps a linear element index to a
+// floating-point value in [1, 2). The [1, 2) range guarantees normal (non-zero,
+// non-denormal, finite) values, so the FMA units are exercised realistically
+// without the risk of NaN/Inf slowdowns. f32 and bf16 are handled explicitly;
+// for any other float type it falls back to a constant 1.0.
+static Value emitRandomFloat(OpBuilder &b, Location loc, Value linearIdx,
+                             Type elemTy) {
+  Type i32Ty = b.getI32Type();
+  auto c32 = [&](uint32_t v) -> Value {
+    return arith::ConstantOp::create(
+        b, loc, b.getIntegerAttr(i32Ty, static_cast<int32_t>(v)));
+  };
+
+  // MurmurHash3-style finalizer using modulo-2^32 arithmetic.
+  Value h = arith::IndexCastOp::create(b, loc, i32Ty, linearIdx);
+  h = arith::MulIOp::create(b, loc, h, c32(0x9E3779B1u));
+  h = arith::XOrIOp::create(b, loc, h,
+                            arith::ShRUIOp::create(b, loc, h, c32(16)));
+  h = arith::MulIOp::create(b, loc, h, c32(0x85EBCA77u));
+  h = arith::XOrIOp::create(b, loc, h,
+                            arith::ShRUIOp::create(b, loc, h, c32(13)));
+
+  if (elemTy.isF32()) {
+    // mantissa = h & 0x7FFFFF; bits = 0x3F800000 | mantissa -> [1, 2).
+    Value mant = arith::AndIOp::create(b, loc, h, c32(0x7FFFFFu));
+    Value bits = arith::OrIOp::create(b, loc, mant, c32(0x3F800000u));
+    return arith::BitcastOp::create(b, loc, elemTy, bits);
+  }
+  if (elemTy.isBF16()) {
+    // bf16 is the top 16 bits of an f32; build the [1, 2) pattern directly.
+    Type i16Ty = b.getIntegerType(16);
+    Value h16 = arith::TruncIOp::create(b, loc, i16Ty, h);
+    auto c16 = [&](uint16_t v) -> Value {
+      return arith::ConstantOp::create(
+          b, loc, b.getIntegerAttr(i16Ty, static_cast<int16_t>(v)));
+    };
+    Value mant = arith::AndIOp::create(b, loc, h16, c16(0x7Fu));
+    Value bits = arith::OrIOp::create(b, loc, mant, c16(0x3F80u));
+    return arith::BitcastOp::create(b, loc, elemTy, bits);
+  }
+  return arith::ConstantOp::create(b, loc, b.getFloatAttr(elemTy, 1.0));
 }
 
 struct ReplicateBenchArgs
@@ -72,6 +119,11 @@ struct ReplicateBenchArgs
         factor = attr.getInt();
     }
     module->removeAttr(kReplicationFactorAttr);
+
+    // Resolve random initialization: command-line option OR module attribute.
+    bool doRandomInit = randomInit || module->hasAttr(kReplicationRandomInitAttr);
+    module->removeAttr(kReplicationRandomInitAttr);
+
     if (factor <= 1)
       return;
 
@@ -100,12 +152,20 @@ struct ReplicateBenchArgs
     Location loc = kernel.getLoc();
     auto origInputs = kernel.getFunctionType().getInputs();
 
-    // For each kernel argument, create a replicated, initialized global memref
-    // and pre-compute the rank-reduced strided type of a single replica slice.
+    // For each kernel argument, allocate a flat i8 global large enough to hold
+    // `factor` contiguous copies of the argument. The buffer is zero
+    // initialized: the all-zero byte pattern reinterprets to +0.0 for floats
+    // and 0 for integers, both of which are normal values that avoid the
+    // denormal/NaN penalties that uninitialized memory could introduce. When
+    // `doRandomInit` is set, the buffers are instead filled with random values
+    // at runtime (see below); the zero global init still serves as a safe
+    // default for any element type the random fill does not cover.
     OpBuilder globalBuilder(ctx);
     globalBuilder.setInsertionPointToStart(module.getBody());
+    Type i8Ty = globalBuilder.getI8Type();
     SmallVector<StringRef> globalNames(origInputs.size());
-    SmallVector<MemRefType> sliceTypes(origInputs.size());
+    SmallVector<int64_t> replicaByteSizes(origInputs.size());
+    SmallVector<int64_t> totalElemCounts(origInputs.size());
     auto alignment = globalBuilder.getI64IntegerAttr(128);
     for (auto [idx, inTy] : llvm::enumerate(origInputs)) {
       auto memrefTy = dyn_cast<MemRefType>(inTy);
@@ -114,52 +174,72 @@ struct ReplicateBenchArgs
                          "statically shaped memrefs");
         return signalPassFailure();
       }
-
-      // Replicated global shape: [factor, origShape...].
-      SmallVector<int64_t> replShape;
-      replShape.push_back(factor);
-      replShape.append(memrefTy.getShape().begin(), memrefTy.getShape().end());
-      auto replTy = MemRefType::get(replShape, memrefTy.getElementType());
-
-      TypedAttr one = getOneScalar(globalBuilder, memrefTy.getElementType());
-      if (!one) {
+      if (!memrefTy.getLayout().isIdentity()) {
+        module.emitError("replicate-bench-args: kernel arguments must have "
+                         "identity layout");
+        return signalPassFailure();
+      }
+      Type elemTy = memrefTy.getElementType();
+      if (!elemTy.isIntOrFloat()) {
         module.emitError("replicate-bench-args: unsupported element type");
         return signalPassFailure();
       }
-      auto tensorTy =
-          RankedTensorType::get(replShape, memrefTy.getElementType());
-      auto initAttr = DenseElementsAttr::get(tensorTy, one);
+
+      int64_t numElements = 1;
+      for (int64_t d : memrefTy.getShape())
+        numElements *= d;
+      int64_t eltBytes = (elemTy.getIntOrFloatBitWidth() + 7) / 8;
+      int64_t replicaBytes = numElements * eltBytes;
+      replicaByteSizes[idx] = replicaBytes;
+      totalElemCounts[idx] = numElements * factor;
+      int64_t totalBytes = replicaBytes * factor;
+
+      auto flatTy = MemRefType::get({totalBytes}, i8Ty);
+      auto tensorTy = RankedTensorType::get({totalBytes}, i8Ty);
+      auto initAttr = DenseElementsAttr::get(
+          tensorTy, globalBuilder.getIntegerAttr(i8Ty, 0));
 
       std::string name = "__bench_replica_" + std::to_string(idx);
       auto global = memref::GlobalOp::create(
           globalBuilder, loc, name, globalBuilder.getStringAttr("private"),
-          replTy, initAttr, /*constant=*/false, alignment);
+          flatTy, initAttr, /*constant=*/false, alignment);
       globalNames[idx] = global.getName();
-
-      // Type of a single replica slice: drop the leading replica dimension,
-      // keeping a (statically strided, dynamically offset) view into the
-      // contiguous replicated buffer.
-      SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
-      staticOffsets.push_back(ShapedType::kDynamic);
-      staticSizes.push_back(1);
-      staticStrides.push_back(1);
-      for (int64_t d : memrefTy.getShape()) {
-        staticOffsets.push_back(0);
-        staticSizes.push_back(d);
-        staticStrides.push_back(1);
-      }
-      sliceTypes[idx] = memref::SubViewOp::inferRankReducedResultType(
-          memrefTy.getShape(), replTy, staticOffsets, staticSizes,
-          staticStrides);
     }
 
-    // Relax the kernel signature so it accepts the strided replica slices.
-    SmallVector<Type> newInputs(sliceTypes.begin(), sliceTypes.end());
-    kernel.setType(FunctionType::get(ctx, newInputs,
-                                     kernel.getFunctionType().getResults()));
-    for (auto [blockArg, sliceTy] :
-         llvm::zip_equal(kernel.getBody().getArguments(), sliceTypes))
-      blockArg.setType(sliceTy);
+    // Optionally fill each replicated buffer with random floating-point values
+    // once, before any timed region. All-zero inputs let the FMA units run at
+    // an unrealistically high clock; random data exercises them realistically.
+    // The fill loop sits before the first perf.bench so it is never timed.
+    if (doRandomInit) {
+      OpBuilder initBuilder(benches.front());
+      Value c0 = arith::ConstantIndexOp::create(initBuilder, loc, 0);
+      Value c1 = arith::ConstantIndexOp::create(initBuilder, loc, 1);
+      for (auto [idx, inTy] : llvm::enumerate(origInputs)) {
+        auto memrefTy = cast<MemRefType>(inTy);
+        Type elemTy = memrefTy.getElementType();
+        // Only float buffers get randomized; integer/other buffers keep the
+        // safe zero initialization.
+        if (!isa<FloatType>(elemTy))
+          continue;
+
+        auto flatTy = cast<MemRefType>(
+            cast<memref::GlobalOp>(module.lookupSymbol(globalNames[idx]))
+                .getType());
+        Value flat = memref::GetGlobalOp::create(initBuilder, loc, flatTy,
+                                                 globalNames[idx]);
+        // Typed view over the whole buffer: memref<totalElems x elemTy>.
+        auto viewTy = MemRefType::get({totalElemCounts[idx]}, elemTy);
+        Value typedView = memref::ViewOp::create(initBuilder, loc, viewTy, flat,
+                                                 c0, /*sizes=*/ValueRange{});
+        Value ub = arith::ConstantIndexOp::create(initBuilder, loc,
+                                                  totalElemCounts[idx]);
+        auto fill = scf::ForOp::create(initBuilder, loc, c0, ub, c1);
+        OpBuilder fb(fill.getBody(), fill.getBody()->begin());
+        Value iv = fill.getInductionVar();
+        Value v = emitRandomFloat(fb, loc, iv, elemTy);
+        memref::StoreOp::create(fb, loc, v, typedView, ValueRange{iv});
+      }
+    }
 
     // Wrap every kernel call inside a perf.bench in a replication loop.
     for (auto bench : benches) {
@@ -172,13 +252,13 @@ struct ReplicateBenchArgs
       for (func::CallOp call : calls) {
         OpBuilder builder(call);
 
-        // Hoist the global handles out of the loop; they are loop invariant.
+        // Hoist the flat global handles out of the loop; they are invariant.
         SmallVector<Value> globals(origInputs.size());
         for (auto [idx, inTy] : llvm::enumerate(origInputs)) {
-          auto replTy = cast<MemRefType>(
+          auto flatTy = cast<MemRefType>(
               cast<memref::GlobalOp>(module.lookupSymbol(globalNames[idx]))
                   .getType());
-          globals[idx] = memref::GetGlobalOp::create(builder, loc, replTy,
+          globals[idx] = memref::GetGlobalOp::create(builder, loc, flatTy,
                                                       globalNames[idx]);
         }
 
@@ -190,24 +270,22 @@ struct ReplicateBenchArgs
         OpBuilder bodyBuilder(loop.getBody(), loop.getBody()->begin());
         Value iv = loop.getInductionVar();
 
-        SmallVector<Value> sliceArgs(origInputs.size());
+        SmallVector<Value> viewArgs(origInputs.size());
         for (auto [idx, inTy] : llvm::enumerate(origInputs)) {
           auto memrefTy = cast<MemRefType>(inTy);
-          SmallVector<OpFoldResult> offsets, sizes, strides;
-          offsets.push_back(iv);
-          sizes.push_back(bodyBuilder.getIndexAttr(1));
-          strides.push_back(bodyBuilder.getIndexAttr(1));
-          for (int64_t d : memrefTy.getShape()) {
-            offsets.push_back(bodyBuilder.getIndexAttr(0));
-            sizes.push_back(bodyBuilder.getIndexAttr(d));
-            strides.push_back(bodyBuilder.getIndexAttr(1));
-          }
-          sliceArgs[idx] = memref::SubViewOp::create(
-              bodyBuilder, loc, sliceTypes[idx], globals[idx], offsets, sizes,
-              strides);
+          // Byte offset of replica `iv`: iv * sizeof(arg).
+          Value replicaBytes = arith::ConstantIndexOp::create(
+              bodyBuilder, loc, replicaByteSizes[idx]);
+          Value byteShift =
+              arith::MulIOp::create(bodyBuilder, loc, iv, replicaBytes);
+          // memref.view yields an identity-layout, offset-0 memref that matches
+          // the original argument type exactly.
+          viewArgs[idx] = memref::ViewOp::create(
+              bodyBuilder, loc, memrefTy, globals[idx], byteShift,
+              /*sizes=*/ValueRange{});
         }
 
-        func::CallOp::create(bodyBuilder, loc, kernel, sliceArgs);
+        func::CallOp::create(bodyBuilder, loc, kernel, viewArgs);
         call.erase();
       }
     }

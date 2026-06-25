@@ -397,22 +397,35 @@ def ReplicateBenchArgs : Pass<"replicate-bench-args", "ModuleOp"> {
   let description = [{
     Operates after bufferization on the benchmark wrapper produced by tpp-run.
     For each `perf.bench` region, the (single) kernel call is wrapped in an
-    `scf.for` loop that iterates over a new outer "replica" dimension. Each
-    kernel argument is backed by a freshly allocated, value-initialized global
-    memref whose leading dimension is the replication factor; every iteration
-    feeds the kernel a distinct `memref.subview` (pure pointer arithmetic, no
-    allocation or copy). This mirrors the "n_layers" replication used by
-    libxsmm's cold-cache GEMM benchmark: the same problem is run on different
-    memory so the caches stay cold.
+    `scf.for` loop that iterates over a new "replica" dimension. Each kernel
+    argument is backed by a flat, zero-initialized `i8` global holding
+    `replication-factor` contiguous copies of the argument; every iteration
+    feeds the kernel a distinct `memref.view` into that buffer (pure pointer
+    arithmetic, no allocation or copy). `memref.view` is used instead of
+    `memref.subview` so that each replica keeps the original identity layout and
+    zero offset, which avoids breaking layout-sensitive ops in the kernel (such
+    as the `memref.expand_shape` introduced by bf16 VNNI packing). This mirrors
+    the "n_layers" replication used by libxsmm's cold-cache GEMM benchmark: the
+    same problem is run on different memory so the caches stay cold.
 
     The replication factor is taken from the `replication-factor` option when
     positive, otherwise from the `tpp.bench_replication_factor` module attribute
     set by the benchmark producer. A factor <= 1 disables the pass.
+
+    By default the buffers are zero initialized. When the `random-init` option
+    or the `tpp.bench_replication_random_init` module attribute is set, each
+    float buffer is filled once (before any timed region) with PRNG-generated
+    values in [1, 2); this avoids the unrealistically high clock that the FMA
+    units reach when fed all-zero inputs.
   }];
   let options = [
     Option<"replicationFactor", "replication-factor", "int64_t",
            /*default=*/"0",
            "Number of replicas (0 = read from module attribute).">,
+    Option<"randomInit", "random-init", "bool",
+           /*default=*/"false",
+           "Initialize the replicated buffers at runtime with random "
+           "floating-point values instead of zeros.">,
   ];
   let dependentDialects = ["memref::MemRefDialect",
                            "scf::SCFDialect",
