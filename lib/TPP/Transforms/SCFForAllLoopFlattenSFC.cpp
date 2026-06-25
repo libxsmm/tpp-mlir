@@ -13,12 +13,14 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Utils/Utils.h"
-#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace mlir {
@@ -150,17 +152,22 @@ using namespace mlir::scf;
 ///   }
 ///
 /// into:
-///   %iv_i = arith.constant dense<[...]> : vector<NxI16>
-///   %iv_j = arith.constant dense<[...]> : vector<NxI16>
+///   memref.global "private" constant @iv_i : memref<NxiW> = dense<[...]>
+///   memref.global "private" constant @iv_j : memref<NxiW> = dense<[...]>
+///   %tbl_i = memref.get_global @iv_i : memref<NxiW>
+///   %tbl_j = memref.get_global @iv_j : memref<NxiW>
 ///   scf.forall (%idx) in (%cN) {
-///     %i_i16 = vector.extract %iv_i[%idx] : i16 from vector<NxI16>
-///     %j_i16 = vector.extract %iv_j[%idx] : i16 from vector<NxI16>
-///     %i = arith.index_cast %i_i16 : i16 to index
-///     %j = arith.index_cast %j_i16 : i16 to index
+///     %i_iw = memref.load %tbl_i[%idx] : memref<NxiW>
+///     %j_iw = memref.load %tbl_j[%idx] : memref<NxiW>
+///     %i = arith.index_cast %i_iw : iW to index
+///     %j = arith.index_cast %j_iw : iW to index
 ///     // original body using %i and %j
 ///   }
 ///
-/// where N is the total iteration count ub0 * ub1
+/// where N is the total iteration count ub0 * ub1 and iW is the smallest
+/// integer type (i8, i16, i32 or i64) whose range can index all N tiles. The
+/// lookup tables are constant memref globals (rather than vector constants)
+/// so that large tile counts do not overflow the SelectionDAG backend.
 static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
   // Only handle 2D forall loops
   if (op.getRank() != 2)
@@ -216,12 +223,29 @@ static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
 
   if (totalCount <= 0)
     return failure();
-  if (count0 > std::numeric_limits<int16_t>::max() || count1 > std::numeric_limits<int16_t>::max())
-    return failure();
 
-  // Build the flattened index vectors
-  SmallVector<int16_t> iv0Values;
-  SmallVector<int16_t> iv1Values;
+  // Select the smallest integer type whose value range can index the entire
+  // linearized tile space. The flattened loop walks totalCount tiles, so the
+  // index values stored in the lookup vectors range over [0, totalCount). For
+  // large matrices this can exceed the i16 range that was previously hard-coded
+  // here, so we widen the element type as needed (i8 -> i16 -> i32 -> i64).
+  IntegerType elemType = [&]() -> IntegerType {
+    int64_t maxIndex = totalCount - 1;
+    if (maxIndex <= std::numeric_limits<int8_t>::max())
+      return builder.getI8Type();
+    if (maxIndex <= std::numeric_limits<int16_t>::max())
+      return builder.getI16Type();
+    if (maxIndex <= std::numeric_limits<int32_t>::max())
+      return builder.getI32Type();
+    return builder.getI64Type();
+  }();
+  unsigned elemBitWidth = elemType.getWidth();
+
+  // Build the flattened index vectors using the selected integer width.
+  SmallVector<APInt> iv0Values;
+  SmallVector<APInt> iv1Values;
+  iv0Values.reserve(totalCount);
+  iv1Values.reserve(totalCount);
 
   for (int64_t i = 0; i < count0; ++i) {
     for (int64_t j = 0; j < count1; ++j) {
@@ -233,18 +257,59 @@ static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
       // we are using a generalized Hilbert curve to calculate the indices, which can improve locality for certain access patterns
       tpp::sfc::gilbertD2xy(iv0val, iv1val, i * count1 + j, count0, count1);
 
-      iv0Values.push_back(static_cast<int16_t>(iv0val));
-      iv1Values.push_back(static_cast<int16_t>(iv1val));
+      iv0Values.emplace_back(elemBitWidth, static_cast<uint64_t>(iv0val),
+                             /*isSigned=*/true);
+      iv1Values.emplace_back(elemBitWidth, static_cast<uint64_t>(iv1val),
+                             /*isSigned=*/true);
     }
   }
 
-  // Create dense constant vectors
-  auto vectorType = VectorType::get(ArrayRef<int64_t>{totalCount}, builder.getI16Type());
-  auto iv0Attr = DenseElementsAttr::get(vectorType, ArrayRef<int16_t>(iv0Values));
-  auto iv1Attr = DenseElementsAttr::get(vectorType, ArrayRef<int16_t>(iv1Values));
+  // Store the SFC index tables as module-level constant memref globals and look
+  // them up with memref.load inside the loop. A previous implementation
+  // materialized these as `vector<NxiW>` constants and used vector.extract with
+  // a dynamic position; for large tile counts (e.g. a 256x256 block grid =
+  // 65536 tiles) lowering that dynamic extract builds a BUILD_VECTOR SDNode
+  // with one operand per element, which overflows SDNode's operand limit and
+  // crashes the SelectionDAG backend. Constant globals + loads scale to any
+  // table size.
+  auto moduleOp = op->getParentOfType<ModuleOp>();
+  if (!moduleOp)
+    return failure();
 
-  Value iv0Vector = arith::ConstantOp::create(builder, loc, vectorType, iv0Attr);
-  Value iv1Vector = arith::ConstantOp::create(builder, loc, vectorType, iv1Attr);
+  auto tableType = MemRefType::get(ArrayRef<int64_t>{totalCount}, elemType);
+  auto tensorType =
+      RankedTensorType::get(ArrayRef<int64_t>{totalCount}, elemType);
+  auto iv0Attr = DenseElementsAttr::get(tensorType, iv0Values);
+  auto iv1Attr = DenseElementsAttr::get(tensorType, iv1Values);
+
+  // Create the constant globals at the top of the module with unique names.
+  OpBuilder globalBuilder(op->getContext());
+  globalBuilder.setInsertionPointToStart(moduleOp.getBody());
+  auto uniqueName = [&](StringRef base) -> std::string {
+    if (!moduleOp.lookupSymbol(base))
+      return base.str();
+    unsigned c = 0;
+    std::string name;
+    do {
+      name = base.str() + "_" + std::to_string(c++);
+    } while (moduleOp.lookupSymbol(name));
+    return name;
+  };
+
+  std::string name0 = uniqueName("__sfc_iv0");
+  auto g0 = memref::GlobalOp::create(
+      globalBuilder, loc, name0, globalBuilder.getStringAttr("private"),
+      tableType, iv0Attr, /*constant=*/true, /*alignment=*/IntegerAttr());
+  std::string name1 = uniqueName("__sfc_iv1");
+  auto g1 = memref::GlobalOp::create(
+      globalBuilder, loc, name1, globalBuilder.getStringAttr("private"),
+      tableType, iv1Attr, /*constant=*/true, /*alignment=*/IntegerAttr());
+
+  // Materialize references to the globals in the function before the loop.
+  Value iv0Table =
+      memref::GetGlobalOp::create(builder, loc, tableType, g0.getSymName());
+  Value iv1Table =
+      memref::GetGlobalOp::create(builder, loc, tableType, g1.getSymName());
 
   // Create the new 1D forall loop
   SmallVector<OpFoldResult> newLowerBound = {builder.getIndexAttr(*lb0)};
@@ -259,11 +324,11 @@ static LogicalResult flattenForallLoop(ForallOp op, OpBuilder &builder) {
 
   Value idx = newLoop.getInductionVars()[0];
 
-  // Extract the original induction variable values using vector.extract with dynamic position
-  Value i = vector::ExtractOp::create(builder, loc, iv0Vector, idx);
-  Value j = vector::ExtractOp::create(builder, loc, iv1Vector, idx);
+  // Look up the original induction variable values from the constant tables.
+  Value i = memref::LoadOp::create(builder, loc, iv0Table, ValueRange{idx});
+  Value j = memref::LoadOp::create(builder, loc, iv1Table, ValueRange{idx});
 
-  // Convert extracted values to index type
+  // Convert loaded values to index type
   Value iIndex = arith::IndexCastOp::create(builder, loc, builder.getIndexType(), i);
   Value jIndex = arith::IndexCastOp::create(builder, loc, builder.getIndexType(), j);
 

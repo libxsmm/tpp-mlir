@@ -484,12 +484,13 @@ def SCFForAllLoopFlattenSFC : Pass<"scf-forall-loop-flatten-sfc"> {
   let summary = "Flatten 2D forall loops into 1D with index vectors using space-filling curve";
   let description = [{
     Transform innermost scf.forall operations with exactly 2 induction variables
-    into scf.forall with 1 induction variable. Creates constant dense vectors
+    into scf.forall with 1 induction variable. Creates constant memref globals
     containing the flattened iteration space values using a space-filling curve (SFC) pattern,
-    and uses vector.extract with dynamic position to derive the original induction variables
-    inside the loop body.
+    and uses memref.load with a dynamic index to derive the original induction variables
+    inside the loop body. The integer width of the lookup tables is chosen to fit
+    the linearized tile count (i8, i16, i32 or i64).
   }];
-  let dependentDialects = ["scf::SCFDialect", "arith::ArithDialect", "vector::VectorDialect"];
+  let dependentDialects = ["scf::SCFDialect", "arith::ArithDialect", "memref::MemRefDialect"];
 }
 
 def GpuInlineConstants : Pass<"gpu-inline-constants", "func::FuncOp"> {
