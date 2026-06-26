@@ -36,12 +36,11 @@
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 // IR-COUNT-4: amx.tile_muli
-
 // IR: scf.for
-// IR-COUNT-2:     vector.transfer_read
-// IR: vector.broadcast
-// IR-COUNT-1:     vector.transfer_read
-// IR: vector.shape_cast
+// IR:   memref.load
+// IR:   vector.broadcast
+// IR:   scf.for
+// IR:     vector.transfer_read
 // IR:     arith.mulf
 // IR:     arith.sitofp
 // IR:     arith.mulf

@@ -160,8 +160,7 @@ private:
         pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
             BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
         pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-        if (!disableTileElementwiseOps)
-          pm.addNestedPass<func::FuncOp>(createTileElementWiseOps());
+        pm.addNestedPass<func::FuncOp>(createTileDequantElementwiseOps());
         pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
         if (nanoKernel) {

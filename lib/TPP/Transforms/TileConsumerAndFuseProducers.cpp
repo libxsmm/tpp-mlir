@@ -33,8 +33,6 @@ namespace tpp {
 #include "TPP/Passes.h.inc"
 #define GEN_PASS_DEF_ELEMENTWISEFUSION
 #include "TPP/Passes.h.inc"
-#define GEN_PASS_DEF_TILEELEMENTWISEOPS
-#include "TPP/Passes.h.inc"
 } // namespace tpp
 } // namespace mlir
 
@@ -795,87 +793,6 @@ struct ElementWiseFusion : tpp::impl::ElementWiseFusionBase<ElementWiseFusion> {
     linalg::populateElementwiseOpsFusionPatterns(patterns,
                                                  fuseElementwiseOpsControlFn);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns));
-  }
-};
-
-// Define an element-wise tiling pass on a linalg.generic op with parallel
-// iterators.
-struct TileElementWiseOps
-    : tpp::impl::TileElementWiseOpsBase<TileElementWiseOps> {
-  using TileElementWiseOpsBase::TileElementWiseOpsBase;
-
-  void runOnOperation() override {
-    auto &ctx = getContext();
-    RewritePatternSet patterns(&ctx);
-
-    // Define a pattern of linalg.generic op with parallel iterators on which we
-    // want to apply tiling.
-    struct TileElementwiseGenericPattern
-        : public OpRewritePattern<linalg::GenericOp> {
-      TileElementWiseOps *pass;
-      TileElementwiseGenericPattern(MLIRContext *context,
-                                    TileElementWiseOps *pass)
-          : OpRewritePattern<linalg::GenericOp>(context), pass(pass) {
-        this->setHasBoundedRewriteRecursion(true);
-      }
-      LogicalResult matchAndRewrite(linalg::GenericOp op,
-                                    PatternRewriter &rewriter) const override {
-        if (!isElementwise(op))
-          return rewriter.notifyMatchFailure(
-              op, "Only tiles linalg.generic with elementwise semantics");
-
-        // Exit if no non-terminating operations in the body (e.g., just a
-        // yield)
-        Block &body = op.getRegion().front();
-        if (body.without_terminator().empty())
-          return rewriter.notifyMatchFailure(
-              op, "No non-terminating operations in the body");
-
-        auto bodyOps = body.without_terminator();
-        if (llvm::hasSingleElement(bodyOps))
-          return rewriter.notifyMatchFailure(
-              op, "Dont tile linalg.generic with single op in the body.");
-
-        // Exit for Op without inputs.
-        if (op.getDpsInputs().empty())
-          return rewriter.notifyMatchFailure(op,
-                                             "May be a reduction, no inputs");
-
-        // Derive the tile sizes for the elementwise op using the output shape.
-        // Tile the outer dimension with 1 and inner dimension with the inner
-        // dimension size of the output shape.
-        auto outputType = cast<ShapedType>(op.getDpsInits()[0].getType());
-        auto outputShape = outputType.getShape();
-        if (outputType.getRank() != 2)
-          return rewriter.notifyMatchFailure(
-              op,
-              "Only tiles linalg.generic with parallel iterators of rank 2");
-
-        SmallVector<int64_t> tileSizes{1, outputShape[1]};
-        linalg::LinalgTilingOptions options;
-        options.setLoopType(linalg::LinalgTilingLoopType::Loops);
-        if (pass->tileSizes.size() == 0)
-          pass->tileSizes = tileSizes;
-        options.setTileSizes(pass->tileSizes);
-        FailureOr<linalg::TiledLinalgOp> tiled =
-            linalg::tileLinalgOp(rewriter, op, options);
-
-        if (failed(tiled))
-          return rewriter.notifyMatchFailure(
-              op, "Failed to tile linalg.generic with parallel iterators");
-
-        rewriter.replaceOp(op, tiled->tensorResults);
-        return success();
-      }
-    };
-
-    mlir::GreedyRewriteConfig config;
-    // Limit to exactly 1 successful matchAndRewrite
-    config.setMaxNumRewrites(1);
-    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
-
-    patterns.add<TileElementwiseGenericPattern>(&ctx, this);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
   }
 };
 
