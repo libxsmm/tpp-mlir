@@ -412,11 +412,12 @@ def ReplicateBenchArgs : Pass<"replicate-bench-args", "ModuleOp"> {
     positive, otherwise from the `tpp.bench_replication_factor` module attribute
     set by the benchmark producer. A factor <= 1 disables the pass.
 
-    By default the buffers are zero initialized. When the `random-init` option
-    or the `tpp.bench_replication_random_init` module attribute is set, each
-    float buffer is filled once (before any timed region) with PRNG-generated
-    values in [1, 2); this avoids the unrealistically high clock that the FMA
-    units reach when fed all-zero inputs.
+    Each float buffer is filled once, before any timed region. By default it is
+    filled with the constant 1.0; when the `random-init` option or the
+    `tpp.bench_replication_random_init` module attribute is set, it is instead
+    filled with PRNG-generated values in [1, 2). Neither default is zero, which
+    avoids the unrealistically high clock that the FMA units reach when fed
+    all-zero inputs.
   }];
   let options = [
     Option<"replicationFactor", "replication-factor", "int64_t",
@@ -424,8 +425,8 @@ def ReplicateBenchArgs : Pass<"replicate-bench-args", "ModuleOp"> {
            "Number of replicas (0 = read from module attribute).">,
     Option<"randomInit", "random-init", "bool",
            /*default=*/"false",
-           "Initialize the replicated buffers at runtime with random "
-           "floating-point values instead of zeros.">,
+           "Initialize the replicated float buffers at runtime with random "
+           "floating-point values in [1, 2) instead of the constant 1.0.">,
   ];
   let dependentDialects = ["memref::MemRefDialect",
                            "scf::SCFDialect",

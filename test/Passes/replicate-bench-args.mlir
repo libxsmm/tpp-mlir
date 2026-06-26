@@ -20,7 +20,13 @@ func.func @_entry(%a: memref<4x4xf32>, %b: memref<4x4xf32>, %c: memref<4x4xf32>)
   return
 }
 
+// By default the float buffers are filled once, before perf.bench, with the
+// constant 1.0 through a whole-buffer memref.view + scf.for.
 // CHECK-LABEL: func.func @entry
+// CHECK: memref.view %{{.*}}[%{{.*}}][] : memref<128xi8> to memref<32xf32>
+// CHECK: scf.for
+// CHECK: arith.constant 1.000000e+00 : f32
+// CHECK: memref.store %{{.*}}, %{{.*}}[%{{.*}}] : memref<32xf32>
 // CHECK: perf.bench
 // CHECK: scf.for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} {
 // CHECK: memref.view %{{.*}}[%{{.*}}][] : memref<128xi8> to memref<4x4xf32>

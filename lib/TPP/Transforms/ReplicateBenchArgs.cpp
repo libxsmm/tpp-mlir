@@ -23,12 +23,12 @@
 // This mirrors the "n_layers" replication used by libxsmm's cold-cache GEMM
 // benchmark: the same problem is run on different memory so caches stay cold.
 //
-// The buffers are zero initialized by default. With random initialization
-// enabled (the `random-init` option or the `tpp.bench_replication_random_init`
-// module attribute) each float buffer is instead filled once, before any timed
-// region, with PRNG-generated values in [1, 2). All-zero inputs let the FMA
-// units run at an unrealistically high clock, so random data yields more
-// representative timings.
+// Each float buffer is filled once, before any timed region. By default it is
+// filled with the constant 1.0; with random initialization enabled (the
+// `random-init` option or the `tpp.bench_replication_random_init` module
+// attribute) it is instead filled with PRNG-generated values in [1, 2).
+// All-zero inputs let the FMA units run at an unrealistically high clock, so
+// neither default value is zero.
 //
 //===----------------------------------------------------------------------===//
 
@@ -156,10 +156,11 @@ struct ReplicateBenchArgs
     // `factor` contiguous copies of the argument. The buffer is zero
     // initialized: the all-zero byte pattern reinterprets to +0.0 for floats
     // and 0 for integers, both of which are normal values that avoid the
-    // denormal/NaN penalties that uninitialized memory could introduce. When
-    // `doRandomInit` is set, the buffers are instead filled with random values
-    // at runtime (see below); the zero global init still serves as a safe
-    // default for any element type the random fill does not cover.
+    // denormal/NaN penalties that uninitialized memory could introduce. The
+    // float buffers are then overwritten at runtime (see below) with 1.0 by
+    // default, or random values when `doRandomInit` is set; the zero global
+    // init still serves as a safe default for any element type the runtime
+    // fill does not cover (e.g. integers).
     OpBuilder globalBuilder(ctx);
     globalBuilder.setInsertionPointToStart(module.getBody());
     Type i8Ty = globalBuilder.getI8Type();
@@ -206,19 +207,22 @@ struct ReplicateBenchArgs
       globalNames[idx] = global.getName();
     }
 
-    // Optionally fill each replicated buffer with random floating-point values
-    // once, before any timed region. All-zero inputs let the FMA units run at
-    // an unrealistically high clock; random data exercises them realistically.
-    // The fill loop sits before the first perf.bench so it is never timed.
-    if (doRandomInit) {
+    // Fill each replicated float buffer once, before any timed region. All-zero
+    // inputs let the FMA units run at an unrealistically high clock, so by
+    // default every float buffer is filled with the constant 1.0; with random
+    // initialization enabled it is instead filled with random values in
+    // [1, 2), which exercises the units more realistically. The fill loop sits
+    // before the first perf.bench so it is never timed. Integer/other buffers
+    // keep the safe zero initialization.
+    {
       OpBuilder initBuilder(benches.front());
       Value c0 = arith::ConstantIndexOp::create(initBuilder, loc, 0);
       Value c1 = arith::ConstantIndexOp::create(initBuilder, loc, 1);
       for (auto [idx, inTy] : llvm::enumerate(origInputs)) {
         auto memrefTy = cast<MemRefType>(inTy);
         Type elemTy = memrefTy.getElementType();
-        // Only float buffers get randomized; integer/other buffers keep the
-        // safe zero initialization.
+        // Only float buffers are filled; integer/other buffers keep the safe
+        // zero initialization.
         if (!isa<FloatType>(elemTy))
           continue;
 
@@ -236,7 +240,10 @@ struct ReplicateBenchArgs
         auto fill = scf::ForOp::create(initBuilder, loc, c0, ub, c1);
         OpBuilder fb(fill.getBody(), fill.getBody()->begin());
         Value iv = fill.getInductionVar();
-        Value v = emitRandomFloat(fb, loc, iv, elemTy);
+        Value v = doRandomInit
+                      ? emitRandomFloat(fb, loc, iv, elemTy)
+                      : arith::ConstantOp::create(
+                            fb, loc, fb.getFloatAttr(elemTy, 1.0));
         memref::StoreOp::create(fb, loc, v, typedView, ValueRange{iv});
       }
     }

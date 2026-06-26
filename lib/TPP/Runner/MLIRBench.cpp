@@ -248,10 +248,7 @@ LogicalResult MLIRBench::createKernelArgs() {
       auto shaped = dyn_cast<ShapedType>(argTy);
       if (!shaped)
         continue;
-      if (!isa<TensorType>(argTy))
-        return module.emitError(
-            "Replication benchmarking only supports tensor kernel arguments");
-      if (!shaped.hasStaticShape())
+      if (!isa<TensorType>(argTy) || !shaped.hasStaticShape())
         return module.emitError(
             "Replication benchmarking requires statically shaped arguments");
       int64_t numElements = 1;
