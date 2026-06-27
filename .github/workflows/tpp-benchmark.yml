@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Emerald Rapids Base
         run: |-
-          CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
+          CMD="KIND=Debug COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
           ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
 
