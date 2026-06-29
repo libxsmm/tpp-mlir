@@ -100,18 +100,6 @@ def LinalgLowering : Pass<"linalg-lowering", "func::FuncOp"> {
   ];
 }
 
-def VectorToXSMM : Pass<"vector-to-xsmm", "ModuleOp"> {
-  let summary = "Lower Vector operations to XSMM functions.";
-  let dependentDialects = ["scf::SCFDialect",
-			   "pdl::PDLDialect",
-			   "pdl_interp::PDLInterpDialect",
-                    	   "vector::VectorDialect", 
-			   "func::FuncDialect",
-                    	   "memref::MemRefDialect", 
-			   "LLVM::LLVMDialect", 
-			   "BuiltinDialect"];
-}
-
 def VectorToKernel : Pass<"vector-to-kernel", "ModuleOp"> {
   let summary = "Lower Vector operations to micro-kernel special lowering.";
   let dependentDialects = ["vector::VectorDialect",

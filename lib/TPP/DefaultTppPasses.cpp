@@ -83,22 +83,6 @@ private:
            "XSMM and Kernel lowering are mutually exclusive");
     bool forceLinalgToVector = (vectorToXSMM || vectorToKernel || nanoKernel);
 
-    // List of operations to skip when lowering Linalg to XSMM / Kernel.
-    // This allows further passes to lower to vector, function, codegen
-    // Default is to not skip anything. Only enable when needed.
-    SmallVector<std::string> skipOperations;
-    // General "linalg-to-vector" choice needs to skip all XSMM matching at
-    // linalg level.
-    if (linalgToVector || vectorToKernel || nanoKernel) {
-      skipOperations.push_back("all");
-    }
-    if (vectorToXSMM) {
-      skipOperations.clear();
-      skipOperations.push_back("unary");
-      skipOperations.push_back("transpose");
-      skipOperations.push_back("vnni");
-    }
-
     // Pipeline building starts here.
     pm.addPass(createFoldAddIntoDest());
     if (linalgToLoops) {
@@ -147,7 +131,7 @@ private:
 
       // Lower Linalg to XSMM.
       pm.addNestedPass<func::FuncOp>(
-          createLinalgLowering(LinalgLoweringOptions{skipOperations}));
+          createLinalgLowering());
 
       if (linalgToVector || forceLinalgToVector) {
 
@@ -179,11 +163,6 @@ private:
         // Please note, canonicalizer should be after hoisting pass because
         // it fuses outer tiling loops and it results in no pattern
         // matching for hoisting pass. Moved inside VectorToKernel Path.
-
-        if (vectorToXSMM) {
-          pm.addPass(createVectorToXSMM());
-        }
-
         // This path will be soon replaced by the nanoKernel path.
         if (vectorToKernel) {
           VectorToKernelOptions options;
