@@ -8,7 +8,6 @@ add_mlir_library(TPPPassBundles
   LowLevelParallelization.cpp
   PostProcessing.cpp
   TppMapping.cpp
-  VectorToXSMM.cpp
   VectorToKernel.cpp
   X86Vectorizer.cpp
 
