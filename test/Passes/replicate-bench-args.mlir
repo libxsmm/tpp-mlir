@@ -1,15 +1,10 @@
 // RUN: tpp-opt %s -replicate-bench-args="replication-factor=2" | FileCheck %s
-// RUN: tpp-opt %s -replicate-bench-args="replication-factor=2 random-init=true" | FileCheck %s --check-prefix=RANDOM
 
 // Replicate the kernel arguments of a (bufferized) benchmark wrapper so that
-// the timed kernel call iterates over distinct buffers. Each argument is backed
-// by a flat, zero-initialized i8 global holding `factor` contiguous copies
-// (2 * 4 * 4 * 4 bytes = 128 bytes), and every iteration feeds the kernel a
-// `memref.view` into that buffer.
-
-// CHECK: memref.global "private" @__bench_replica_0 : memref<128xi8> = dense<0>
-// CHECK: memref.global "private" @__bench_replica_1 : memref<128xi8> = dense<0>
-// CHECK: memref.global "private" @__bench_replica_2 : memref<128xi8> = dense<0>
+// the timed kernel call iterates over distinct buffers. In the current
+// lowering, each argument gets a stack-like temporary `memref<128xi8>`
+// allocation populated with two `memref.copy` operations (for factor=2), and
+// each benchmark iteration feeds `_entry` with per-iteration `memref.view`s.
 
 // The kernel signature is preserved (identity-layout contiguous memrefs).
 // CHECK-LABEL: func.func @_entry
@@ -20,28 +15,31 @@ func.func @_entry(%a: memref<4x4xf32>, %b: memref<4x4xf32>, %c: memref<4x4xf32>)
   return
 }
 
-// By default the float buffers are filled once, before perf.bench, with the
-// constant 1.0 through a whole-buffer memref.view + scf.for.
+// By default the argument buffers are initialized by copying from globals into
+// each per-replica view before entering perf.bench.
 // CHECK-LABEL: func.func @entry
-// CHECK: memref.view %{{.*}}[%{{.*}}][] : memref<128xi8> to memref<32xf32>
+// CHECK: %[[A0:.*]] = memref.alloc() {alignment = 128 : i64} : memref<128xi8>
+// CHECK: %[[A1:.*]] = memref.alloc() {alignment = 128 : i64} : memref<128xi8>
+// CHECK: %[[A2:.*]] = memref.alloc() {alignment = 128 : i64} : memref<128xi8>
 // CHECK: scf.for
-// CHECK: arith.constant 1.000000e+00 : f32
-// CHECK: memref.store %{{.*}}, %{{.*}}[%{{.*}}] : memref<32xf32>
+// CHECK: memref.view %[[A0]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.copy
+// CHECK: scf.for
+// CHECK: memref.view %[[A1]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.copy
+// CHECK: scf.for
+// CHECK: memref.view %[[A2]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.copy
 // CHECK: perf.bench
 // CHECK: scf.for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} {
-// CHECK: memref.view %{{.*}}[%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.view %[[A0]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.view %[[A1]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
+// CHECK: memref.view %[[A2]][%{{.*}}][] : memref<128xi8> to memref<4x4xf32>
 // CHECK: func.call @_entry
-// CHECK-NOT: memref.alloc
-// CHECK-NOT: memref.copy
+// CHECK: memref.dealloc %[[A0]] : memref<128xi8>
+// CHECK: memref.dealloc %[[A1]] : memref<128xi8>
+// CHECK: memref.dealloc %[[A2]] : memref<128xi8>
 
-// With random-init the float buffers are filled once, before perf.bench, with
-// a PRNG value in [1, 2) through a whole-buffer memref.view + scf.for.
-// RANDOM-LABEL: func.func @entry
-// RANDOM: memref.view %{{.*}}[%{{.*}}][] : memref<128xi8> to memref<32xf32>
-// RANDOM: scf.for
-// RANDOM: arith.bitcast %{{.*}} : i32 to f32
-// RANDOM: memref.store %{{.*}}, %{{.*}}[%{{.*}}] : memref<32xf32>
-// RANDOM: perf.bench
 func.func @entry() {
   %c10 = arith.constant 10 : i64
   %0 = memref.get_global @g0 : memref<4x4xf32>

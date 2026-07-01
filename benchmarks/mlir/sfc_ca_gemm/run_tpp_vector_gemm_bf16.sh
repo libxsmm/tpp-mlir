@@ -96,7 +96,7 @@ for M in "${SIZES[@]}"; do
 
       echo "=== Running   M=${M} N=${N} K=${K} ==="
       run_out="$("${TPP_RUN}" "${mlir_file}" \
-        -e entry -entry-point-result=void \
+        -e entry -entry-point-result=void --vector-to-kernels --registerBlocking=32,32,32 \
         -n "${N_ITERS}" --bench-replication-gb="${REPL_GIB}" \
         "${RANDOM_FLAGS[@]}" \
         "${PARALLEL_FLAGS[@]}")"

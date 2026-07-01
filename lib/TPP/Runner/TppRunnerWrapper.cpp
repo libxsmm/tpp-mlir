@@ -62,8 +62,7 @@ struct TppRunnerWrapper
     double replicationTargetGiB =
         (numBenchLoops > 1) ? benchReplicationGiB : 0.0;
     MLIRBenchConfig config(seed, tensorInitType, identity, backend,
-                           offloadToDevice, replicationTargetGiB,
-                           /*replicationRandomInit=*/randomSplat);
+                 offloadToDevice, replicationTargetGiB);
     MLIRBench bench(module, config);
 
     // Can only either print or run benchmarks, make this clear before we try to
