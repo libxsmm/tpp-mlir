@@ -116,6 +116,7 @@ if [ "$BENCH_OMP" ]; then
   benchmark omp/mlir-fp32.json "OpenMP TPP-MLIR FP32"
   benchmark omp/mlir-fp32-vector-to-kernel.json "OpenMP TPP-MLIR VECTOR-TO-KERNEL FP32"
   benchmark omp/mlir-bf16.json "OpenMP TPP-MLIR BF16"
+  benchmark omp/mlir-i8-bf16-gemm-amx.json "OpenMP TPP-MLIR I8-BF16 GEMM-AMX"
   benchmark omp/torch-dynamo.json "OpenMP TPP-MLIR PyTorch"
   benchmark omp/torch-dynamo-vector-to-kernel.json "OpenMP TPP-MLIR VECTOR-TO-KERNEL PyTorch"
 fi

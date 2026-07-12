@@ -1,11 +1,31 @@
 [
   {
+  "gemm_i8_f32_dequant_mlir_vector_small_amx": {
+    "i8_f32_dequant_512x512_omp_64_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=args --float-type=mx-i8-f32 --batch=512 --layers=512,512 --tiles=32,32,64 --vnni=4 --quant-type=dequantize" ],
+      "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=555 --bench-replication-gb=5'" ],
+      "extensions": [ "amx_int8" ]
+    }
+  }},
+  {
+  "gemm_i8_f32_dequant_mlir_vector_large_amx": {
+    "i8_f32_dequant_8192x8192_omp_64_mlir": {
+      "type": "IR-GEN",
+      "benchmark": [ "mlir-gen", "--kernel=args --float-type=mx-i8-f32 --batch=8192 --layers=8192,8192 --tiles=32,32,64 --vnni=4 --quant-type=dequantize" ],
+      "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=555 --bench-replication-gb=5'" ],
+      "extensions": [ "amx_int8" ]
+    }
+  }},
+  {
   "gemm_i8_f32_dequant_mlir_vector_large_amx": {
     "i8_f32_dequant_4096x4096_omp_64_mlir": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=args --float-type=mx-i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant-type=dequantize" ],
       "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123 --bench-replication-gb=5'" ],
       "extensions": [ "amx_int8" ]
     }
   }},
@@ -15,7 +35,7 @@
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=args --float-type=mx-bf16 --batch=4096 --layers=8192,4096 --tiles=32,32,32 --vnni=2" ],
       "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123'" ],
+      "flags": [ "-n", "100", "-run-args='--def-parallel --vector-to-kernels --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123 --bench-replication-gb=5'" ],
       "extensions": [ "amx_bf16" ]
     }
   }}

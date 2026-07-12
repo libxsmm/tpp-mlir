@@ -123,7 +123,7 @@ echo "Raw timings written to ${RAW_CSV}"
 #==============================================================================
 # Post-process: compute TFLOP/s and sort by arithmetic complexity
 #==============================================================================
-SORTED_CSV="${OUT_DIR}/sfc_ca_gemm_results.csv"
+SORTED_CSV="${OUT_DIR}/run_tpp_vector_gemm_bf16_results.csv"
 python3 "${SCRIPT_DIR}/postprocess.py" "${RAW_CSV}" "${SORTED_CSV}"
 
 echo "Sorted results with TFLOP/s written to ${SORTED_CSV}"
