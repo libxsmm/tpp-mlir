@@ -107,10 +107,7 @@
 // MXI8-CONTRACT-SAME:                     %[[ARG0:.*]]: tensor<2x36x64x64xi8>,
 // MXI8-CONTRACT-SAME:                     %[[ARG1:.*]]: tensor<16x36x64x48xi8>,
 // MXI8-CONTRACT-SAME:                     %[[ARG2:.*]]: tensor<2x16x64x48xi32>) -> tensor<2x16x64x48xi32> {
-// MXI8-CONTRACT:           %[[VAL_0:.*]] = arith.constant 0 : i32
-// MXI8-CONTRACT:           %[[VAL_1:.*]] = tensor.empty() : tensor<2x16x64x48xi32>
-// MXI8-CONTRACT:           %[[VAL_2:.*]] = linalg.fill ins(%[[VAL_0]] : i32) outs(%[[VAL_1]] : tensor<2x16x64x48xi32>) -> tensor<2x16x64x48xi32>
-// MXI8-CONTRACT:           %[[VAL_3:.*]] = linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]] ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xi8>, tensor<16x36x64x48xi8>) outs(%[[VAL_2]] : tensor<2x16x64x48xi32>) -> tensor<2x16x64x48xi32>
+// MXI8-CONTRACT:           %[[VAL_3:.*]] = linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]] ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xi8>, tensor<16x36x64x48xi8>) outs(%[[ARG2]] : tensor<2x16x64x48xi32>) -> tensor<2x16x64x48xi32>
 // MXI8-CONTRACT:           return %[[VAL_3]] : tensor<2x16x64x48xi32>
 // MXI8-CONTRACT:         }
 

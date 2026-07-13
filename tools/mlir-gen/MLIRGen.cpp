@@ -613,8 +613,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
   // float type?
   if (quantType == QuantizationType::Quant) {
     output = getZeroInitTensor(zeroType);
-  } else if (quantType == QuantizationType::Dequant ||
-             quantType == QuantizationType::Mixed) {
+  } else if (quantType == QuantizationType::Dequant) {
     Type elementType = inputType.getElementType();
     if (elementType.isInteger(8)) {
       // Get integer tensor accumulator type for dequantization.
