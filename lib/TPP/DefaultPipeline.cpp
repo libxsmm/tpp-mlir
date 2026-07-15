@@ -104,10 +104,6 @@ llvm::cl::list<unsigned> registerBlocking(
     llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 32}),
     llvm::cl::CommaSeparated);
 
-llvm::cl::opt<bool> vectorToXSMM("vector-to-XSMM",
-                                 llvm::cl::desc("Lower vector to XSMM"),
-                                 llvm::cl::init(false));
-
 namespace mlir {
 namespace tpp {
 #define GEN_PASS_DEF_DEFAULTPIPELINE
@@ -185,7 +181,6 @@ private:
       tppDefaultOptions.parallelTaskGrid = SmallVector<unsigned>{
           parallelTaskGrid.begin(), parallelTaskGrid.end()};
       tppDefaultOptions.linalgToVector = linalgToVector;
-      tppDefaultOptions.vectorToXSMM = vectorToXSMM;
       tppDefaultOptions.lowerPackUnpackWithoutTranspose =
           lowerPackUnpackWithoutTranspose;
       tppDefaultOptions.disableVnniPacking = disableVnniPacking;

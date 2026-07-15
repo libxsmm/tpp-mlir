@@ -74,14 +74,10 @@ private:
     //  * Linalg-to-XSMM: the default path, no options needed
     //  * Linalg-to-Vector: Enable with `linalg-to-vector` flag.
     //    No further changes done to the IR, lowers straigt to LLVM.
-    //  * Vector-to-XSMM: Enable with `vector-to-xsmm` flag, forces
-    //    `linalg-to-vector` and lowers vector patterns to libxsmm calls.
     //  * Vector-to-Kernel: Enable with `vector-to-kernel` flag, forces
     //    `linalg-to-vector` and lowers vector patterns to libxsmm-like
     //    micro-kernels via specialized lowering of certain vector patterns.
-    assert(!(vectorToXSMM && vectorToKernel) &&
-           "XSMM and Kernel lowering are mutually exclusive");
-    bool forceLinalgToVector = (vectorToXSMM || vectorToKernel || nanoKernel);
+    bool forceLinalgToVector = (vectorToKernel || nanoKernel);
 
     // Pipeline building starts here.
     pm.addPass(createFoldAddIntoDest());

@@ -49,9 +49,7 @@ struct LinalgLowering : public tpp::impl::LinalgLoweringBase<LinalgLowering>,
 
 private:
   void constructPipeline() override {
-    ConvertLinalgToXsmmOptions linalgOptions;
-    linalgOptions.skipOperations = SmallVector<std::string>{*skipOperations};
-    pm.addPass(createConvertLinalgToXsmm(linalgOptions));
+    pm.addPass(createConvertLinalgToXsmm());
     pm.addPass(createCombineXsmmOpPass());
     pm.addPass(createFoldXsmmFlags());
     pm.addPass(createVerifyXsmmCalls());

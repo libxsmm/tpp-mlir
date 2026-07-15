@@ -39,10 +39,6 @@ def ConvertLinalgToXsmm : Pass<"convert-linalg-to-xsmm", "func::FuncOp"> {
                            "linalg::LinalgDialect",
                            "xsmm::XsmmDialect",
                            "tensor::TensorDialect"];
-  let options = [
-    ListOption<"skipOperations", "skip-operations", "std::string",
-           "Operations to skip.">
-  ];
 }
 
 def VerifyXsmmCalls : Pass<"verify-xsmm-calls", "func::FuncOp"> {

@@ -44,9 +44,6 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"linalgToVector", "linalg-to-vector",
            "bool", /*default=*/"false",
            "Lower linalg directly to vector.">,
-    Option<"vectorToXSMM", "vector-to-xsmm",
-           "bool", /*default=*/"false",
-           "Lower vector patterns to XSMM calls.">,
     Option<"vectorToKernel", "vector-to-kernel",
            "bool", /*default=*/"false",
            "Lower vector patterns to micro-kernels.">,
@@ -100,10 +97,6 @@ def LinalgLowering : Pass<"linalg-lowering", "func::FuncOp"> {
   let dependentDialects = ["xsmm::XsmmDialect",
                            "scf::SCFDialect",
                            "memref::MemRefDialect"];
-  let options = [
-    ListOption<"skipOperations", "skip-operations", "std::string",
-           "Operations to skip lowering linalg-to-xsmm directly.">
-  ];
 }
 
 def VectorToKernel : Pass<"vector-to-kernel", "ModuleOp"> {
