@@ -54,21 +54,6 @@ llvm_version() {
   echo "${LLVM_VERSION}"
 }
 
-# Add known device extension suffixes to a base string
-add_device_extensions() {
-  local BASE=${1}
-  local DEVICE_LIST=${2}
-
-  # GPU extensions
-  if [[ ${DEVICE_LIST,,} =~ "cuda" ]]; then
-    BASE=${BASE}-cuda
-  elif [[ ${DEVICE_LIST,,} =~ "intel" ]]; then
-    BASE=${BASE}-intel
-  fi
-
-  echo ${BASE}
-}
-
 # Wait for a file to appear on an existing directory
 wait_for_file() {
   local DIR="${1}"

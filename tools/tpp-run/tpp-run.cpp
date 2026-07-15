@@ -57,7 +57,6 @@
 #include "TPP/Dialect/Check/CheckDialect.h"
 #include "TPP/Dialect/Perf/PerfDialect.h"
 #include "TPP/Dialect/Xsmm/XsmmDialect.h"
-#include "TPP/GPU/Utils.h"
 #include "TPP/PassBundles.h"
 #include "TPP/Passes.h"
 
@@ -128,24 +127,12 @@ llvm::cl::opt<bool> printLLVM("print-llvm",
                               llvm::cl::desc("print LLVM IR before lowering"),
                               llvm::cl::init(false));
 
-// Select target GPU backend for the pipeline.
-llvm::cl::opt<std::string>
-    defGpuBackend("gpu", llvm::cl::desc("Target GPU backend for lowering"),
-                  llvm::cl::value_desc("cuda,intel"), llvm::cl::init(""));
-
 // Select target CPU feature for the pipeline.
 llvm::cl::opt<std::string> runnerCpuTargetFeature(
     "target-feature", llvm::cl::desc("Specify CPU target feature for lowering"),
     llvm::cl::value_desc("avx, avx2, avx512f, avx512vnni, avx512bf16, amx, "
                          "amx_bf16, amx_tile, neon, sve"),
     llvm::cl::init(""));
-
-// Kernel buffers - arguments and return values - are expected to be allocated
-// on GPU.
-llvm::cl::opt<bool>
-    defGpuArgs("gpu-args",
-               llvm::cl::desc("Kernel buffers are allocated on GPU"),
-               llvm::cl::init(true));
 
 struct TargetMachineOptions {
   std::string triple;
@@ -204,13 +191,9 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   tpp::TppRunnerWrapperOptions wrapperOpts;
   wrapperOpts.kernelName = options.mainFuncName;
   wrapperOpts.kernelType = options.mainFuncType;
-  wrapperOpts.backend = defGpuBackend;
   wrapperOpts.wrapperCpuTargetFeature = runnerCpuTargetFeature;
-  wrapperOpts.offloadToDevice = defGpuArgs;
   wrapperOpts.numBenchLoops = benchNumLoops;
   wrapperOpts.benchReplicationGiB = benchReplicationGiB;
-  // Warmup on GPUs are currently breaking buffer allocation on GPUs
-  wrapperOpts.benchWarmup = defGpuBackend.empty();
   wrapperOpts.printResult = printKernelResult;
   wrapperOpts.printInput = printKernelInput;
   wrapperOpts.randomSplat = splatRandom;
@@ -219,8 +202,7 @@ static LogicalResult prepareMLIRKernel(Operation *op,
   wrapperOpts.identity = identity;
   passManager.addPass(tpp::createTppRunnerWrapper(wrapperOpts));
 
-  tpp::DefaultPipelineOptions defPipelineOpts{defGpuBackend,
-                                              runnerCpuTargetFeature};
+  tpp::DefaultPipelineOptions defPipelineOpts{runnerCpuTargetFeature};
   passManager.addPass(tpp::createDefaultPipeline(defPipelineOpts));
 
   auto result = passManager.run(module);
@@ -325,9 +307,6 @@ int main(int argc, char **argv) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   llvm::InitializeNativeTargetAsmParser();
-
-  // Initialize GPU-related LLVM machinery
-  tpp::initializeGpuTargets();
 
   // Register all passes to expose them for debugging
   mlir::registerAllPasses();

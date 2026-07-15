@@ -16,7 +16,6 @@ die_syntax() {
   echo "  -l: Optional linker flag, defaults to system linker"
   echo "  -R: Optional request to remove BLD_DIR before CMake"
   echo "  -S: Optional sanitizer flag, defaults to none"
-  echo "  -G: Optional GPU support flag, defaults to none"
   echo "  -O: Optional OpenMP support flag, defaults to none"
   echo "  -n: Optional link job flag, defaults to nproc"
   exit 1
@@ -102,9 +101,6 @@ while getopts "s:b:i:m:t:c:l:n:G:RSOD" arg; do
     S)
       SAN_OPTIONS="-DUSE_SANITIZER=\"Address;Memory;Leak;Undefined\""
       ;;
-    G)
-      ENABLE_GPU="-DTPP_GPU=${OPTARG}"
-      ;;
     O)
       BUILD_OPTIONS="${BUILD_OPTIONS} -DUSE_OpenMP=ON"
       ;;
@@ -166,5 +162,4 @@ echo_run cmake -Wno-dev -G Ninja \
     -DLLVM_EXTERNAL_LIT=${TPP_LIT} \
     ${BUILD_OPTIONS} \
     ${LINKER_OPTIONS} \
-    ${SAN_OPTIONS} \
-    ${ENABLE_GPU}
+    ${SAN_OPTIONS}    

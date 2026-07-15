@@ -39,11 +39,6 @@ class FuncOp;
 class FuncDialect;
 } // namespace func
 
-namespace gpu {
-class GPUModuleOp;
-class GPUDialect;
-} // namespace gpu
-
 namespace linalg {
 class LinalgDialect;
 } // namespace linalg
@@ -72,17 +67,13 @@ namespace scf {
 class SCFDialect;
 } // namespace scf
 
-namespace spirv {
-class SPIRVDialect;
-} // namespace spirv
-
 namespace tensor {
 class TensorDialect;
 } // namespace tensor
 
 namespace vector {
 class VectorDialect;
-} // namespace tensor
+} // namespace vector
 
 namespace tpp {
 
@@ -99,10 +90,6 @@ class VectorDialect;
 namespace xsmm {
 class XsmmDialect;
 } // namespace xsmm
-
-namespace xegpu {
-class XeGPUDialect;
-} // namespace xegpu
 
 namespace x86 {
 class X86Dialect;

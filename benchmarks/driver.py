@@ -182,10 +182,6 @@ class BaseRun(object):
         self.original_env[asan_key] = ":".join(asan_options)
         # Always disable leak santizier
         asan_options.append("detect_leaks=0")
-        # GPU tests require extra ASAN flags due to incompatibility with CUDA
-        # See: https://github.com/google/sanitizers/issues/629
-        if "--gpu" in " ".join(self.flags):
-            asan_options.extend(["protect_shadow_gap=0", "replace_intrin=0"])
         os.environ[asan_key] = ":".join(asan_options)
 
     def extendHarnessCmd(self, cmd):
@@ -569,9 +565,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--init-type", type=str, help="Random initializer type"
-    )
-    parser.add_argument(
-        "--gpu", type=str, help="Target GPU backend for lowering (cuda)"
     )
     args = parser.parse_args()
 

@@ -30,7 +30,6 @@ config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
 config.host_arch = "@HOST_ARCH@"
 config.tpp_src_root = "@CMAKE_SOURCE_DIR@"
 config.tpp_obj_root = "@CMAKE_BINARY_DIR@"
-config.tpp_gpu = "@TPP_GPU@"
 config.use_openmp = "@USE_OpenMP@"
 config.cpuid_checker = "@CMAKE_BINARY_DIR@/bin/check-cpuid"
 

@@ -17,7 +17,6 @@
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -184,37 +183,6 @@ LogicalResult MLIRBench::renameKernel() {
   return success();
 }
 
-Value MLIRBench::registerOnGpu(Value buf, MemRefType memRefTy) {
-  // Do nothing when not using GPU
-  if (!offloadToDevice || !(backend == "cuda"))
-    return buf;
-
-  // Allocate an arg buffer on device and copy data from host
-  // Use shared memory on Intel GPU and dedicated GPU allocation, otherwise
-  bool isHostShared = backend == "intel";
-  auto gpuAlloc =
-      gpu::AllocOp::create(builder, unkLoc, memRefTy, ValueRange{}, ValueRange{},
-                                   ValueRange{}, /*hostShared=*/isHostShared);
-  auto gpuBuf = gpuAlloc.getResult(0);
-
-  Operation *memcpy;
-  if (backend == "intel") {
-    memcpy = memref::CopyOp::create(builder, unkLoc, buf, gpuBuf);
-  } else {
-    memcpy = gpu::MemcpyOp::create(builder, unkLoc, /*asyncToken=*/ValueRange{},
-                                           ValueRange{}, gpuBuf, buf);
-  }
-
-  // Dealloc the arg buffer at the end of program
-  builder.setInsertionPointToEnd(&getMainBlock());
-  gpu::DeallocOp::create(builder, unkLoc, /*asyncToken=*/ValueRange{}, gpuBuf);
-
-  // Continue inserting ops after the created kernel arg
-  builder.setInsertionPointAfter(memcpy);
-
-  return gpuBuf;
-}
-
 LogicalResult MLIRBench::createKernelArgs() {
   // Clear current args and rebuild them from scratch
   kernelArgs.clear();
@@ -318,7 +286,6 @@ LogicalResult MLIRBench::createKernelArgs() {
                 Value data =
                     createDenseMemref(builder, module, argInitType, memRefTy,
                                       seed, nextMemrefType, isScaleArgument);
-                data = registerOnGpu(data, memRefTy);
                 return data;
             })
             .Case<TensorType>([&](auto tensorTy) {
@@ -338,7 +305,6 @@ LogicalResult MLIRBench::createKernelArgs() {
               auto data =
                   createDenseMemref(builder, module, argInitType, memrefType,
                                     seed, nextMemrefType, isScaleArgument);
-              data = registerOnGpu(data, memrefType);
               return bufferization::ToTensorOp::create(builder,
                   unkLoc, tensorTy, data, /*restrict=*/true, /*writable=*/true);
             })
@@ -509,39 +475,6 @@ LogicalResult MLIRBench::printResult(Operation *kernelCall) {
 
   // Kernels must return a single result
   Value result = kernelCall->getResult(0);
-
-  bool isIntel = (backend == "intel");
-  if (((backend == "cuda") || isIntel) && offloadToDevice) {
-    auto resType = cast<ShapedType>(result.getType());
-    auto memrefType =
-        MemRefType::get(resType.getShape(), resType.getElementType());
-
-    if (isa<TensorType>(result.getType())) {
-      result =
-          bufferization::ToBufferOp::create(builder, unkLoc, memrefType, result);
-    }
-
-    auto outBuf = memref::AllocOp::create(builder, unkLoc, memrefType);
-
-    Operation *memcpy;
-    if (isIntel) {
-      memcpy = memref::CopyOp::create(builder, unkLoc, result, outBuf);
-    } else {
-      memcpy = gpu::MemcpyOp::create(builder,
-          unkLoc, /*asyncToken=*/ValueRange{}, ValueRange{}, outBuf, result);
-    }
-
-    // Dealloc the output buffer at the end of program.
-    // For now, automatic deallocation is disabled for GPUs.
-    builder.setInsertionPointToEnd(&getMainBlock());
-    memref::DeallocOp::create(builder, unkLoc, outBuf);
-
-    // Restore insertion point
-    builder.setInsertionPointAfter(memcpy);
-
-    result = outBuf;
-  }
-
   return printShapedType(result);
 }
 
@@ -568,5 +501,3 @@ Block &MLIRBench::getMainBlock() { return main.getBody().front(); }
 LogicalResult MLIRBench::emitError(llvm::Twine desc) {
   return module.emitError(desc);
 }
-
-std::string MLIRBench::getGPUName() { return backend; }

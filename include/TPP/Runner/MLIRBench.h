@@ -126,10 +126,6 @@ class MLIRBench {
   /// Gets main wrappers's block
   Block &getMainBlock();
 
-  // Expose memref buffer to GPU
-  // Returns registered buffer
-  Value registerOnGpu(Value buf, MemRefType memRefTy);
-
 public:
   /// Return kernelArgs
   llvm::SmallVector<KernelArg> getKernelArgs() { return kernelArgs; }
@@ -184,9 +180,6 @@ public:
 
   /// Reports error on the current module's location
   LogicalResult emitError(llvm::Twine);
-
-  /// Return the GPU name, if any (empty for CPU)
-  std::string getGPUName();
 };
 
 } // namespace mlir

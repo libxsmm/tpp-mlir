@@ -17,9 +17,6 @@ def DefaultPipeline : Pass<"default-pipeline", "ModuleOp"> {
     A collection of passes that lower everything to MLIR LLVM IR.
   }];
   let options = [
-    Option<"gpuBackend", "gpu", "std::string",
-            /*default=*/"\"\"",
-           "Optional target GPU backend.">,
     Option<"pipelineCpuTargetFeature", "target-feature", "std::string",
             /*default=*/"",
            "Optional CPU target feature.">,
@@ -152,62 +149,6 @@ def Postprocessing : Pass<"postprocess", "func::FuncOp"> {
 
 def Cleanup : Pass<"cleanup"> {
   let summary = "General IR cleanup e.g., canonicalization, CSE etc.";
-}
-
-def GpuPipeline : Pass<"gpu-pipeline", "ModuleOp"> {
-  let summary = "Lower all eligible operations into GPU compatible IR";
-  let options = [
-    Option<"gpuBackend", "gpu", "std::string",
-            /*default=*/"\"cuda\"",
-           "Target GPU backend for lowering (cuda).">,
-  ];
-}
-
-def GpuConversion : Pass<"gpu-conversion", "ModuleOp"> {
-  let summary = "Convert operations to GPU";
-  let description = [{
-    Convert all eligble operations into generic GPU operations.
-  }];
-  let dependentDialects = ["linalg::LinalgDialect",
-                           "gpu::GPUDialect",
-                           "scf::SCFDialect",
-                           "memref::MemRefDialect",
-                           "xegpu::XeGPUDialect"];
-  let options = [
-    Option<"isIntel", "intel",
-           "bool", /*default=*/"false",
-           "Convert for Intel GPU">,
-    Option<"kTile", "k-tile", "int64_t",
-           /*default=*/"32",
-           "GEMM tile size for reduction dimension.">,
-    Option<"stages", "stages", "int64_t",
-           /*default=*/"1",
-           "Number of cooperative prefetch stages.">,
-    ListOption<"dpasTile", "dpas-tile", "int64_t",
-               "DPAS register block sizes MxNxK">,
-  ];
-}
-
-def GpuToCuda : Pass<"gpu-to-cuda", "ModuleOp"> {
-  let summary = "Lower generic GPU operations to CUDA backend";
-  let dependentDialects = ["affine::AffineDialect",
-                           "arith::ArithDialect",
-                           "memref::MemRefDialect",
-                           "scf::SCFDialect",
-                           "gpu::GPUDialect",
-                           "NVVM::NVVMDialect",
-                           "nvgpu::NVGPUDialect"];
-  let options = [
-    Option<"gpuTriple", "triple", "std::string",
-            /*default=*/"\"nvptx64-nvidia-cuda\"",
-           "GPU target triple.">,
-    Option<"gpuChip", "chip", "std::string",
-            /*default=*/"\"sm_70\"",
-           "GPU target architecture.">,
-    Option<"gpuFeatures", "features", "std::string",
-            /*default=*/"\"+ptx60\"",
-           "GPU target features.">,
-  ];
 }
 
 def X86Vectorizer : Pass<"x86-vectorizer", "ModuleOp"> {

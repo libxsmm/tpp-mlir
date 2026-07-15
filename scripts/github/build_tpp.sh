@@ -19,7 +19,6 @@ echo "--- LLVM"
 LLVM_VERSION=$(llvm_version)
 
 LLVM_INSTALL_DIR=${LLVMROOT}/${LLVM_VERSION}
-LLVM_INSTALL_DIR=$(add_device_extensions ${LLVM_INSTALL_DIR} ${GPU})
 
 if [ ! -d "${LLVM_INSTALL_DIR}" ]; then
   echo "LLVM ${LLVM_VERSION} not found"
@@ -46,10 +45,6 @@ fi
 if [ ! "${LINKER}" ]; then
   LINKER=lld
 fi
-if [ "${GPU}" ]; then
-  GPU_OPTION="-G ${GPU}"
-  source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
-fi
 # Always build OpenMP in CI
 EXTENSIONS="-O"
 
@@ -75,7 +70,6 @@ if ! ${SCRIPT_DIR}/ci/cmake.sh \
   -t ${KIND} \
   ${SANITIZERS} \
   ${EXTENSIONS} \
-  ${GPU_OPTION} \
   -c ${COMPILER} \
   -l ${LINKER} \
   -n ${NPROCS_LIMIT_LINK:-1}

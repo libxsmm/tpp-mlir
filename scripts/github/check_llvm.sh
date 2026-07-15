@@ -17,7 +17,6 @@ mkdir -p ${LLVMROOT}
 LLVM_VERSION=$(llvm_version)
 
 LLVM_INSTALL_DIR=${LLVMROOT}/${LLVM_VERSION}
-LLVM_INSTALL_DIR=$(add_device_extensions ${LLVM_INSTALL_DIR} ${GPU})
 
 if [ -f "${LLVM_INSTALL_DIR}/bin/mlir-opt" ]; then
   echo "Found $LLVM_VERSION"

@@ -441,40 +441,11 @@ def LinalgDeGeneralize : Pass<"linalg-degeneralize-generic-ops", "func::FuncOp">
   let dependentDialects = ["linalg::LinalgDialect"];
 }
 
-def SetSPIRVCapabilities : Pass<"tpp-set-spirv-capabilities", "ModuleOp"> {
-  let summary = "Set SPIR-V capabilities.";
-  let options = [
-    Option<"clientAPI", "client-api", "std::string",
-            /*default=*/"\"opencl\"",
-           "The client API to use for capabilities">,
-  ];
-}
-
-def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attr", "gpu::GPUModuleOp"> {
-  let summary = "Set SPIR-V ABI attribute.";
-  let options = [
-    Option<"clientAPI", "client-api", "std::string",
-            /*default=*/"\"opencl\"",
-           "The client API to use for ABI attribute">,
-  ];
-}
-
 def DecomposeAggregatedOps : Pass<"decompose-aggregated-ops", "func::FuncOp"> {
   let summary = "Decompose aggregated operations.";
   let description = [{
     Decompose operations that implement the `AggregatedOpInterface`.
   }];
-}
-
-def GpuDataTransfer : Pass<"gpu-data-transfer", "func::FuncOp"> {
-  let summary = "Transfer data to and from GPU.";
-  let description = [{
-    Make host data required by GPU kernels accessible by the device.
-    It might involve data copies and/or movement.
-  }];
-  let dependentDialects = ["func::FuncDialect",
-                           "memref::MemRefDialect",
-                           "gpu::GPUDialect"];
 }
 
 def FoldXsmmFlags : Pass<"fold-xsmm-flags", "func::FuncOp"> {
@@ -517,17 +488,6 @@ def SCFForAllLoopFlattenSFC : Pass<"scf-forall-loop-flatten-sfc"> {
     the linearized tile count (i8, i16, i32 or i64).
   }];
   let dependentDialects = ["scf::SCFDialect", "arith::ArithDialect", "memref::MemRefDialect"];
-}
-
-def GpuInlineConstants : Pass<"gpu-inline-constants", "func::FuncOp"> {
-  let summary = "Inlines constants into GPU launch.";
-  let description = [{
-    Inline constants into GPU launch body to reduce number of parameters
-    and allow further constant propagation after kernel outlining.
-    The pass should be used just before GPU kernel outlining.
-  }];
-  let dependentDialects = ["gpu::GPUDialect",
-                           "arith::ArithDialect"];
 }
 
 def IntelAMXTileConfigInsertionPass : Pass<"intel-amx-tile-config-insertion-pass",
@@ -580,7 +540,6 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
   let dependentDialects = ["func::FuncDialect",
                            "tensor::TensorDialect",
                            "memref::MemRefDialect",
-                           "gpu::GPUDialect",
                            "arith::ArithDialect",
                            "scf::SCFDialect",
                            "vector::VectorDialect",
@@ -635,31 +594,6 @@ def TppRunnerWrapper : Pass<"tpp-runner-wrapper", "ModuleOp">{
   ];
 }
 
-def LinalgToXeGPU : Pass<"linalg-to-xegpu", "func::FuncOp"> {
-  let summary = "Convert linalg dialect to XeGPU dialect.";
-  let description = [{
-    Lower linalg ops to XeGPU dialect.
-  }];
-  let dependentDialects = ["linalg::LinalgDialect",
-                           "gpu::GPUDialect",
-                           "xegpu::XeGPUDialect",
-                           "scf::SCFDialect",
-                           "memref::MemRefDialect",
-                           "arith::ArithDialect",
-                           "math::MathDialect",
-                           "vector::VectorDialect"];
-  let options = [
-    Option<"kTile", "k-tile", "int64_t",
-           /*default=*/"32",
-           "GEMM tile size for reduction dimension.">,
-    Option<"stages", "stages", "int64_t",
-           /*default=*/"1",
-           "Number of cooperative prefetch stages.">,
-    ListOption<"dpasTile", "dpas-tile", "int64_t",
-               "DPAS register block sizes MxNxK">,
-  ];
-}
-
 def FoldIntoEltwise : Pass<"fold-into-eltwise", "ModuleOp"> {
   let summary = "Fold operations into elementwise ops.";
   let description = [{
@@ -688,20 +622,6 @@ def SplitReductionDim : Pass<"split-reduction-dim", "func::FuncOp"> {
            /*default=*/"0",
            "Reduction dimension tile size">,
   ];
-}
-
-def GpuVectorize : Pass<"gpu-vectorize", "ModuleOp"> {
-  let summary = "Vectorize GPU kernel.";
-  let description = [{
-    Convert ops targeting GPU to vectorized representation.
-  }];
-  let dependentDialects = ["gpu::GPUDialect",
-                           "scf::SCFDialect",
-                           "memref::MemRefDialect",
-                           "tensor::TensorDialect",
-                           "math::MathDialect",
-                           "arith::ArithDialect",
-                           "vector::VectorDialect"];
 }
 
 def RegisterBlocking : Pass<"register-blocking", "func::FuncOp"> {

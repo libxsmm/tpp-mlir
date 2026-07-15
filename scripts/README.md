@@ -37,7 +37,7 @@ To run local tests like in the CI-environment (relies at least on the TPP-enviro
 ```bash
 cd tpp-mlir
 source scripts/env.sh
-KIND=Debug COMPILER=clang LINKER=lld CHECK=1 GPU=cuda CLEAN=1 scripts/github/build_tpp.sh
+KIND=Debug COMPILER=clang LINKER=lld CHECK=1 CLEAN=1 scripts/github/build_tpp.sh
 ```
 
 Above scripts (scripts/env.sh) must be sourced from inside of the tpp-mlir directory (Git repository).

@@ -37,23 +37,8 @@ add_llvm_executable(tpp-run
 
 llvm_update_compile_flags(tpp-run)
 
-if (TPP_GPU MATCHES "cuda")
-  set(TPP_GPU_LINK_FLAGS
-      ${TPP_GPU_LINK_FLAGS}
-      -lmlir_cuda_runtime
-    )
-
-  # We need the libcuda.so library.
-  # See: mlir/lib/ExecutionEngine/CMakeLists.txt
-  find_library(CUDA_RUNTIME_LIBRARY cuda HINTS ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} REQUIRED)
-  set(CUDA_LIBS
-      ${CUDA_RUNTIME_LIBRARY}
-    )
-endif()
-
 target_link_libraries(tpp-run PRIVATE
   ${LIBS}
-  ${CUDA_LIBS}
 )
 
 message(STATUS "TPP libraries at: ${CMAKE_BINARY_DIR}/lib")
@@ -69,7 +54,6 @@ target_link_options(tpp-run PRIVATE
   -lmlir_c_runner_utils
   -lmlir_runner_utils
   -lmlir_async_runtime
-  ${TPP_GPU_LINK_FLAGS}
   $<$<BOOL:${USE_OpenMP}>:${OpenMP_C_LIBRARIES}>
   -Wl,--as-needed
 )

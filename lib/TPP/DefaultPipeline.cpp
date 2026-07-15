@@ -17,7 +17,6 @@
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/Async/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Pass/PassOptions.h"
@@ -170,39 +169,27 @@ private:
     if (print == PrintStage::Early)
       pm.addPass(createPrintIRPass());
 
-    if (!gpuBackend.empty()) {
-      // Apply the custom GPU lowering pipeline
-      pm.addPass(createGpuPipeline(GpuPipelineOptions{gpuBackend}));
-    } else {
-      // Apply the default preprocessing pass
-      DefaultTppPassesOptions tppDefaultOptions;
-      tppDefaultOptions.linalgToLoops = linalgToLoops;
-      tppDefaultOptions.sfcOrder = sfcOrder;
-      tppDefaultOptions.parallelTaskGrid = SmallVector<unsigned>{
-          parallelTaskGrid.begin(), parallelTaskGrid.end()};
-      tppDefaultOptions.linalgToVector = linalgToVector;
-      tppDefaultOptions.lowerPackUnpackWithoutTranspose =
-          lowerPackUnpackWithoutTranspose;
-      tppDefaultOptions.disableVnniPacking = disableVnniPacking;
-      tppDefaultOptions.disableTileElementwiseOps = disableTileElementwiseOps;
-      tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
-          registerBlocking.begin(), registerBlocking.end()};
-      tppDefaultOptions.vectorToKernel = vectorToKernel;
-      tppDefaultOptions.nanoKernel = nanoKernel;
-      tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
+    // Apply the default preprocessing pass
+    DefaultTppPassesOptions tppDefaultOptions;
+    tppDefaultOptions.linalgToLoops = linalgToLoops;
+    tppDefaultOptions.sfcOrder = sfcOrder;
+    tppDefaultOptions.parallelTaskGrid = SmallVector<unsigned>{
+        parallelTaskGrid.begin(), parallelTaskGrid.end()};
+    tppDefaultOptions.linalgToVector = linalgToVector;
+    tppDefaultOptions.lowerPackUnpackWithoutTranspose =
+        lowerPackUnpackWithoutTranspose;
+    tppDefaultOptions.disableVnniPacking = disableVnniPacking;
+    tppDefaultOptions.disableTileElementwiseOps = disableTileElementwiseOps;
+    tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
+        registerBlocking.begin(), registerBlocking.end()};
+    tppDefaultOptions.vectorToKernel = vectorToKernel;
+    tppDefaultOptions.nanoKernel = nanoKernel;
+    tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
 
-      pm.addPass(createDefaultTppPasses(tppDefaultOptions));
-    }
+    pm.addPass(createDefaultTppPasses(tppDefaultOptions));
 
     if (print == PrintStage::Mid)
       pm.addPass(createPrintIRPass());
-
-    // Bail out early for Intel GPU.
-    // The rest of the lowering is performed by IMEX.
-    if (gpuBackend == "intel") {
-      pm.addPass(createPrintIRPass());
-      return;
-    }
 
     // Partial Lowering
     pm.addPass(memref::createExpandStridedMetadataPass());
@@ -229,11 +216,6 @@ private:
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
     pm.addPass(createSCFToControlFlowPass());
 
-    pm.addNestedPass<func::FuncOp>(createGpuAsyncRegionPass());
-    pm.addPass(createGpuToLLVMConversionPass());
-    GpuModuleToBinaryPassOptions gpuModuleToBinaryPassOptions;
-    gpuModuleToBinaryPassOptions.compilationTarget = "fatbin";
-    pm.addPass(createGpuModuleToBinaryPass(gpuModuleToBinaryPassOptions));
     pm.addPass(createConvertMathToLLVMPass());
     pm.addPass(createAsyncToAsyncRuntimePass());
     pm.addPass(createAsyncRuntimeRefCountingPass());
@@ -241,6 +223,11 @@ private:
     pm.addPass(createConvertIndexToLLVMPass());
 
     pm.addPass(createConvertFuncToLLVMPass());
+
+    // FIXME: Removing this line crashes two CPU quantization tests
+    // even though neither are affected by GPU lowering.
+    // There must be some pattern that this pass does that makes a difference.
+    pm.addPass(createGpuToLLVMConversionPass());
 
     pm.addPass(createArithToLLVMConversionPass());
     pm.addPass(createConvertControlFlowToLLVMPass());

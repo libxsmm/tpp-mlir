@@ -12,9 +12,6 @@ project(tpp-dialect LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 
-set(TPP_GPU "" CACHE STRING "Enables GPU runtime (default: '')")
-set_property(CACHE TPP_GPU PROPERTY STRINGS "" "cuda")
-
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   message(STATUS "TPP-MLIR out-of-tree build.")
 
@@ -107,27 +104,6 @@ add_custom_target(benchmarks-omp ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT
                   DEPENDS tpp-opt tpp-run xsmm_dnn_mlp
                   WORKING_DIRECTORY ${BENCHMARK_DIR}
                   COMMENT Run Benchmarks)
-
-# GPU Benchmarks
-if (TPP_GPU)
-  if (TPP_GPU MATCHES "cuda")
-    set(BENCH_CUDA_CFGS
-      ${CONFIG_DIR}/GPU/cuda.json
-    )
-    set(BENCH_CUDA_DEPS
-      bench_cuda_matmul
-    )
-  endif()
-
-  string(JOIN ',' BENCH_GPU_CFGS_STR ${BENCH_CUDA_CFGS})
-
-  # Run a small set of benchmarks with small iterations to test the benchmarks and run locally on small machines
-  add_custom_target(benchmarks-gpu ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BINARY_DIR} -n 10
-  -c ${BENCH_GPU_CFGS_STR}
-  DEPENDS tpp-opt tpp-run ${BENCH_CUDA_DEPS}
-  WORKING_DIRECTORY ${BENCHMARK_DIR}
-  COMMENT Run Quick GPU Benchmarks)
-endif()
 
 # Run PyTorch Dynamo generated models as benchmarks
 set(BENCH_PT_CFGS

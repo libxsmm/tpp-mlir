@@ -19,7 +19,6 @@ LLVM_VERSION=$(llvm_version)
 echo "LLVM version: ${LLVM_VERSION}"
 
 LLVM_INSTALL_DIR=${LLVMROOT}/${LLVM_VERSION}
-LLVM_INSTALL_DIR=$(add_device_extensions ${LLVM_INSTALL_DIR} ${GPU})
 
 # If there's another process building it, wait.
 # Otherwise, make the dir quickly so others don't attempt at the same time
@@ -35,7 +34,6 @@ fi
 if [ ! "${LLVM_TAR_DIR}" ]; then
   LLVM_TAR_DIR="/scratch/tpp-llvm-tar"
 fi
-LLVM_TAR_DIR=$(add_device_extensions ${LLVM_TAR_DIR} ${GPU})
 mkdir -p ${LLVM_TAR_DIR}
 
 # Fetch specific LLVM version
@@ -92,14 +90,9 @@ check_program ${LINKER}
 if [ ! "${LLVM_BUILD_DIR}" ]; then
   LLVM_BUILD_DIR="/scratch/tpp-llvm"
 fi
-LLVM_BUILD_DIR=$(add_device_extensions ${LLVM_BUILD_DIR} ${GPU})
 LLVM_BUILD_DIR=$(realpath ${LLVM_BUILD_DIR})
 LLVM_BUILD_DIR=${LLVM_BUILD_DIR:-build-${COMPILER}}
 mkdir -p ${LLVM_BUILD_DIR}
-
-if [ "${GPU}" ]; then
-  source ${SCRIPT_DIR}/ci/setup_gpu_env.sh
-fi
 
 echo "Environment configured successfully"
 
@@ -110,14 +103,6 @@ LLVM_PROJECTS="mlir"
 LLVM_TARGETS="host"
 if [ ! "${KIND}" ]; then
   KIND=RelWithDebInfo
-fi
-
-# LLVM GPU setup
-if [[ ${GPU,,} =~ "cuda" ]]; then
-  LLVM_BUILD_EXTENSIONS="${LLVM_BUILD_EXTENSIONS} -DCMAKE_CUDA_COMPILER=nvcc -DMLIR_ENABLE_CUDA_RUNNER=ON -DMLIR_ENABLE_CUDA_CONVERSIONS=ON"
-  LLVM_TARGETS="${LLVM_TARGETS};NVPTX"
-elif [[ ${GPU,,} =~ "intel" ]]; then
-  LLVM_BUILD_EXTENSIONS="${LLVM_BUILD_EXTENSIONS} -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD="SPIRV" -DMLIR_ENABLE_LEVELZERO_RUNNER=1"
 fi
 
 echo_run cmake -Wno-dev -G Ninja \
