@@ -52,10 +52,6 @@ if [ "${GPU}" ]; then
 fi
 # Always build OpenMP in CI
 EXTENSIONS="-O"
-# Enable OneDNN build
-if [ "${ONEDNN}" ]; then
-  EXTENSIONS="${EXTENSIONS} -D"
-fi
 
 if [ "${CLEAN}" ]; then
   BUILD_DIR_RM=-R

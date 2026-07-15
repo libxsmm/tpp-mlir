@@ -63,7 +63,6 @@ add_mlir_library(TPPTransforms
     TPPIR
     TPPXsmmDialect
     TPPCheckToLoops
-    TPPLinalgToFunc
     TPPPerfToFunc
     TPPPerfToLoop
     TPPXsmmToFunc

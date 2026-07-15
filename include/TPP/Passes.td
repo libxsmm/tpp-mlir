@@ -54,17 +54,6 @@ def VerifyXsmmCalls : Pass<"verify-xsmm-calls", "func::FuncOp"> {
   let dependentDialects = [ "xsmm::XsmmDialect" ];
 }
 
-def ConvertLinalgToFunc : Pass<"convert-linalg-to-func", "ModuleOp"> {
-  let summary = "Convert linalg to func";
-  let description = [{
-    Convert linalg named operations to function call using a BLAS-style
-    API.
-  }];
-  let dependentDialects = ["func::FuncDialect",
-                           "memref::MemRefDialect",
-                           "linalg::LinalgDialect", "LLVM::LLVMDialect"];
-}
-
 def VectorizationPass : Pass<"vectorization-pass",
                                      "func::FuncOp"> {
   let summary = "convert linalg to memref/vector";

@@ -18,7 +18,6 @@ die_syntax() {
   echo "  -S: Optional sanitizer flag, defaults to none"
   echo "  -G: Optional GPU support flag, defaults to none"
   echo "  -O: Optional OpenMP support flag, defaults to none"
-  echo "  -D: Optional OneDNN support flag, defaults to none"
   echo "  -n: Optional link job flag, defaults to nproc"
   exit 1
 }
@@ -108,9 +107,6 @@ while getopts "s:b:i:m:t:c:l:n:G:RSOD" arg; do
       ;;
     O)
       BUILD_OPTIONS="${BUILD_OPTIONS} -DUSE_OpenMP=ON"
-      ;;
-    D)
-      BUILD_OPTIONS="${BUILD_OPTIONS} -DUSE_OneDNN=ON"
       ;;
     n)
       PROCS=$(nproc)

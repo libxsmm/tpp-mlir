@@ -62,9 +62,6 @@ message (STATUS "LIBXSMM Include dir: ${XSMM_INCLUDE_DIRS}")
 include(xsmm-dnn)
 message (STATUS "LIBXSMM-DNN Include dir: ${XSMM_DNN_INCLUDE_DIRS}")
 
-# onednn
-include(one-dnn)
-
 # Sanitizers (include as late as possible aka append)
 include(sanitizers)
 

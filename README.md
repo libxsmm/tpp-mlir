@@ -20,7 +20,7 @@ If you have a checkout with the previous name, please follow [these instructions
 ## How to setup the environment
 
 In order to build LLVM and TPP-MLIR, several software development tools such as git, cmake, compilers, etc. are needed.
-If you're able to build LLVM, you'll be able to build our project, but we do have some additional (optional) dependencies (OneDNN, OpenMP) that can be disabled (see below).
+If you're able to build LLVM, you'll be able to build our project, but we do have some additional (optional) dependencies (OpenMP) that can be disabled (see below).
 Our required dependencies (libxsmm, libxsmm-dnn) are fetched and built by our build system, so you should have no problems either.
 
 If you're having trouble with your build, you can use Conda to create a minimal environment (see below).
@@ -71,9 +71,6 @@ This setup assumes that you have built LLVM and MLIR in `$CUSTOM_LLVM_ROOT` as a
 
 _Note: OpenMP is a requirement to get multi-threaded performance on our code.
 If you don't want to build with OpenMP, disable with the CMake flag `-DUSE_OpenMP=False`._
-
-_Note: OneDNN is a requirement to get performance comparisons against our code.
-If you don't want to build with OneDNN, disable with the CMake flag `-DUSE_OneDNN=False`._
 
 ```sh
 # Clone

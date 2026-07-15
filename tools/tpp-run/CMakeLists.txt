@@ -4,11 +4,6 @@ get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 get_property(extension_libs GLOBAL PROPERTY MLIR_EXTENSION_LIBS)
 
-if(USE_OneDNN)
-  set(ONEDNN_LIBS "tpp_dnnl_runner_utils")
-  set(ONEDNN_LIBS_INCL "-ltpp_dnnl_runner_utils")
-endif()
-
 set(LIBS
         MLIRRegisterAllExtensions
         MLIRRegisterAllDialects
@@ -28,7 +23,6 @@ set(LIBS
         TPPTransforms
         TPPRunner
         tpp_xsmm_runner_utils
-        ${ONEDNN_LIBS}
         )
 
 set(LLVM_LINK_COMPONENTS
@@ -71,7 +65,6 @@ target_link_options(tpp-run PRIVATE
   -Wl,--no-as-needed
   -L${CMAKE_BINARY_DIR}/lib
   -ltpp_xsmm_runner_utils
-  ${ONEDNN_LIBS_INCL}
   -L${LLVM_LIBRARY_DIR}
   -lmlir_c_runner_utils
   -lmlir_runner_utils
