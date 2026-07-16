@@ -1,5 +1,5 @@
 // RUN: tpp-run -e entry --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run %s -e entry --entry-point-result=void --vector-to-kernels --registerBlocking=32,32,32 -print  --splat-to-random --init-type normal  -seed 123  > %t.2
+// RUN: tpp-run %s -e entry --entry-point-result=void --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 

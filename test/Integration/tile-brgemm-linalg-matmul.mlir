@@ -1,5 +1,5 @@
 // RUN: tpp-run -e entry --entry-point-result=void -print %s > %t.1
-// RUN: tpp-run -e entry --entry-point-result=void --vector-to-kernels --registerBlocking=8,32,1 %s -print > %t.2
+// RUN: tpp-run -e entry --entry-point-result=void --nano-kernels --registerBlocking=8,32,1 --gemm-unroll=1,16,1 %s -print > %t.2
 // RUN: fpcmp %t.1 %t.2
 // RUN: rm %t.1 %t.2
 

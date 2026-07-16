@@ -99,6 +99,13 @@ llvm::cl::list<unsigned> registerBlocking(
     llvm::cl::list_init<unsigned>(SmallVector<unsigned>{8, 32}),
     llvm::cl::CommaSeparated);
 
+llvm::cl::list<int64_t> gemmUnroll(
+    "gemm-unroll",
+    llvm::cl::desc("GEMM register unroll sizes for the innermost dims: [M, N, "
+                   "K]. Required by the nano-kernel path to reduce "
+                   "vector.contract to register-sized shapes"),
+    llvm::cl::CommaSeparated);
+
 namespace mlir {
 namespace tpp {
 #define GEN_PASS_DEF_DEFAULTPIPELINE
@@ -196,6 +203,8 @@ private:
     tppDefaultOptions.disableTileElementwiseOps = disableTileElementwiseOps;
     tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
         registerBlocking.begin(), registerBlocking.end()};
+    tppDefaultOptions.gemmUnroll =
+        SmallVector<int64_t>{gemmUnroll.begin(), gemmUnroll.end()};
     tppDefaultOptions.vectorToKernel = vectorToKernel;
     tppDefaultOptions.nanoKernel = nanoKernel;
     tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;

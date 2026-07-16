@@ -1,5 +1,5 @@
 // RUN: tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void --vector-to-kernels --registerBlocking=8,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s > %t.2
+// RUN: tpp-run  -e gemm_bf16_dp_random_AB --entry-point-result=void --nano-kernels --registerBlocking=8,32,2 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123 %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 memref.global "private" constant @__constant_2x16x32x2xbf16 : memref<2x16x32x2xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
@@ -24,7 +24,7 @@ func.func @gemm_bf16_dp_random_AB(%arg0: memref<8x2x32x32xbf16>) -> memref<8x2x3
 
 
 // RUN: tpp-run -e gemm_bf16_args --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e gemm_bf16_args --entry-point-result=void  --vector-to-kernels --registerBlocking=8,32,2 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
+// RUN: tpp-run -e gemm_bf16_args --entry-point-result=void  --nano-kernels --registerBlocking=8,32,2 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 func.func @gemm_bf16_args(%arg0: memref<4x2x64x64xbf16>, %arg1: memref<2x2x32x64x2xbf16>, %arg2: memref<4x2x64x64xbf16>) -> memref<4x2x64x64xbf16> {
@@ -47,7 +47,7 @@ func.func @gemm_bf16_args(%arg0: memref<4x2x64x64xbf16>, %arg1: memref<2x2x32x64
 
 
 // RUN: tpp-run -e mlp_bf16 --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e  mlp_bf16 --entry-point-result=void --vector-to-kernels --registerBlocking=4,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: tpp-run -e  mlp_bf16 --entry-point-result=void --nano-kernels --registerBlocking=4,32,2 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 memref.global "private" constant @__constant_32xbf16 : memref<32xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
@@ -82,8 +82,8 @@ func.func @mlp_bf16(%arg0: memref<8x2x32x32xbf16>) -> memref<8x2x32x32xbf16> {
 }
 
 // RUN: tpp-run -e optimal_register_blocking --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --vector-to-kernels --registerBlocking=6,64,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
-// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --vector-to-kernels --registerBlocking=3,32,2 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.3
+// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --nano-kernels --registerBlocking=6,64,2 --gemm-unroll=1,32,1 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: tpp-run -e optimal_register_blocking --entry-point-result=void --nano-kernels --registerBlocking=3,32,2 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123 %s  > %t.3
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.3
 

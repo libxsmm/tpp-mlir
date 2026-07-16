@@ -1,5 +1,5 @@
 // RUN: tpp-run -e gemm_f32_args --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e gemm_f32_args --entry-point-result=void  --vector-to-kernels --registerBlocking=8,32,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
+// RUN: tpp-run -e gemm_f32_args --entry-point-result=void  --nano-kernels --registerBlocking=8,32,1 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
@@ -17,7 +17,7 @@ func.func @gemm_f32_args(%arg0: tensor<8x4x32x32xf32>, %arg1: tensor<4x4x32x32xf
 }
 
 // RUN: tpp-run -e mlp_f32_args --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e mlp_f32_args --entry-point-result=void  --vector-to-kernels --registerBlocking=8,32,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
+// RUN: tpp-run -e mlp_f32_args --entry-point-result=void  --nano-kernels --registerBlocking=8,32,1 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 #mlp_map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
@@ -48,7 +48,7 @@ func.func @mlp_f32_args(%arg0: tensor<8x4x32x32xf32>, %arg1: tensor<4x4x32x32xf3
 }
 
 // RUN: tpp-run -e mlp_f32 --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e mlp_f32 --entry-point-result=void  --vector-to-kernels --registerBlocking=4,32,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
+// RUN: tpp-run -e mlp_f32 --entry-point-result=void  --nano-kernels --registerBlocking=4,32,1 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 func.func @mlp_f32(%arg0: tensor<8x4x32x32xf32>) -> tensor<8x4x32x32xf32> {
@@ -78,8 +78,8 @@ func.func @mlp_f32(%arg0: tensor<8x4x32x32xf32>) -> tensor<8x4x32x32xf32> {
 }
 
 // RUN: tpp-run -e optimal_register_packing --entry-point-result=void -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e optimal_register_packing --entry-point-result=void  --vector-to-kernels --registerBlocking=6,64,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
-// RUN: tpp-run -e optimal_register_packing --entry-point-result=void  --vector-to-kernels --registerBlocking=3,32,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.3
+// RUN: tpp-run -e optimal_register_packing --entry-point-result=void  --nano-kernels --registerBlocking=6,64,1 --gemm-unroll=1,32,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.2
+// RUN: tpp-run -e optimal_register_packing --entry-point-result=void  --nano-kernels --registerBlocking=3,32,1 --gemm-unroll=1,16,1 -print  --splat-to-random --init-type normal  -seed 123  %s > %t.3
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.3
 
