@@ -9,7 +9,6 @@ add_mlir_library(TPPPassBundles
   PostProcessing.cpp
   TppMapping.cpp
   VectorToKernel.cpp
-  X86Vectorizer.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/TPP

@@ -148,26 +148,4 @@ def Cleanup : Pass<"cleanup"> {
   let summary = "General IR cleanup e.g., canonicalization, CSE etc.";
 }
 
-def X86Vectorizer : Pass<"x86-vectorizer", "ModuleOp"> {
-  let summary = "Vectorize ops for x86 targets.";
-  let description = [{
-    Convert ops into vectorized x86 sequences.
-  }];
-  let dependentDialects = ["scf::SCFDialect",
-                           "tensor::TensorDialect",
-                           "linalg::LinalgDialect",
-                           "math::MathDialect",
-                           "tensor::TensorDialect",
-                           "arith::ArithDialect",
-                           "x86::X86Dialect",
-                           "affine::AffineDialect",
-                           "vector::VectorDialect"];
-  let options = [
-    ListOption<"blocks", "blocks", "int64_t",
-               "Register block sizes for the innermost dims: [M, N, K]">,
-    ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
-               "GEMM unroll sizes for the innermost dims: [M, N, K]">
-  ];
-}
-
 #endif // TPP_DIALECT_TPP_PASSBUNDLES
