@@ -236,6 +236,12 @@ private:
     pm.addPass(createConvertAsyncToLLVMPass());
     pm.addPass(createConvertIndexToLLVMPass());
     pm.addPass(createConvertFuncToLLVMPass());
+
+    // FIXME: Removing this line crashes two CPU quantization tests
+    // even though neither are affected by GPU lowering.
+    // There must be some pattern that this pass does that makes a difference.
+    pm.addPass(createGpuToLLVMConversionPass());
+
     pm.addPass(createArithToLLVMConversionPass());
     pm.addPass(createConvertControlFlowToLLVMPass());
     if (defParallel)
