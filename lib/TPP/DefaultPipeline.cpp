@@ -169,7 +169,26 @@ private:
     if (print == PrintStage::Early)
       pm.addPass(createPrintIRPass());
 
-    // Apply the default preprocessing pass
+    addDefaultTppPasses();
+
+    if (print == PrintStage::Mid)
+      pm.addPass(createPrintIRPass());
+
+    addPartialLoweringPasses();
+
+    // Print IR of optimized kernel and main
+    if (print == PrintStage::Late)
+      pm.addPass(createPrintIRPass());
+
+    addLowerToLLVMPasses();
+
+    // Print IR of kernel and main in LLVM dialect
+    if (print == PrintStage::LLVM)
+      pm.addPass(createPrintIRPass());
+  }
+
+  // Apply the default TPP pass.
+  void addDefaultTppPasses() {
     DefaultTppPassesOptions tppDefaultOptions;
     tppDefaultOptions.linalgToLoops = linalgToLoops;
     tppDefaultOptions.sfcOrder = sfcOrder;
@@ -185,13 +204,11 @@ private:
     tppDefaultOptions.vectorToKernel = vectorToKernel;
     tppDefaultOptions.nanoKernel = nanoKernel;
     tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
-
     pm.addPass(createDefaultTppPasses(tppDefaultOptions));
+  }
 
-    if (print == PrintStage::Mid)
-      pm.addPass(createPrintIRPass());
-
-    // Partial Lowering
+  // Partially lower the IR towards LLVM.
+  void addPartialLoweringPasses() {
     pm.addPass(memref::createExpandStridedMetadataPass());
     pm.addPass(createConvertTensorToLinalgPass());
     pm.addNestedPass<func::FuncOp>(createConvertLinalgToLoopsPass());
@@ -202,12 +219,10 @@ private:
     arithExpandOpsOptions.includeF8E8M0 = true;
     pm.addPass(arith::createArithExpandOpsPass(arithExpandOpsOptions));
     pm.addPass(createLowerAffinePass());
+  }
 
-    // Print IR of optimized kernel and main
-    if (print == PrintStage::Late)
-      pm.addPass(createPrintIRPass());
-
-    // Lower to LLVM
+  // Lower the remaining dialects to the LLVM dialect.
+  void addLowerToLLVMPasses() {
     ConvertVectorToLLVMPassOptions options;
 #if defined(__x86_64__)
     options.x86 = true;
@@ -215,20 +230,12 @@ private:
     pm.addPass(createConvertVectorToLLVMPass(options));
     pm.addPass(createFinalizeMemRefToLLVMConversionPass());
     pm.addPass(createSCFToControlFlowPass());
-
     pm.addPass(createConvertMathToLLVMPass());
     pm.addPass(createAsyncToAsyncRuntimePass());
     pm.addPass(createAsyncRuntimeRefCountingPass());
     pm.addPass(createConvertAsyncToLLVMPass());
     pm.addPass(createConvertIndexToLLVMPass());
-
     pm.addPass(createConvertFuncToLLVMPass());
-
-    // FIXME: Removing this line crashes two CPU quantization tests
-    // even though neither are affected by GPU lowering.
-    // There must be some pattern that this pass does that makes a difference.
-    pm.addPass(createGpuToLLVMConversionPass());
-
     pm.addPass(createArithToLLVMConversionPass());
     pm.addPass(createConvertControlFlowToLLVMPass());
     if (defParallel)
@@ -237,16 +244,7 @@ private:
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
     pm.addPass(createReconcileUnrealizedCastsPass());
-
-    // Anything useful has been lowered by now.
-    // Cleanup IR by removing any dead symbols.
-    // This step aims to avoid errors caused by frontend leftovers.
-    // See issue: #704
     pm.addPass(createSymbolDCEPass());
-
-    // Print IR of kernel and main in LLVM dialect
-    if (print == PrintStage::LLVM)
-      pm.addPass(createPrintIRPass());
   }
 };
 
