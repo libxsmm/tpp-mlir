@@ -68,10 +68,6 @@ llvm::cl::list<unsigned>
                      llvm::cl::list_init<unsigned>(SmallVector<unsigned>{2, 8}),
                      llvm::cl::CommaSeparated);
 
-llvm::cl::opt<bool> linalgToVector("linalg-to-vector",
-                                   llvm::cl::desc("Lower linalg to vector"),
-                                   llvm::cl::init(false));
-
 llvm::cl::opt<bool>
     vectorToKernel("vector-to-kernels",
                    llvm::cl::desc("Lower vector to micro-kernels"),
@@ -194,7 +190,6 @@ private:
     tppDefaultOptions.sfcOrder = sfcOrder;
     tppDefaultOptions.parallelTaskGrid = SmallVector<unsigned>{
         parallelTaskGrid.begin(), parallelTaskGrid.end()};
-    tppDefaultOptions.linalgToVector = linalgToVector;
     tppDefaultOptions.lowerPackUnpackWithoutTranspose =
         lowerPackUnpackWithoutTranspose;
     tppDefaultOptions.disableVnniPacking = disableVnniPacking;

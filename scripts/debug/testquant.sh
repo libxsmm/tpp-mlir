@@ -30,9 +30,9 @@ for test in 3 8 16 32 64; do
   direct=direct-$test
   quantized=quant-$test
   echo "Linalg To Vector: $direct and $quantized..."
-  ./bin/tpp-run -linalg-to-vector -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct.mlir > $direct-vector.out
+  ./bin/tpp-run -nano-kernel -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct.mlir > $direct-vector.out
   diff -q $direct.out $direct-vector.out
-  ./bin/tpp-run -linalg-to-vector -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized.mlir > $quantized-vector.out
+  ./bin/tpp-run -nano-kernel -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized.mlir > $quantized-vector.out
   diff -q $quantized.out $quantized-vector.out
 done
 

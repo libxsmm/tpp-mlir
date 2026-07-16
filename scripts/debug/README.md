@@ -84,7 +84,7 @@ To compare two runs, create them separately with the `debug_all_passes.sh` scrip
 
 ./scripts/debug/debug_all_passes.sh \
   -b ./build/bin \
-  -o "--default-tpp-passes='linalg-to-vector'" \
+  -o "--default-tpp-passes='nano-kernel'" \
   -i file.mlir \
   -t vector
 

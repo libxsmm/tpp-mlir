@@ -69,11 +69,11 @@ struct DefaultTppPasses
   }
 
 private:
-  // Vectorization is required by the explicit `linalg-to-vector` path as well
-  // as the `vector-to-kernel` and `nano-kernel` paths, which are built on top
-  // of it. Any of these flags enables the vectorization stage.
+  // Vectorization is required by the explicit `vector-to-kernel`
+  // and `nano-kernel` paths, which are built on top of it.
+  // Any of these flags enables the vectorization stage.
   bool shouldVectorize() const {
-    return linalgToVector || vectorToKernel || nanoKernel;
+    return vectorToKernel || nanoKernel;
   }
 
   // Lower linalg directly to loops, skipping all TPP transformations.
@@ -175,7 +175,7 @@ private:
   }
 
   // Convert to parallel loops and apply low-level parallelization. The
-  // `linalg-to-vector` path lowers vector to SCF, while the XSMM path (also
+  // vectorization path lowers vector to SCF, while the XSMM path (also
   // used by `vector-to-kernel` and `nano-kernel`) applies AMX tile
   // configuration and lowers XSMM to function calls.
   void addParallelizationPasses() {
@@ -185,26 +185,23 @@ private:
     LowLevelParallelizationOptions LowLevelParallelization{
         SmallVector<unsigned>{*parallelTaskGrid}};
 
-    if (linalgToVector)
-      pm.addPass(createConvertVectorToSCFPass());
+    pm.addPass(createConvertVectorToSCFPass());
 
     // Low level parallelization passes.
     if (!sfcOrder)
       pm.addPass(createLowLevelParallelization(LowLevelParallelization));
 
-    if (!linalgToVector) {
-      // TODO: These passes have been moved out of low level parallelization
-      // pass since these apply on xsmm dialect. They'll be moved back in
-      // subsequent commits.
-      pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigInsertionPass());
-      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-      pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-      pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigHoistingPass());
-      // TODO: This pass has been moved out of LocalDialectsLowering since it is
-      // applicable to xsmm only. It'll be moved back in subsequent commits.
-      pm.addPass(createConvertXsmmToFunc());
-    }
+    // TODO: These passes have been moved out of low level parallelization
+    // pass since these apply on xsmm dialect. They'll be moved back in
+    // subsequent commits.
+    pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigInsertionPass());
+    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+    pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+    pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigHoistingPass());
+    // TODO: This pass has been moved out of LocalDialectsLowering since it is
+    // applicable to xsmm only. It'll be moved back in subsequent commits.
+    pm.addPass(createConvertXsmmToFunc());
   }
 
   void constructPipeline() override {
@@ -212,8 +209,6 @@ private:
     //  * Linalg-to-Loops: Enable with `linalg-to-loops`. Skips all TPP
     //    transformations and lowers linalg directly to loops.
     //  * Linalg-to-XSMM: the default path, no options needed.
-    //  * Linalg-to-Vector: Enable with `linalg-to-vector`. Lowers straight to
-    //    LLVM with no further changes to the IR.
     //  * Vector-to-Kernel / Nano-Kernel: Enable with `vector-to-kernel` or
     //    `nano-kernel`. Both require vectorization and lower vector patterns to
     //    libxsmm-like micro-/nano-kernels via specialized lowering.
