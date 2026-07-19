@@ -99,7 +99,6 @@ benchmark () {
 # Base Benchmarks
 if [ "$BENCH_BASE" ]; then
   benchmark base/base.json "Base Benchmarks"
-  benchmark base/pack.json "Pack Benchmarks"
   benchmark base/mha.json "MHA Benchmarks"
   benchmark base/named-ops.json "Named Ops Benchmarks"
 fi

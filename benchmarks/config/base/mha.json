@@ -1,33 +1,33 @@
 [
   {
-    "mha": {
-      "fp32_mha_tensorflow_seq_len_32": {
-        "type": "MLIR",
-        "benchmark": "fp32-mha-tensorflow-seq-len-32.mlir",
-        "environment": {},
-        "flags": [ "-n", "10" ],
-        "extensions": [ "(avx2|asimd)" ]
-      },
-      "fp32_projection": {
-        "type": "MLIR",
-        "benchmark": "fp32-projection.mlir",
-        "environment": {},
-        "flags": [ "-n", "100" ],
-        "extensions": [ "(avx2|asimd)" ]
-      },
-      "fp32_query_times_keys": {
-        "type": "MLIR",
-        "benchmark": "fp32-query-times-key.mlir",
-        "environment": {},
-        "flags": [ "-n", "100" ],
-        "extensions": [ "(avx2|asimd)" ]
-      },
-      "fp32_out_softmax_times_value.mlir": {
-        "type": "MLIR",
-        "benchmark": "fp32-out-softmax-times-value.mlir",
-        "environment": {},
-        "flags": [ "-n", "100" ],
-        "extensions": [ "(avx2|asimd)" ]
-      }
-    }}
+  "mha": {
+    "fp32_mha_tensorflow_seq_len_32": {
+      "type": "MLIR",
+      "benchmark": "mha/fp32-mha-tensorflow-seq-len-32.mlir",
+      "environment": {},
+      "flags": [ "-n", "10" ],
+      "extensions": [ "(avx2|asimd)" ]
+    },
+    "fp32_projection": {
+      "type": "MLIR",
+      "benchmark": "mha/fp32-projection.mlir",
+      "environment": {},
+      "flags": [ "-n", "100" ],
+      "extensions": [ "(avx2|asimd)" ]
+    },
+    "fp32_query_times_keys": {
+      "type": "MLIR",
+      "benchmark": "mha/fp32-query-times-key.mlir",
+      "environment": {},
+      "flags": [ "-n", "100" ],
+      "extensions": [ "(avx2|asimd)" ]
+    },
+    "fp32_out_softmax_times_value.mlir": {
+      "type": "MLIR",
+      "benchmark": "mha/fp32-out-softmax-times-value.mlir",
+      "environment": {},
+      "flags": [ "-n", "100" ],
+      "extensions": [ "(avx2|asimd)" ]
+    }
+  }}
 ]
