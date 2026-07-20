@@ -69,13 +69,6 @@ struct DefaultTppPasses
   }
 
 private:
-  // Vectorization is required by the explicit `vector-to-kernel`
-  // and `nano-kernel` paths, which are built on top of it.
-  // Any of these flags enables the vectorization stage.
-  bool shouldVectorize() const {
-    return vectorToKernel || nanoKernel;
-  }
-
   // Lower linalg directly to loops, skipping all TPP transformations.
   void addLinalgToLoopsPasses() {
     // Generalize linalg.pack and linalg.unpack.
@@ -140,7 +133,6 @@ private:
     TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose,
                                         disableVnniPacking};
     pm.addPass(createTppMapping(tppMappingOptions));
-
     // Generalize linalg.pack and linalg.unpack.
     pm.addPass(createLowerPacksAndUnPacks());
     pm.addPass(createCleanup());
@@ -164,11 +156,12 @@ private:
     // No-op unless the benchmark producer requested replication.
     pm.addPass(createReplicateBenchArgs());
 
-    // Lower Linalg to XSMM.
-    pm.addNestedPass<func::FuncOp>(createLinalgLowering());
-
-    if (shouldVectorize())
+    if (vectorToKernel || nanoKernel)
+      // Lower Linalg to Vector.
       addVectorizationPasses();
+    else
+      // Lower Linalg to XSMM.
+      pm.addNestedPass<func::FuncOp>(createLinalgLowering());
 
     // Final cleanup.
     pm.addPass(createCleanup());
