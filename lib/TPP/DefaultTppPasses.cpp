@@ -8,6 +8,7 @@
 
 #include "TPP/PassBundles.h"
 
+#include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -75,6 +76,7 @@ private:
     pm.addPass(createLowerPacksAndUnPacks());
     pm.addNestedPass<func::FuncOp>(createDecomposeAggregatedOps());
     pm.addPass(createBufferize());
+    pm.addPass(createConvertTensorToLinalgPass());
     pm.addNestedPass<func::FuncOp>(createConvertLinalgToLoopsPass());
     pm.addPass(createCleanup());
   }
@@ -185,16 +187,17 @@ private:
       pm.addPass(createLowLevelParallelization(LowLevelParallelization));
 
     // TODO: These passes have been moved out of low level parallelization
-    // pass since these apply on xsmm dialect. They'll be moved back in
-    // subsequent commits.
-    pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigInsertionPass());
-    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-    pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-    pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigHoistingPass());
-    // TODO: This pass has been moved out of LocalDialectsLowering since it is
-    // applicable to xsmm only. It'll be moved back in subsequent commits.
-    pm.addPass(createConvertXsmmToFunc());
+    // pass since these apply on xsmm dialect.
+    if (!(vectorToKernel || nanoKernel)) {
+      pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigInsertionPass());
+      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+      pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+      pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigHoistingPass());
+      // TODO: This pass has been moved out of LocalDialectsLowering since it is
+      // applicable to xsmm only.
+      pm.addPass(createConvertXsmmToFunc());
+    }
   }
 
   void constructPipeline() override {

@@ -214,7 +214,6 @@ private:
   // Partially lower the IR towards LLVM.
   void addPartialLoweringPasses() {
     pm.addPass(memref::createExpandStridedMetadataPass());
-    pm.addPass(createConvertTensorToLinalgPass());
     pm.addNestedPass<func::FuncOp>(createConvertLinalgToLoopsPass());
     if (defParallel)
       pm.addPass(createConvertSCFToOpenMPPass());
