@@ -91,11 +91,14 @@ add_custom_target(benchmarks ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BIN
 set(BENCH_OMP_CFGS
   ${CONFIG_DIR}/omp/dnn-fp32.json
   ${CONFIG_DIR}/omp/dnn-bf16.json
-  ${CONFIG_DIR}/omp/mlir-fp32.json
-  ${CONFIG_DIR}/omp/mlir-bf16.json
-  ${CONFIG_DIR}/omp/mlir-fp32-vector-to-kernel.json
-  ${CONFIG_DIR}/omp/torch-dynamo.json
-  ${CONFIG_DIR}/omp/torch-dynamo-vector-to-kernel.json
+  ${CONFIG_DIR}/omp/mlir-xsmm-fp32.json
+  ${CONFIG_DIR}/omp/mlir-xsmm-bf16.json
+  ${CONFIG_DIR}/omp/mlir-vector-fp32.json
+  ${CONFIG_DIR}/omp/mlir-vector-fp32-avx2.json
+  ${CONFIG_DIR}/omp/mlir-vector-bf16.json
+  ${CONFIG_DIR}/omp/mlir-vector-amx.json
+  ${CONFIG_DIR}/omp/torch-dynamo-xsmm.json
+  ${CONFIG_DIR}/omp/torch-dynamo-vector.json
 )
 string(JOIN ',' BENCH_OMP_CFGS_STR ${BENCH_OMP_CFGS})
 add_custom_target(benchmarks-omp ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BINARY_DIR} -n 10
