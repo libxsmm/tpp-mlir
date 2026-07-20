@@ -43,14 +43,14 @@
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": {},
-      "flags": [ "-n", "100",  "-run-args='--nano-kernels --registerBlocking=8,32,1'" ],
+      "flags": [ "-n", "100",  "-run-args='--nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1'" ],
       "extensions": ["avx512.*"]
     },
     "mlir_gemm_fp32_vector_avx2": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": {},
-      "flags": [ "-n", "100",  "-run-args='--nano-kernels --target-feature=avx2 --registerBlocking=4,16,1'" ],
+      "flags": [ "-n", "100",  "-run-args='--nano-kernels --gemm-unroll=1,16,1 --target-feature=avx2 --registerBlocking=4,16,1'" ],
       "extensions": ["avx2"]
     },
     "mlir_gemm_fp32_vector_sve": {
@@ -74,14 +74,14 @@
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,16,1" ],
       "environment": {},
-      "flags": [ "-n", "100",  "-run-args='--def-parallel --nano-kernels --registerBlocking=8,32,1'" ],
+      "flags": [ "-n", "100",  "-run-args='--def-parallel --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1'" ],
       "extensions": ["avx512.*"]
     },
     "mlir_mlp_fp32_vector_avx2": {
       "type": "IR-GEN",
       "benchmark": [ "mlir-gen", "--kernel=const --bias --relu --float-type=f32 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --registerUnroll=1,8,1" ],
       "environment": {},
-      "flags": [ "-n", "100",  "-run-args='--def-parallel --nano-kernels --target-feature=avx2 --registerBlocking=4,16,1'" ],
+      "flags": [ "-n", "100",  "-run-args='--def-parallel --nano-kernels --gemm-unroll=1,16,1 --target-feature=avx2 --registerBlocking=4,16,1'" ],
       "extensions": ["avx2" ]
     },
     "mlir_mlp_fp32_vector_sve": {
