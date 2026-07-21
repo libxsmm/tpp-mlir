@@ -134,6 +134,12 @@ llvm::cl::opt<std::string> runnerCpuTargetFeature(
                          "amx_bf16, amx_tile, neon, sve"),
     llvm::cl::init(""));
 
+// Disable MLIR multithreading (same as tpp-opt, from mlir-opt)
+llvm::cl::opt<bool> mlirDisableThreading("mlir-disable-threading",
+                                        llvm::cl::desc("Disable MLIR multithreading"),
+                                        llvm::cl::init(false));
+
+
 struct TargetMachineOptions {
   std::string triple;
   std::string cpu;
@@ -182,7 +188,10 @@ static LogicalResult prepareMLIRKernel(Operation *op,
     return op->emitOpError("Expected a 'builtin.module' op");
 
   // A set of default passes that lower any input IR to LLVM
-  PassManager passManager(module.getContext());
+  auto context = module.getContext();
+  if (mlirDisableThreading)
+    context->disableMultithreading();
+  PassManager passManager(context);
 
   // Propagate pass manager's command-line options.
   if (failed(applyPassManagerCLOptions(passManager)))
