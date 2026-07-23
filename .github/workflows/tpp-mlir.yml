@@ -54,12 +54,12 @@ jobs:
                 'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 \
                 ${{ github.workspace }}/scripts/github/build_tpp.sh'"
 
-  TPP-MLIR-SRF:
+  TPP-MLIR-avx2:
     runs-on: pcl-tiergarten
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
-      - name: Clang Release
+      - name: AVX2 Clang Release
         run: "${{ env.SRUN }} --partition=cwf --time=0:30:00 -- \
             'KIND=Release COMPILER=clang LINKER=lld CHECK=1 \
             ${{ github.workspace }}/scripts/github/build_tpp.sh'"
