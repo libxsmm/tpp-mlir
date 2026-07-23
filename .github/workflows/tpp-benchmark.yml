@@ -122,4 +122,4 @@ jobs:
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
                 ${{ github.workspace }}/scripts/github/benchmark.sh -o"
-          ${{ env.SRUN }} --partition=arl --time=0:30:00 -- $CMD
+          ${{ env.SRUN }} --partition=arlh --time=0:30:00 -- $CMD
