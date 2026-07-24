@@ -36,7 +36,7 @@
              },
              "irgen": {
                  "type": "IR-GEN",
-                 "benchmark": [ "mlir-gen", "--kernel=const --float-type=bf16 --vnni=2 --batch=64 --layers=64,64 --tiles=32,32,32" ],
+                 "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --vnni=2 --batch=64 --layers=64,64 --tiles=32,32,32" ],
                  "environment": { "OMP_NUM_THREADS": "32" },
                  "flags": [ "-n", "100" ],
                  "extensions": [ "(avx2|asimd)" ]

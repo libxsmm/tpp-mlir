@@ -1,4 +1,4 @@
-// RUN: mlir-gen --kernel=args --bias --relu --seed=0 --float-type=f32 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP32
+// RUN: mlir-gen --kernel=args --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP32
 
 // FP32: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // FP32: // RUN{{.*}}-e entry -entry-point-result=void

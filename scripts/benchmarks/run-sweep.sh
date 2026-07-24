@@ -130,8 +130,8 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   # mlir-gen flag templates (must match gen-sweep-config.py).
   # Use --kernel=args (same as the perf config); tpp-run --splat-to-random
   # --seed=123 makes both baseline and test runs see identical inputs.
-  gen_args_i8="--kernel=args --float-type=mx-i8-f32 --tiles=32,32,64 --vnni=4 --quant-type=dequantize --seed=123"
-  gen_args_bf16="--kernel=args --float-type=mx-bf16 --tiles=32,32,32 --vnni=2 --seed=123"
+  gen_args_i8="--kernel=args --data-type=mx-i8-f32 --tiles=32,32,64 --vnni=4 --quant-type=dequantize --seed=123"
+  gen_args_bf16="--kernel=args --data-type=mx-bf16 --tiles=32,32,32 --vnni=2 --seed=123"
   vk_args_i8="--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --sfc-order=true"
   vk_args_bf16="--def-parallel --vector-to-kernels --registerBlocking=32,32,32 --sfc-order=true"
 

@@ -90,7 +90,7 @@ for M in "${SIZES[@]}"; do
       mlir_file="${OUT_DIR}/gemm_sfc_${M}_${N}_${K}_mx-bf16.mlir"
 
       echo "=== Generating M=${M} N=${N} K=${K} ==="
-      "${MLIR_GEN}" --kernel=args --float-type=bf16 \
+      "${MLIR_GEN}" --kernel=args --data-type=bf16 \
         --batch="${N}" --layers="${K},${M}" --tiles="${TILES}" --vnni=2 \
         > "${mlir_file}"
 

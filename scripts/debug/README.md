@@ -55,7 +55,7 @@ Examples:
 // Generates an MLP with `mlir-gen`, uses `meld`
 ./scripts/debug/debug_all_passes.sh \
   -b ./build/bin \
-  -m "--kernel=const --bias --relu --float-type=bf16 --batch=256 --layers=1024,1024,1024,1024" \
+  -m "--kernel=const --bias --relu --data-type=bf16 --batch=256 --layers=1024,1024,1024,1024" \
   -d meld
 
 // Default behaviour, runs `mlir-gen` & `tpp-opt` without args, uses `diff`

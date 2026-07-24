@@ -37,14 +37,14 @@
   "fc_128x1024x4096_fp32_mlir": {
     "fc_fp32_single_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=f32 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=f32 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": { "OMP_NUM_THREADS": "1" },
       "flags": [ "-n", "100" ],
       "extensions": [ "(avx2|asimd)" ]
     },
     "fc_fp32_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=f32 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=f32 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='-def-parallel'" ],
       "extensions": [ "(avx2|asimd)" ]
@@ -54,14 +54,14 @@
   "fc_128x1024x4096_bf16_dp2_mlir": {
     "fc_bf16_dp2_single_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=bf16 --vnni=2 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=bf16 --vnni=2 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": {},
       "flags": [ "-n", "100" ],
       "extensions": [ "(avx2|asimd)" ]
     },
     "fc_bf16_dp2_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=bf16 --vnni=2 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=bf16 --vnni=2 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='-def-parallel'" ],
       "extensions": [ "(avx2|asimd)" ]
@@ -71,14 +71,14 @@
   "fc_128x1024x4096_bf16_dp4_mlir": {
     "fc_bf16_dp4_single_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=bf16 --vnni=4 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=bf16 --vnni=4 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": {},
       "flags": [ "-n", "100" ],
       "extensions": [ "(svebf16)" ]
     },
     "fc_bf16_dp4_omp_16_mlir": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --float-type=bf16 --vnni=4 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
+      "benchmark": [ "mlir-gen", "--kernel=args --bias --relu --data-type=bf16 --vnni=4 --batch=128 --layers=4096,1024 --tiles=64,64,64" ],
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
       "flags": [ "-n", "100", "-run-args='-def-parallel'" ],
       "extensions": [ "(svebf16)" ]

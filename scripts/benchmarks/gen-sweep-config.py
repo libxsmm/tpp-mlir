@@ -26,7 +26,7 @@ DTYPES = {
         "group": "gemm_i8_f32_dequant_mlir_vector_large_amx",
         "name_fmt": "i8_f32_dequant_{M}x{N}x{K}_omp_64_mlir",
         "gen_flags": (
-            "--kernel=args --float-type=mx-i8-f32 --batch={M} "
+            "--kernel=args --data-type=mx-i8-f32 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
             "--quant-type=dequantize"
         ),
@@ -41,7 +41,7 @@ DTYPES = {
         "group": "gemm_bf16_f32_dequant_mlir_vector_large_amx",
         "name_fmt": "bf16_f32_dequant_{M}x{N}x{K}_omp_64_mlir",
         "gen_flags": (
-            "--kernel=args --float-type=mx-bf16 --batch={M} "
+            "--kernel=args --data-type=mx-bf16 --batch={M} "
             "--layers={K},{N} --tiles=32,32,32 --vnni=2"
         ),
         "run_args": (

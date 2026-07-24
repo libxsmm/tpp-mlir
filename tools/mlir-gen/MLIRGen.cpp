@@ -116,7 +116,7 @@ static Value createCastToFloat(OpBuilder &builder, Location loc, Value value,
 
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              unsigned batch, StringRef layersStr,
-                             StringRef tilesStr, StringRef registerUnrollStr, StringRef targetType,
+                             StringRef tilesStr, StringRef registerUnrollStr, StringRef dataType,
                              StringRef scaleType, StringRef quantizationTypeStr,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
@@ -158,18 +158,17 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   parseStringList(layersStr, layers);
   assert(layers.size() >= 2 && "Must have at least input/output layers");
 
-  // Parse tile sizes
+  // Parse matmul tile / unroll sizes
   parseStringList(tilesStr, tiles);
   assert((tiles.size() == 0 || tiles.size() == 3) &&
          "Must have 3 tile sizes (or none)");
-
   parseStringList(registerUnrollStr, registerUnroll);
-  assert((tiles.size() == 0 || tiles.size() == 3) &&
+  assert((registerUnroll.size() == 0 || registerUnroll.size() == 3) &&
          "Must have 3 register unrolling or none");
 
-  // Pick data type
+  // Pick data types
   auto elementType =
-      llvm::StringSwitch<std::optional<SmallVector<mlir::Type>>>(targetType)
+      llvm::StringSwitch<std::optional<SmallVector<mlir::Type>>>(dataType)
           .CaseLower("f32", SmallVector<Type>{builder.getF32Type(),
                                               builder.getF32Type()})
           .CaseLower("f16", SmallVector<Type>{builder.getF16Type(),
@@ -214,7 +213,7 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   // If the target type contains "mx", it is a mixed precision type. If
   // quantization type is not explicitly specified, we will default to Mixed
   // quantization type for mixed precision target types.
-  bool hasMixedType = !targetType.empty() && targetType.contains("mx");
+  bool hasMixedType = !dataType.empty() && dataType.contains("mx");
   if (hasMixedType && quantType == QuantizationType::None)
     quantType = QuantizationType::Mixed;
 
