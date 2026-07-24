@@ -3,8 +3,6 @@
 // RUN: mlir-gen --kernel=args --bias --relu --seed=0 --float-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=DP4
 
 // RUN: not --crash mlir-gen --output=named --kernel=args --bias --relu --seed=0 --float-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=2 2>&1 | FileCheck %s --check-prefix=VNNI-TODO
-// RUN: mlir-gen --output=named --keep-generic-matmul --kernel=args --bias --relu --seed=0 --float-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=2 2>&1 | FileCheck %s --check-prefix=GENERIC
-
 
 // BF16: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // BF16: // RUN{{.*}}-e entry -entry-point-result=void
@@ -66,7 +64,7 @@
 // DP4-NOT: dealloc
 
 
-// VNNI-TODO: Unsupported Lowering for VNNI, Try '--keep-generic-matmul'
+// VNNI-TODO: Unsupported Lowering for VNNI, Try 'generic' or 'contract' lowering
 // VNNI-TODO: UNREACHABLE executed
 
 // GENERIC: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>

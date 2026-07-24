@@ -87,7 +87,7 @@ static Value createExpandedScaleTensor(OpBuilder &builder, Location loc,
   return scale;
 }
 
-static Value createCastToType(OpBuilder &builder, Location loc, Value value,
+static Value createCastToFloat(OpBuilder &builder, Location loc, Value value,
                               mlir::Type dstType,
                               arith::FastMathFlagsAttr fmf = nullptr) {
   assert(dstType.isFloat() && "Unsupported target type for cast");
@@ -120,11 +120,11 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              StringRef scaleType, StringRef quantizationTypeStr,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
-                             bool keepGenericMatmul, int vnniBlockingFactor)
+                             int vnniBlockingFactor)
     : builder(&context), loc(builder.getUnknownLoc()), batch(batch), seed(seed),
       identity(identity), flops(0), enableBias(enableBias),
       enableRelu(enableRelu), enableSoftmax(enableSoftmax),
-      keepGenericMatmul(keepGenericMatmul), vnniFactor(vnniBlockingFactor) {
+      vnniFactor(vnniBlockingFactor) {
 
   // Register all necessary dialects
   context
@@ -141,8 +141,6 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
           .CaseLower("named", OutputOpKind::NamedOp)
           .Default(std::nullopt);
   assert(optOutputOpKind && "Invalid output Op kind");
-  assert(!(optOutputOpKind == OutputOpKind::Contract && keepGenericMatmul) &&
-         "Can't keep generic matmul with contract");
   outputOpKind = *optOutputOpKind;
 
   // Parse kernel type
@@ -567,7 +565,7 @@ Value MLIRGenerator::lowerNamedMatmul(Value input, Value weight, Value output) {
   // tensor had been discussed and can be revisited as potential solution.
   if (vnniFactor != 0) {
     llvm_unreachable(
-        "Unsupported Lowering for VNNI, Try '--keep-generic-matmul'");
+        "Unsupported Lowering for VNNI, Try 'generic' or 'contract' lowering");
   }
 
   Value namedMatmul;
@@ -645,7 +643,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
                                                   reassociationIndices);
   }
 
-  if (outputOpKind == OutputOpKind::Generic || keepGenericMatmul) {
+  if (outputOpKind == OutputOpKind::Generic) {
     chain = lowerGenericMatmul(input, weight, output);
   } else if (outputOpKind == OutputOpKind::Contract) {
     chain = lowerContract(input, weight, output);
@@ -1007,15 +1005,15 @@ Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
                                            ? arith::FastMathFlags::nnan
                                            : arith::FastMathFlags::none;
             arg1 =
-                createCastToType(nestedBuilder, nestedLoc, arg1, floatTy,
+                createCastToFloat(nestedBuilder, nestedLoc, arg1, floatTy,
                                  arith::FastMathFlagsAttr::get(&context, fmf));
             arg2 =
-                createCastToType(nestedBuilder, nestedLoc, arg2, floatTy,
+                createCastToFloat(nestedBuilder, nestedLoc, arg2, floatTy,
                                  arith::FastMathFlagsAttr::get(&context, fmf));
             Value alu = arith::MulFOp::create(nestedBuilder, loc, arg1, arg2)
                             ->getResult(0);
             Value castToFloat =
-                createCastToType(nestedBuilder, nestedLoc, arg0,
+                createCastToFloat(nestedBuilder, nestedLoc, arg0,
                                  outputShapedTy.getElementType());
             alu = arith::MulFOp::create(nestedBuilder, loc, castToFloat, alu)
                       ->getResult(0);

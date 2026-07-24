@@ -36,13 +36,6 @@ llvm::cl::opt<std::string> outputOpKind(
     "output", llvm::cl::desc("Specifies linalg op kind generic, contract or named"),
     llvm::cl::value_desc("generic,contract,named"), llvm::cl::init("generic"));
 
-// Enable emission of generic matmul when outputKind is named op
-llvm::cl::opt<bool> keepGenericMatmul(
-    "keep-generic-matmul",
-    llvm::cl::desc("Enable emission of generic matmul when choosen "
-                   "outputKind is named op"),
-    llvm::cl::value_desc("bool"), llvm::cl::init(false));
-
 // Type of kernel to be generated
 llvm::cl::opt<std::string> kernel("kernel",
                                   llvm::cl::desc("Kernel type to be generated"),
@@ -143,6 +136,6 @@ int main(int argc, char **argv) {
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, floatType,
                     scaleType, quantizationType, seed, identity, enableBias,
-                    enableRelu, enableSoftmax, keepGenericMatmul, vnni);
+                    enableRelu, enableSoftmax, vnni);
   return gen.generate(filename, floatType.getValue().find("mx-", 0) == 0);
 }

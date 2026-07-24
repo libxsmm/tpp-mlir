@@ -86,9 +86,6 @@ class MLIRGenerator {
   /// Kind of linalg output Op to be generated
   OutputOpKind outputOpKind;
 
-  /// Allow emitting generic matmul when OutputOpKind is named op
-  bool keepGenericMatmul;
-
   /// List of supported kernel types that can be generated
   ///  * Const: Generates weights and biases as constant (RO).
   ///  * Args: Generates weights and biaseds as arguments (RW).
@@ -267,7 +264,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, StringRef, int, bool, bool, bool, bool, bool, int);
+                StringRef, StringRef, int, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }
 
