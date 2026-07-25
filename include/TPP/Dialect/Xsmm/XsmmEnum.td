@@ -74,9 +74,9 @@ def Xsmm_GemmFlags : I64EnumAttr<
     [
       I64EnumAttrCase<"NONE", 0, "none">,
       I64EnumAttrCase<"BETA_0", 4, "beta_0">,
-      I64EnumAttrCase<"VNNI_A", 2048, "vnni_a">,
-      I64EnumAttrCase<"VNNI_B", 4096, "vnni_b">,
-      I64EnumAttrCase<"VNNI_C", 8192, "vnni_c">,
+      I64EnumAttrCase<"VNNI_A", 256, "vnni_a">,
+      I64EnumAttrCase<"VNNI_B", 512, "vnni_b">,
+      I64EnumAttrCase<"VNNI_C", 1024, "vnni_c">,
       I64EnumAttrCase<"NO_RESET_TILECONFIG", 64, "no_reset_tileconfig">,
       I64EnumAttrCase<"NO_SETUP_TILECONFIG", 128, "no_setup_tileconfig">
    ]> {

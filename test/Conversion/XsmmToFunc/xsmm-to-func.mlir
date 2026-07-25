@@ -57,9 +57,9 @@ func.func @dispatch_gemm() -> i64 {
 // CHECK-DAG: %[[C4:.+]] = arith.constant 4 : i64
 // CHECK-DAG: %[[C5:.+]] = arith.constant 5 : i64
 // CHECK-DAG: %[[C6:.+]] = arith.constant 6 : i64
-// Or between 2048 and 4096 (see enum for GemmFlags)
-// CHECK-DAG: %[[C6144:.+]] = arith.constant 6144 : i64
-// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C6144]])
+// Or between 256 and 512 (see enum for GemmFlags)
+// CHECK-DAG: %[[C768:.+]] = arith.constant 768 : i64
+// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C768]])
 
 // -----
 
@@ -75,9 +75,9 @@ func.func @dispatch_gemm() -> i64 {
 // CHECK-DAG: %[[C4:.+]] = arith.constant 4 : i64
 // CHECK-DAG: %[[C5:.+]] = arith.constant 5 : i64
 // CHECK-DAG: %[[C6:.+]] = arith.constant 6 : i64
-// Or between 2048 and 4096 and 8192 (see enum for GemmFlags)
-// CHECK-DAG: %[[C14336:.+]] = arith.constant 14336 : i64
-// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C14336]])
+// Or between 256 and 512 and 1024 (see enum for GemmFlags)
+// CHECK-DAG: %[[C1792:.+]] = arith.constant 1792 : i64
+// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C1792]])
 
 // -----
 
@@ -94,8 +94,8 @@ func.func @dispatch_gemm() -> i64 {
 // CHECK-DAG: %[[C5:.+]] = arith.constant 5 : i64
 // CHECK-DAG: %[[C6:.+]] = arith.constant 6 : i64
 // LIBXSMM is col-major check we swap the flag for A and B (see enum for GemmFlags)
-// CHECK-DAG: %[[C4096:.+]] = arith.constant 4096 : i64
-// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C4096]])
+// CHECK-DAG: %[[C512:.+]] = arith.constant 512 : i64
+// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C512]])
 
 // -----
 
@@ -112,8 +112,8 @@ func.func @dispatch_gemm() -> i64 {
 // CHECK-DAG: %[[C5:.+]] = arith.constant 5 : i64
 // CHECK-DAG: %[[C6:.+]] = arith.constant 6 : i64
 // LIBXSMM is col-major check we swap the flag for A and B (see enum for GemmFlags)
-// CHECK-DAG: %[[C2048:.+]] = arith.constant 2048 : i64
-// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C2048]])
+// CHECK-DAG: %[[C256:.+]] = arith.constant 256 : i64
+// CHECK: call @xsmm_gemm_dispatch(%[[C2]], %[[C1]], %[[C2]], %[[C3]], %[[C4]], %[[C5]], %[[C6]], %[[C256]])
 
 // -----
 
@@ -196,8 +196,8 @@ func.func @dispatch_gemm_vnni() -> i64 {
   // CHECK: %[[C2:.+]] = arith.constant 2 : i64
   // CHECK-DAG: %[[C128:.+]] = arith.constant 128 : i64
   // CHECK-DAG: %[[C512:.+]] = arith.constant 512 : i64
+  // vnni_b is swapped to vnni_a (256) for col-major, which is CSE'd with the k dim constant
   // CHECK-DAG: %[[C256:.+]] = arith.constant 256 : i64
-  // CHECK-DAG: %[[C2048:.+]] = arith.constant 2048 : i64
   %0 = xsmm.gemm.dispatch [128, 512, 256, 256, 512, 512]  flags = (vnni_b) data_type = bf16
   return %0 : i64
 }
@@ -234,7 +234,7 @@ func.func @dispatch_fused_brgemm() -> i64 {
 // CHECK-LABEL: dispatch_fused_brgemm
 // CHECK: %[[DATA_TYPE:.+]] = arith.constant 2 : i64
 // CHECK-DAG: %[[DIM:.+]] = arith.constant 13 : i64
-// CHECK-DAG: %[[GEMM_FLAGS:.+]] = arith.constant 4096 : i64
+// CHECK-DAG: %[[GEMM_FLAGS:.+]] = arith.constant 512 : i64
 // CHECK-DAG: %[[UNARY_FLAGS:.+]] = arith.constant 0 : i64
 // CHECK-DAG: %[[UNARY_KIND:.+]] = arith.constant 5 : i64
 // CHECK-DAG: %[[BINARY_FLAGS:.+]] = arith.constant 4 : i64
@@ -264,11 +264,11 @@ func.func @dispatch_fused_brgemm() -> i64 {
 // CHECK-LABEL: dispatch_fused_brgemm
 // CHECK: %[[C2:.+]] = arith.constant 2 : i64
 // CHECK-DAG: %[[C13:.+]] = arith.constant 13 : i64
-// CHECK-DAG: %[[C4096:.+]] = arith.constant 4096 : i64
+// CHECK-DAG: %[[C512:.+]] = arith.constant 512 : i64
 // CHECK-DAG: %[[C0:.+]] = arith.constant 0 : i64
 // CHECK-DAG: %[[C4:.+]] = arith.constant 4 : i64
 // CHECK-DAG: %[[C1:.+]] = arith.constant 1 : i64
-// CHECK: %{{.+}} = call @xsmm_fused_brgemm_dispatch(%[[C2]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C4096]], %[[C0]], %[[C0]], %[[C4]], %[[C1]])
+// CHECK: %{{.+}} = call @xsmm_fused_brgemm_dispatch(%[[C2]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C512]], %[[C0]], %[[C0]], %[[C4]], %[[C1]])
 
 // -----
 
@@ -281,12 +281,12 @@ func.func @multiple_gemm_flags_fused_brgemm() -> i64 {
 // CHECK-LABEL: multiple_gemm_flags_fused_brgemm
 // CHECK: %[[C2:.+]] = arith.constant 2 : i64
 // CHECK-DAG: %[[C13:.+]] = arith.constant 13 : i64
-// Or between 2048 and 4096 and 8192 (see enum for GemmFlags)
-// CHECK-DAG: %[[C14336:.+]] = arith.constant 14336 : i64
+// Or between 256 and 512 and 1024 (see enum for GemmFlags)
+// CHECK-DAG: %[[C1792:.+]] = arith.constant 1792 : i64
 // CHECK-DAG: %[[C0:.+]] = arith.constant 0 : i64
 // CHECK-DAG: %[[C4:.+]] = arith.constant 4 : i64
 // CHECK-DAG: %[[C1:.+]] = arith.constant 1 : i64
-// CHECK: %{{.+}} = call @xsmm_fused_brgemm_dispatch(%[[C2]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C14336]], %[[C0]], %[[C0]], %[[C4]], %[[C1]])
+// CHECK: %{{.+}} = call @xsmm_fused_brgemm_dispatch(%[[C2]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C13]], %[[C1792]], %[[C0]], %[[C0]], %[[C4]], %[[C1]])
 
 // -----
 
