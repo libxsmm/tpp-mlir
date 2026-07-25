@@ -14,7 +14,10 @@ def Xsmm_DataType: I64EnumAttr<
     "DataType", "see: libxsmm_datatype",
     [
       I64EnumAttrCase<"F32",  1, "f32">,
-      I64EnumAttrCase<"BF16", 2, "bf16">
+      I64EnumAttrCase<"BF16", 2, "bf16">,
+      // FP8 data types. libxsmm names E5M2 as BF8 and E4M3 as HF8.
+      I64EnumAttrCase<"BF8",  4, "bf8">,
+      I64EnumAttrCase<"HF8",  5, "hf8">
     ]>{
    let cppNamespace = "mlir::xsmm";
 }
@@ -39,7 +42,8 @@ def Xsmm_UnaryKind : I64EnumAttr<
       I64EnumAttrCase<"ZERO", 2, "zero">,
       I64EnumAttrCase<"RELU", 5, "relu">,
       I64EnumAttrCase<"VNNI2", 28, "vnni_2">,
-      I64EnumAttrCase<"TRANSPOSE", 29, "transpose">
+      I64EnumAttrCase<"TRANSPOSE", 29, "transpose">,
+      I64EnumAttrCase<"VNNI4", 54, "vnni_4">
     ]> {
   let cppNamespace = "mlir::xsmm";
 }

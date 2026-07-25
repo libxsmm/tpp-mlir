@@ -175,6 +175,11 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                                               builder.getF16Type()})
           .CaseLower("bf16", SmallVector<Type>{builder.getBF16Type(),
                                                builder.getBF16Type()})
+          // FP8 pure types. E5M2 is named bf8 and E4M3 is named hf8 by libxsmm.
+          .CaseLower("bf8", SmallVector<Type>{builder.getF8E5M2Type(),
+                                              builder.getF8E5M2Type()})
+          .CaseLower("hf8", SmallVector<Type>{builder.getF8E4M3FNType(),
+                                              builder.getF8E4M3FNType()})
           .CaseLower("mx-bf16", SmallVector<Type>{builder.getBF16Type(),
                                                   builder.getF32Type()})
           .CaseLower("mx-f16", SmallVector<Type>{builder.getF16Type(),
@@ -226,9 +231,10 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   if (quantType != QuantizationType::None)
     outputOpKind = OutputOpKind::Contract;
 
-  // Disable VNNI packing if it is not a F16/BF16/I8 data type
+  // Disable VNNI packing if it is not a F16/BF16/I8/FP8 data type
   if (!dataTypes[0].isBF16() && !dataTypes[0].isF16() &&
-      !dataTypes[0].isInteger(8))
+      !dataTypes[0].isInteger(8) &&
+      !llvm::isa<Float8E5M2Type, Float8E4M3FNType>(dataTypes[0]))
     vnniFactor = 0;
   assert(((vnniFactor >= 0) && (vnniFactor % 2 == 0)) &&
          "Invalid VNNI packing factor");

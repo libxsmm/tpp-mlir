@@ -273,7 +273,7 @@ func.func @gemm_invoke(%arg0: memref<3x3xf32>, %arg1: memref<3x3xf32>, %arg2: me
 
 func.func @gemm_invoke(%arg0: f32, %arg1: memref<3x3xf32>, %arg2: memref<3x3xf32>,
                        %arg3: memref<3x3xf32>) {
-  // expected-error@+1 {{op operand #0 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type values or 64-bit signless integer, but got 'f32'}}
+  // expected-error@+1 {{op operand #0 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 64-bit signless integer, but got 'f32'}}
   xsmm.gemm(data_type = f32, %arg0, %arg1, %arg2, %arg3)
     : (f32, memref<3x3xf32>, memref<3x3xf32>, memref<3x3xf32>) -> ()
   return
@@ -283,7 +283,7 @@ func.func @gemm_invoke(%arg0: f32, %arg1: memref<3x3xf32>, %arg2: memref<3x3xf32
 
 func.func @gemm_invoke(%arg0: i64, %arg1: memref<1x1x3x3xf32>, %arg2: memref<3x3xf32>,
                        %arg3: memref<3x3xf32>) {
-  // expected-error@+1 {{op operand #1 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type values or 64-bit signless integer, but got 'memref<1x1x3x3xf32>'}}
+  // expected-error@+1 {{op operand #1 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 64-bit signless integer, but got 'memref<1x1x3x3xf32>'}}
   xsmm.gemm(data_type = f32, %arg0, %arg1, %arg2, %arg3)
     : (i64, memref<1x1x3x3xf32>, memref<3x3xf32>, memref<3x3xf32>) -> ()
   return
@@ -321,7 +321,7 @@ func.func @brgemm_invoke(%arg0: i64, %arg1: memref<3x3xf32>, %arg2: memref<3x3xf
 
 func.func @brgemm_invoke(%arg0: i64, %arg1: memref<3x3xf32>, %arg2: memref<2x3x3xf32>,
                          %arg3: memref<3x3xf32>, %arg4: memref<2xf32>) {
-  // expected-error@+1 {{operand #4 must be variadic of 2D/3D/4D static memref of 32-bit float or bfloat16 type values or 64-bit signless integer, but got 'memref<2xf32>'}}
+  // expected-error@+1 {{operand #4 must be variadic of 2D/3D/4D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 64-bit signless integer, but got 'memref<2xf32>'}}
   xsmm.brgemm(data_type = f32, %arg0, %arg1, %arg2, %arg3, %arg4)
     : (i64, memref<3x3xf32>, memref<2x3x3xf32>, memref<3x3xf32>, memref<2xf32>) -> ()
   return
@@ -339,7 +339,7 @@ func.func @brgemm_invoke(%arg0: i64, %arg1: memref<2x3x3xf32>, %arg2: memref<2x3
 // -----
 
 func.func @gemm_invoke(%arg0: i64, %arg1: memref<?x?xf32>, %arg2: memref<?x?xf32>) {
-  // expected-error@+1 {{operand #1 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type values or 64-bit signless integer, but got 'memref<?x?xf32>'}}
+  // expected-error@+1 {{operand #1 must be variadic of 2D/3D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 64-bit signless integer, but got 'memref<?x?xf32>'}}
   xsmm.gemm(data_type = f32, %arg0, %arg1, %arg2, %arg2)
     : (i64, memref<?x?xf32>, memref<?x?xf32>, memref<?x?xf32>) -> ()
   return
@@ -348,7 +348,7 @@ func.func @gemm_invoke(%arg0: i64, %arg1: memref<?x?xf32>, %arg2: memref<?x?xf32
 // -----
 
 func.func @gemm_invoke(%arg0: i64, %arg1: memref<?x?x?xf32>, %arg2: memref<?x?x?xf32>, %arg3: memref<?x?xf32>) {
-  // expected-error@+1 {{operand #1 must be variadic of 2D/3D/4D static memref of 32-bit float or bfloat16 type values or 64-bit signless integer, but got 'memref<?x?x?xf32>'}}
+  // expected-error@+1 {{operand #1 must be variadic of 2D/3D/4D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 64-bit signless integer, but got 'memref<?x?x?xf32>'}}
   xsmm.brgemm(data_type = f32, %arg0, %arg1, %arg2, %arg3, %arg0)
     : (i64, memref<?x?x?xf32>, memref<?x?x?xf32>, memref<?x?xf32>, i64) -> ()
   return
@@ -357,7 +357,7 @@ func.func @gemm_invoke(%arg0: i64, %arg1: memref<?x?x?xf32>, %arg2: memref<?x?x?
 // -----
 
 func.func @unary_invoke(%arg0: memref<?x?xf32>, %arg1: memref<3x3xf32>, %disp: i64) {
-  // expected-error@+1 {{operand #1 must be variadic of 1D/2D/3D/4D static memref of 32-bit float or bfloat16 type values or 32-bit float or bfloat16 type or 64-bit signless integer, but got 'memref<?x?xf32>'}}
+  // expected-error@+1 {{operand #1 must be variadic of 1D/2D/3D/4D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type or 64-bit signless integer, but got 'memref<?x?xf32>'}}
   xsmm.unary relu(data_type = f32, %disp, %arg0, %arg1) : (i64, memref<?x?xf32>, memref<3x3xf32>) -> ()
   return
 }
@@ -365,7 +365,7 @@ func.func @unary_invoke(%arg0: memref<?x?xf32>, %arg1: memref<3x3xf32>, %disp: i
 // -----
 
 func.func @unary_invoke(%arg0: memref<?x?xf32>, %arg1: memref<3x3xf32>, %disp: i64) {
-  // expected-error@+1 {{operand #1 must be variadic of 1D/2D/3D/4D static memref of 32-bit float or bfloat16 type values or 32-bit float or bfloat16 type or 64-bit signless integer, but got 'memref<?x?xf32>'}}
+  // expected-error@+1 {{operand #1 must be variadic of 1D/2D/3D/4D static memref of 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type values or 32-bit float or bfloat16 type or f8E5M2 type or f8E4M3FN type or 64-bit signless integer, but got 'memref<?x?xf32>'}}
   xsmm.binary add(data_type = f32, %disp, %arg0, %arg0, %arg1)
     : (i64, memref<?x?xf32>, memref<?x?xf32>, memref<3x3xf32>) -> ()
   return

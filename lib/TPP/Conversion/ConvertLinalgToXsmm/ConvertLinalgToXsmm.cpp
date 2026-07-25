@@ -1071,8 +1071,11 @@ struct ConvertVnniPacking : public OpRewritePattern<linalg::TransposeOp> {
     unaryInfo.ldo = stridesOnOutput->front() / vnniFactor;
     auto flags = rewriter.getArrayAttr(xsmm::UnaryFlagsAttr::get(
         rewriter.getContext(), xsmm::UnaryFlags::NONE));
-    xsmm::UnaryKindAttr kind =
-        xsmm::UnaryKindAttr::get(rewriter.getContext(), xsmm::UnaryKind::VNNI2);
+    // Select the norm-to-vnni transform based on the blocking factor:
+    // factor 2 -> VNNI2 (bf16), factor 4 -> VNNI4 (fp8).
+    xsmm::UnaryKindAttr kind = xsmm::UnaryKindAttr::get(
+        rewriter.getContext(),
+        vnniFactor == 4 ? xsmm::UnaryKind::VNNI4 : xsmm::UnaryKind::VNNI2);
     xsmm::utils::replaceOpWithUnary(rewriter, transposeOp, {source, out},
                                     unaryInfo, flags, kind);
     return success();

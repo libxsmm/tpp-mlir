@@ -10,6 +10,7 @@
 #include "TPP/Dialect/Xsmm/XsmmEnum.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/TypeUtilities.h"
 
@@ -289,13 +290,15 @@ static LogicalResult verifyGemmFlags(ArrayAttr flags, DataType dataType,
   for (auto flag : flags) {
     flagsAsInt.push_back(cast<IntegerAttr>(flag).getInt());
   }
-  // VNNI flags must be specified only for bf16 type
-  if (dataType != DataType::BF16 && llvm::any_of(flagsAsInt, [](int64_t flag) {
+  // VNNI flags must be specified only for low-precision types (bf16 or fp8).
+  bool isVnniType = dataType == DataType::BF16 || dataType == DataType::BF8 ||
+                    dataType == DataType::HF8;
+  if (!isVnniType && llvm::any_of(flagsAsInt, [](int64_t flag) {
         return (flag == static_cast<int64_t>(GemmFlags::VNNI_B) ||
                 flag == static_cast<int64_t>(GemmFlags::VNNI_A) ||
                 flag == static_cast<int64_t>(GemmFlags::VNNI_C));
       })) {
-    return op->emitOpError() << "VNNI flags but type is not bf16";
+    return op->emitOpError() << "VNNI flags but type is not bf16 or fp8";
   }
 
   return success();
@@ -423,6 +426,11 @@ static LogicalResult verifyXsmmCommon(OpTy invokeOp,
   auto isCompatible = [](xsmm::DataType dataType, Type type) {
     if (dataType == xsmm::DataType::F32)
       return type.isF32();
+    // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+    if (dataType == xsmm::DataType::BF8)
+      return llvm::isa<Float8E5M2Type>(type);
+    if (dataType == xsmm::DataType::HF8)
+      return llvm::isa<Float8E4M3FNType>(type);
     return type.isBF16();
   };
 

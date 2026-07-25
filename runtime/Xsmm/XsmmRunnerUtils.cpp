@@ -68,10 +68,39 @@ void *get_base_ptr(const libxsmm_datatype dType, void *alignedPtr,
   } else if (dType == LIBXSMM_DATATYPE_BF16) {
     bf16 *base_ptr = (bf16 *)alignedPtr + offset;
     return (void *)base_ptr;
+  } else if (dType == LIBXSMM_DATATYPE_BF8) {
+    // E5M2. libxsmm_bfloat8 is a single byte.
+    libxsmm_bfloat8 *base_ptr = (libxsmm_bfloat8 *)alignedPtr + offset;
+    return (void *)base_ptr;
+  } else if (dType == LIBXSMM_DATATYPE_HF8) {
+    // E4M3. libxsmm_hfloat8 is a single byte.
+    libxsmm_hfloat8 *base_ptr = (libxsmm_hfloat8 *)alignedPtr + offset;
+    return (void *)base_ptr;
   }
   fprintf(stderr, "Unhandled data type in get_data_pointer_from_memref_desc:%d",
           dType);
   return nullptr;
+}
+
+// BF16 and FP8 (E5M2/BF8, E4M3/HF8) have no native accumulate support, so the
+// computation must be retargeted to F32.
+bool needsFp32Compute(const libxsmm_datatype dtype) {
+  return dtype == LIBXSMM_DATATYPE_BF16 || dtype == LIBXSMM_DATATYPE_BF8 ||
+         dtype == LIBXSMM_DATATYPE_HF8;
+}
+
+// Return the compute data type for a given input/output data type.
+libxsmm_datatype getCompDataType(const libxsmm_datatype dtype) {
+  return needsFp32Compute(dtype) ? LIBXSMM_DATATYPE_F32 : dtype;
+}
+
+// Return the size in bytes of a single element of the given data type.
+size_t getDataTypeSize(const libxsmm_datatype dtype) {
+  if (dtype == LIBXSMM_DATATYPE_F32)
+    return sizeof(float);
+  if (dtype == LIBXSMM_DATATYPE_BF8 || dtype == LIBXSMM_DATATYPE_HF8)
+    return sizeof(libxsmm_bfloat8);
+  return sizeof(bf16);
 }
 
 } // namespace
@@ -130,9 +159,9 @@ extern "C" int64_t xsmm_gemm_dispatch(const libxsmm_datatype dtype, int64_t m,
   l_shape.a_in_type = dtype;
   l_shape.b_in_type = dtype;
   l_shape.out_type = dtype;
-  // Retarget computation type from bf16 to f32 due to missing hardware support.
-  l_shape.comp_type =
-      dtype == LIBXSMM_DATATYPE_BF16 ? LIBXSMM_DATATYPE_F32 : dtype;
+  // Retarget computation type from bf16/fp8 to f32 due to missing hardware
+  // support.
+  l_shape.comp_type = getCompDataType(dtype);
 
   auto sgemm = libxsmm_dispatch_gemm(l_shape, l_flags, l_prefetch_flags);
   if (!sgemm) {
@@ -162,10 +191,11 @@ xsmm_unary_dispatch(const libxsmm_meltw_unary_type op_type,
   unary_shape.m = static_cast<libxsmm_blasint>(n);
   unary_shape.n = static_cast<libxsmm_blasint>(m);
   unary_shape.in0_type = dtype;
-  // Retarget computation type from bf16 to f32 due to missing hardware support.
-  // Copy and Zero should remain in BF16 to avoid useless up/down casts
-  auto force_fp32 = (dtype == LIBXSMM_DATATYPE_BF16 &&
-                     !hasImplicitComputeDtypeUnary(op_type));
+  // Retarget computation type from bf16/fp8 to f32 due to missing hardware
+  // support. Copy and Zero should remain in the low-precision type to avoid
+  // useless up/down casts.
+  auto force_fp32 =
+      (needsFp32Compute(dtype) && !hasImplicitComputeDtypeUnary(op_type));
   unary_shape.comp_type = force_fp32 ? LIBXSMM_DATATYPE_F32 : dtype;
   unary_shape.out_type = dtype;
   unary_shape.ldi = static_cast<libxsmm_blasint>(ldi);
@@ -195,9 +225,9 @@ xsmm_binary_dispatch(const libxsmm_meltw_binary_type op_type,
   binary_shape.n = static_cast<libxsmm_blasint>(m);
   binary_shape.in0_type = dtype;
   binary_shape.in1_type = dtype;
-  // Retarget computation type from bf16 to f32 due to missing hardware support.
-  binary_shape.comp_type =
-      dtype == LIBXSMM_DATATYPE_BF16 ? LIBXSMM_DATATYPE_F32 : dtype;
+  // Retarget computation type from bf16/fp8 to f32 due to missing hardware
+  // support.
+  binary_shape.comp_type = getCompDataType(dtype);
   binary_shape.out_type = dtype;
   binary_shape.ldi = static_cast<libxsmm_blasint>(ldiLhs);
   binary_shape.ldi2 = static_cast<libxsmm_blasint>(ldiRhs);
@@ -236,8 +266,7 @@ extern "C" int64_t xsmm_intel_amx_tile_config_dispatch(
   l_shape.a_in_type = dtype;
   l_shape.b_in_type = dtype;
   l_shape.out_type = dtype;
-  l_shape.comp_type =
-      dtype == LIBXSMM_DATATYPE_BF16 ? LIBXSMM_DATATYPE_F32 : dtype;
+  l_shape.comp_type = getCompDataType(dtype);
 
   auto sgemm = libxsmm_dispatch_tilecfg_gemm(l_shape, l_cfg_flags);
   if (!sgemm) {
@@ -344,11 +373,11 @@ extern "C" int64_t xsmm_brgemm_dispatch(const libxsmm_datatype dtype, int64_t m,
   l_shape.a_in_type = dtype;
   l_shape.b_in_type = dtype;
   l_shape.out_type = dtype;
-  // Retarget computation type from bf16 to f32 due to missing hardware support.
-  l_shape.comp_type =
-      dtype == LIBXSMM_DATATYPE_BF16 ? LIBXSMM_DATATYPE_F32 : dtype;
+  // Retarget computation type from bf16/fp8 to f32 due to missing hardware
+  // support.
+  l_shape.comp_type = getCompDataType(dtype);
   l_brconfig.br_type = LIBXSMM_GEMM_BATCH_REDUCE_STRIDE;
-  auto typeSize = dtype == LIBXSMM_DATATYPE_F32 ? sizeof(float) : sizeof(bf16);
+  auto typeSize = getDataTypeSize(dtype);
   l_brconfig.br_stride_a_hint = stride_b * typeSize;
   l_brconfig.br_stride_b_hint = stride_a * typeSize;
   l_brconfig.br_unroll_hint = 0;
@@ -423,14 +452,13 @@ xsmm_fused_brgemm_dispatch(const libxsmm_datatype data_type, int64_t m,
   l_shape.a_in_type = data_type;
   l_shape.b_in_type = data_type;
   l_shape.out_type = data_type;
-  // Retarget computation type from bf16 to f32 due to missing hardware support.
-  l_shape.comp_type =
-      data_type == LIBXSMM_DATATYPE_BF16 ? LIBXSMM_DATATYPE_F32 : data_type;
+  // Retarget computation type from bf16/fp8 to f32 due to missing hardware
+  // support.
+  l_shape.comp_type = getCompDataType(data_type);
 
   libxsmm_gemm_batch_reduce_config l_brconfig;
   l_brconfig.br_type = LIBXSMM_GEMM_BATCH_REDUCE_STRIDE;
-  auto typeSize =
-      data_type == LIBXSMM_DATATYPE_F32 ? sizeof(float) : sizeof(bf16);
+  auto typeSize = getDataTypeSize(data_type);
   l_brconfig.br_stride_a_hint = stride_b * typeSize;
   l_brconfig.br_stride_b_hint = stride_a * typeSize;
   l_brconfig.br_unroll_hint = 0;
@@ -472,6 +500,17 @@ xsmm_intel_amx_tile_config_invoke(const libxsmm_datatype dType, int64_t addr,
 
   cfg_tr.tilecfg = reinterpret_cast<libxsmm_tilecfgfunction>(addr);
   cfg_tr.tilecfg(l_tilestate);
+}
+
+// FP8 -> F32 scalar converters. These are used to print/verify pure fp8 results
+// since the target has no native fp8 arithmetic. libxsmm names E5M2 as BF8 and
+// E4M3 as HF8. The 8-bit datum is passed as an i8 to match the MLIR ABI.
+extern "C" MLIR_RUNNERUTILS_EXPORT float xsmm_convert_bf8_to_f32(uint8_t in) {
+  return libxsmm_convert_bf8_to_f32(static_cast<libxsmm_bfloat8>(in));
+}
+
+extern "C" MLIR_RUNNERUTILS_EXPORT float xsmm_convert_hf8_to_f32(uint8_t in) {
+  return libxsmm_convert_hf8_to_f32(static_cast<libxsmm_hfloat8>(in));
 }
 
 static void printXsmmStruct(const libxsmm_gemm_shape &gemmShape,

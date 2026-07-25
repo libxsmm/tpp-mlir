@@ -20,8 +20,8 @@ class StaticMemRefRankOf<list<Type> allowedTypes, list<int> ranks> :
          MemRefOf<allowedTypes>.summary,
          "::mlir::MemRefType">;
 
-def XsmmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16], [1, 2, 3, 4]>,
-                            F32, BF16, I64]>;
+def XsmmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16, F8E5M2, F8E4M3FN], [1, 2, 3, 4]>,
+                            F32, BF16, F8E5M2, F8E4M3FN, I64]>;
 
 //===----------------------------------------------------------------------===//
 // BinaryOp
@@ -95,7 +95,7 @@ def Xsmm_UnaryOp : Xsmm_Op<"unary", [MemoryEffects<[MemWrite, MemRead]>]> {
 // GemmOp
 //===----------------------------------------------------------------------===//
 
-def GemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16], [2, 3]>, I64]>;
+def GemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16, F8E5M2, F8E4M3FN], [2, 3]>, I64]>;
 
 def Xsmm_GemmOp : Xsmm_Op<"gemm", [MemoryEffects<[MemWrite, MemRead]>]> {
   let summary = "matmul call operation.";
@@ -123,7 +123,7 @@ def Xsmm_GemmOp : Xsmm_Op<"gemm", [MemoryEffects<[MemWrite, MemRead]>]> {
 // BrgemmOp
 //===----------------------------------------------------------------------===//
 
-def BrgemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16], [2, 3, 4]>, I64]>;
+def BrgemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16, F8E5M2, F8E4M3FN], [2, 3, 4]>, I64]>;
 
 def Xsmm_BrgemmOp : Xsmm_Op<"brgemm", [MemoryEffects<[MemWrite, MemRead]>]> {
   let summary = "brgemm call operation.";

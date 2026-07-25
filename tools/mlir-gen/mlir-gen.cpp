@@ -68,7 +68,7 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<std::string>
     dataType("data-type", llvm::cl::desc("Data type for arguments"),
               llvm::cl::value_desc(
-                  "f32|f16|bf16|mx-bf16|mx-f16|mx-i8|mx-i8-f32|mx-f32-i8"),
+                  "f32|f16|bf16|bf8|hf8|mx-bf16|mx-f16|mx-i8|mx-i8-f32|mx-f32-i8"),
               llvm::cl::init("f32"));
 
 // Scale type flag to chose data type of scaling factor.For now it is kind of a

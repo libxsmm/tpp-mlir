@@ -24,8 +24,9 @@
 
 // Base class for float values.
 struct TensorInitFloat : public TensorInit<llvm::APFloat> {
-  // Supported data types. (TODO: Support 8-bit data types)
-  enum class DataType { AUTO, FP16, FP32, FP64, BF16, F8E8M0FNU };
+  // Supported data types.
+  // FP8 pure types: F8E5M2 (libxsmm BF8) and F8E4M3FN (libxsmm HF8).
+  enum class DataType { AUTO, FP16, FP32, FP64, BF16, F8E8M0FNU, F8E5M2, F8E4M3FN };
 
   static bool isTypeSupported(const mlir::Type &type) {
     return type.isF16() || type.isF32() || type.isF64() || type.isBF16() ||
@@ -43,6 +44,20 @@ protected:
   static void toF8E8M0FNU(llvm::APFloat &value) {
     bool ignored;
     value.convert(llvm::APFloat::Float8E8M0FNU(),
+                  llvm::APFloat::rmNearestTiesToEven, &ignored);
+  }
+
+  // F8E5M2 (libxsmm BF8) conversion (by reference).
+  static void toF8E5M2(llvm::APFloat &value) {
+    bool ignored;
+    value.convert(llvm::APFloat::Float8E5M2(),
+                  llvm::APFloat::rmNearestTiesToEven, &ignored);
+  }
+
+  // F8E4M3FN (libxsmm HF8) conversion (by reference).
+  static void toF8E4M3FN(llvm::APFloat &value) {
+    bool ignored;
+    value.convert(llvm::APFloat::Float8E4M3FN(),
                   llvm::APFloat::rmNearestTiesToEven, &ignored);
   }
 

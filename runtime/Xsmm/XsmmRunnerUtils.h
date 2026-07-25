@@ -84,4 +84,10 @@ extern "C" MLIR_RUNNERUTILS_EXPORT void
 xsmm_intel_amx_tile_config_invoke(const libxsmm_datatype dType, int64_t addr,
                                   void *alignedPtrA, int64_t offset);
 
+// FP8 -> F32 scalar converters (E5M2 = BF8, E4M3 = HF8). The 8-bit datum is
+// passed as an i8 to match the MLIR ABI.
+extern "C" MLIR_RUNNERUTILS_EXPORT float xsmm_convert_bf8_to_f32(uint8_t in);
+
+extern "C" MLIR_RUNNERUTILS_EXPORT float xsmm_convert_hf8_to_f32(uint8_t in);
+
 #endif // TPP_EXECUTIONENGINE_CRUNNERUTILS_H

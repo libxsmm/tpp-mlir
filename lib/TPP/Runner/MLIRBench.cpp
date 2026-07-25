@@ -396,7 +396,44 @@ void MLIRBench::printMean(Value mean) {
 void MLIRBench::printVector(Value vector) {
   auto op = vector;
   auto vectorValue = dyn_cast<VectorType>(vector.getType());
-  if (vectorValue.getElementType().isBF16()) {
+  auto elemType = vectorValue.getElementType();
+  // vector.print does not support low-precision types; up-cast to f32.
+  if (llvm::isa<Float8E5M2Type, Float8E4M3FNType>(elemType)) {
+    // FP8 (E5M2/E4M3) has no native arithmetic on the target, so we cannot use
+    // arith.extf here. Convert each lane to f32 using the libxsmm converters
+    // exposed by the runtime (E5M2 = BF8, E4M3 = HF8).
+    StringRef fnName = llvm::isa<Float8E5M2Type>(elemType)
+                           ? "xsmm_convert_bf8_to_f32"
+                           : "xsmm_convert_hf8_to_f32";
+    Type i8Type = builder.getI8Type();
+    Type f32Type = builder.getF32Type();
+    // Declare the runtime converter once at module scope.
+    auto fnDecl = dyn_cast_or_null<func::FuncOp>(module.lookupSymbol(fnName));
+    if (!fnDecl) {
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToStart(&getModuleBlock());
+      auto fnType = builder.getFunctionType({i8Type}, {f32Type});
+      fnDecl = func::FuncOp::create(builder, unkLoc, fnName, fnType);
+      fnDecl.setPrivate();
+    }
+    auto shape = vectorValue.getShape();
+    int64_t numElems = vectorValue.getNumElements();
+    auto i8VecType = VectorType::get(shape, i8Type);
+    Value i8Vec = arith::BitcastOp::create(builder, unkLoc, i8VecType, vector);
+    auto f32VecType = VectorType::get(shape, f32Type);
+    Value f32Vec = arith::ConstantOp::create(
+        builder, unkLoc, builder.getZeroAttr(f32VecType));
+    for (int64_t i = 0; i < numElems; i++) {
+      Value lane = vector::ExtractOp::create(builder, unkLoc, i8Vec,
+                                             ArrayRef<int64_t>{i});
+      Value converted =
+          func::CallOp::create(builder, unkLoc, fnDecl, ValueRange{lane})
+              .getResult(0);
+      f32Vec = vector::InsertOp::create(builder, unkLoc, converted, f32Vec,
+                                        ArrayRef<int64_t>{i});
+    }
+    op = f32Vec;
+  } else if (elemType.isBF16()) {
     VectorType vecType =
         VectorType::get(vectorValue.getShape(), builder.getF32Type());
     op = arith::ExtFOp::create(builder, unkLoc, vecType, vector, arith::FastMathFlagsAttr{});

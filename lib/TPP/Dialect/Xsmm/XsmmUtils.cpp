@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 
 #include "TPP/Transforms/Utils/BuilderUtils.h"
@@ -66,6 +67,11 @@ DataTypeAttr getDataType(RewriterBase &rewriter, Type type) {
   auto elemType = getElementTypeOrSelf(type);
   if (elemType.isBF16())
     return xsmm::DataTypeAttr::get(rewriter.getContext(), xsmm::DataType::BF16);
+  // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+  if (llvm::isa<Float8E5M2Type>(elemType))
+    return xsmm::DataTypeAttr::get(rewriter.getContext(), xsmm::DataType::BF8);
+  if (llvm::isa<Float8E4M3FNType>(elemType))
+    return xsmm::DataTypeAttr::get(rewriter.getContext(), xsmm::DataType::HF8);
   return xsmm::DataTypeAttr::get(rewriter.getContext(), xsmm::DataType::F32);
 }
 

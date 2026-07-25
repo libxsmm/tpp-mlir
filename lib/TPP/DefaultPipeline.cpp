@@ -218,6 +218,13 @@ private:
     if (defParallel)
       pm.addPass(createConvertSCFToOpenMPPass());
     pm.addPass(createConvertVectorToSCFPass());
+    // FP8 (E5M2/E4M3) has no native CPU arithmetic support. Emulate it by
+    // promoting operations to F32 around extf/truncf pairs.
+    mlir::arith::ArithEmulateUnsupportedFloatsOptions emulateFloatsOptions;
+    emulateFloatsOptions.sourceTypeStrs = {"f8E5M2", "f8E4M3FN"};
+    emulateFloatsOptions.targetTypeStr = "f32";
+    pm.addPass(
+        mlir::arith::createArithEmulateUnsupportedFloats(emulateFloatsOptions));
     mlir::arith::ArithExpandOpsPassOptions arithExpandOpsOptions;
     arithExpandOpsOptions.includeF8E8M0 = true;
     pm.addPass(arith::createArithExpandOpsPass(arithExpandOpsOptions));

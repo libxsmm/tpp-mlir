@@ -78,6 +78,7 @@ set(BENCH_CFGS
   ${CONFIG_DIR}/base/base.json
   ${CONFIG_DIR}/base/mha.json
   ${CONFIG_DIR}/base/named-ops.json
+  ${CONFIG_DIR}/base/fp8.json
 )
 string(JOIN ',' BENCH_CFGS_STR ${BENCH_CFGS})
 # Run a small set of benchmarks with small iterations to test the benchmarks and run locally on small machines

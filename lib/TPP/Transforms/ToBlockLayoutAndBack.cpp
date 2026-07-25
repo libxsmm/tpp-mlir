@@ -22,6 +22,7 @@
 #include "mlir/Dialect/Traits.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/Support/MathExtras.h"
@@ -107,8 +108,11 @@ mlir::linalgx::packVNNIMatmulOp(RewriterBase &rewriter,
                                 linalg::GenericOp matmulOp) {
   if (matmulOp.getInputs().size() > 0) {
     auto elementType = getElementTypeOrSelf(matmulOp.getInputs()[0].getType());
-    if (!elementType.isBF16() && !elementType.isInteger(8))
-      return rewriter.notifyMatchFailure(matmulOp, "require int8/bf16 type");
+    // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+    if (!elementType.isBF16() && !elementType.isInteger(8) &&
+        !llvm::isa<Float8E5M2Type, Float8E4M3FNType>(elementType))
+      return rewriter.notifyMatchFailure(matmulOp,
+                                         "require int8/bf16/fp8 type");
   }
 
   if (matmulOp.hasDynamicShape())
@@ -189,8 +193,10 @@ FailureOr<linalg::GenericOp>
 mlir::linalgx::packVNNIBRGemmOp(RewriterBase &rewriter,
                                 linalg::BatchReduceMatmulOp brgemmOp) {
   auto elementType = getElementTypeOrSelf(brgemmOp.getInputs()[0].getType());
-  if (!elementType.isBF16())
-    return rewriter.notifyMatchFailure(brgemmOp, "require bf16 type");
+  // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+  if (!elementType.isBF16() &&
+      !llvm::isa<Float8E5M2Type, Float8E4M3FNType>(elementType))
+    return rewriter.notifyMatchFailure(brgemmOp, "require bf16/fp8 type");
 
   if (brgemmOp.hasDynamicShape())
     return rewriter.notifyMatchFailure(brgemmOp, "require static shape");

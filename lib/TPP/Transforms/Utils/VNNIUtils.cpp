@@ -69,12 +69,19 @@ unsigned getVnniBlockingFactor(Type type, Operation *op) {
   unsigned blockingFactor = 0;
 
   auto elementType = getElementTypeOrSelf(type);
-  if (elementType.isBF16() || elementType.isInteger(8)) {
+  // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+  bool isFp8 =
+      llvm::isa<Float8E5M2Type, Float8E4M3FNType>(elementType);
+  if (elementType.isBF16() || elementType.isInteger(8) || isFp8) {
     // Check if a VNNI factor hint is associated to the IR via DLTI.
     auto vnniValue = dlti::utils::query(op, {"CPU", "vnni"});
     if (succeeded(vnniValue)) {
       if (auto intAttr = llvm::dyn_cast<IntegerAttr>(*vnniValue))
         blockingFactor = intAttr.getInt();
+    } else if (isFp8) {
+      blockingFactor = llvm::isa<Float8E5M2Type>(elementType)
+                           ? libxsmm_cpuid_dot_pack_factor(LIBXSMM_DATATYPE_BF8)
+                           : libxsmm_cpuid_dot_pack_factor(LIBXSMM_DATATYPE_HF8);
     } else {
       blockingFactor =
           elementType.isBF16()
@@ -192,8 +199,11 @@ bool isInVnniLayout(VnniOperandRank expectedRank, ShapedType shape,
 
 bool isInVnniLayout(int64_t expectedRank, ShapedType shape,
                     std::optional<unsigned> blockingFactor) {
-  if (shape.getRank() != expectedRank ||
-      !(shape.getElementType().isBF16() || shape.getElementType().isInteger(8)))
+  auto elementType = shape.getElementType();
+  // libxsmm names E5M2 as BF8 and E4M3 as HF8.
+  bool isVnniType = elementType.isBF16() || elementType.isInteger(8) ||
+                    llvm::isa<Float8E5M2Type, Float8E4M3FNType>(elementType);
+  if (shape.getRank() != expectedRank || !isVnniType)
     return false;
 
   auto vnniDim = shape.getShape().back();

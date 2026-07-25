@@ -7,11 +7,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "TPP/Transforms/Utils/TensorInitFloat.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 using namespace mlir;
 
 TensorInitFloat::DataType
 TensorInitFloat::getTensorInitDataType(mlir::Type type) {
+  // FP8 pure types. libxsmm names E5M2 as BF8 and E4M3 as HF8.
+  if (llvm::isa<mlir::Float8E5M2Type>(type))
+    return DataType::F8E5M2;
+  if (llvm::isa<mlir::Float8E4M3FNType>(type))
+    return DataType::F8E4M3FN;
   if (type.isFloat(8))
     return DataType::F8E8M0FNU;
   if (type.isBF16())
@@ -37,6 +43,12 @@ void TensorInitFloat::convertType(llvm::APFloat &value) {
   switch (type) {
   case DataType::F8E8M0FNU:
     toF8E8M0FNU(value);
+    break;
+  case DataType::F8E5M2:
+    toF8E5M2(value);
+    break;
+  case DataType::F8E4M3FN:
+    toF8E4M3FN(value);
     break;
   case DataType::FP16:
     toFP16(value);
