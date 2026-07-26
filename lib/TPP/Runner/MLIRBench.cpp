@@ -421,17 +421,54 @@ void MLIRBench::printVector(Value vector) {
     auto i8VecType = VectorType::get(shape, i8Type);
     Value i8Vec = arith::BitcastOp::create(builder, unkLoc, i8VecType, vector);
     auto f32VecType = VectorType::get(shape, f32Type);
-    Value f32Vec = arith::ConstantOp::create(
+    Value initVec = arith::ConstantOp::create(
         builder, unkLoc, builder.getZeroAttr(f32VecType));
-    for (int64_t i = 0; i < numElems; i++) {
+
+    // Convert one FP8 lane at position `idx` of `i8Vec` to f32 and insert it
+    // into `f32Vec`, returning the updated accumulator vector.
+    auto convertLane = [&](Value f32Vec, OpFoldResult idx) -> Value {
       Value lane = vector::ExtractOp::create(builder, unkLoc, i8Vec,
-                                             ArrayRef<int64_t>{i});
+                                             ArrayRef<OpFoldResult>{idx});
       Value converted =
           func::CallOp::create(builder, unkLoc, fnDecl, ValueRange{lane})
               .getResult(0);
-      f32Vec = vector::InsertOp::create(builder, unkLoc, converted, f32Vec,
-                                        ArrayRef<int64_t>{i});
+      return vector::InsertOp::create(builder, unkLoc, converted, f32Vec,
+                                      ArrayRef<OpFoldResult>{idx});
+    };
+
+    // Emitting one extract/call/insert per lane fully unrolled at compile time
+    // would explode the IR for large vectors. Instead emit an scf.for loop
+    // blocked by `unrollFactor`: the outer loop iterates over blocks of
+    // `unrollFactor` lanes (unrolled here in the loop body), and a
+    // compile-time-unrolled tail handles the leftover lanes. This keeps the
+    // generated IR size bounded regardless of the vector length.
+    constexpr int64_t unrollFactor = 128;
+    Value f32Vec = initVec;
+    int64_t numBlocks = numElems / unrollFactor;
+    if (numBlocks > 0) {
+      auto lb = getConstIndex(builder, 0);
+      auto ub = getConstIndex(builder, numBlocks * unrollFactor);
+      auto step = getConstIndex(builder, unrollFactor);
+      auto loop = scf::ForOp::create(builder, unkLoc, lb, ub, step,
+                                     ValueRange{f32Vec});
+      {
+        OpBuilder::InsertionGuard g(builder);
+        builder.setInsertionPointToStart(loop.getBody());
+        Value iv = loop.getInductionVar();
+        Value acc = loop.getRegionIterArg(0);
+        for (int64_t k = 0; k < unrollFactor; k++) {
+          Value idx = k == 0 ? iv
+                             : arith::AddIOp::create(builder, unkLoc, iv,
+                                                     getConstIndex(builder, k));
+          acc = convertLane(acc, idx);
+        }
+        scf::YieldOp::create(builder, unkLoc, ValueRange{acc});
+      }
+      f32Vec = loop.getResult(0);
     }
+    // Compile-time-unrolled tail for the remaining (< unrollFactor) lanes.
+    for (int64_t i = numBlocks * unrollFactor; i < numElems; i++)
+      f32Vec = convertLane(f32Vec, builder.getIndexAttr(i));
     op = f32Vec;
   } else if (elemType.isBF16()) {
     VectorType vecType =
