@@ -421,8 +421,6 @@ void MLIRBench::printVector(Value vector) {
     auto i8VecType = VectorType::get(shape, i8Type);
     Value i8Vec = arith::BitcastOp::create(builder, unkLoc, i8VecType, vector);
     auto f32VecType = VectorType::get(shape, f32Type);
-    Value initVec = arith::ConstantOp::create(
-        builder, unkLoc, builder.getZeroAttr(f32VecType));
 
     // Convert one FP8 lane at position `idx` of `i8Vec` to f32 and insert it
     // into `f32Vec`, returning the updated accumulator vector.
@@ -443,7 +441,8 @@ void MLIRBench::printVector(Value vector) {
     // compile-time-unrolled tail handles the leftover lanes. This keeps the
     // generated IR size bounded regardless of the vector length.
     constexpr int64_t unrollFactor = 128;
-    Value f32Vec = initVec;
+    Value f32Vec = arith::ConstantOp::create(
+        builder, unkLoc, builder.getZeroAttr(f32VecType));
     int64_t numBlocks = numElems / unrollFactor;
     if (numBlocks > 0) {
       auto lb = getConstIndex(builder, 0);
