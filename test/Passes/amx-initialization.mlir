@@ -1,7 +1,5 @@
 
-// RUN: LIBXSMM_TARGET=spr tpp-opt --default-pipeline %s | FileCheck %s --check-prefix=CHECK-AMX-BF16
-
-
+// RUN: tpp-opt --convert-to-llvm %s | FileCheck %s --check-prefix=CHECK-AMX-BF16
 
 // CHECK-AMX-BF16-LABEL:   llvm.func @entry
 // CHECK-AMX-BF16:         llvm.call_intrinsic "llvm.x86.tileloadd64.internal"{{.*}} -> !llvm.x86_amx
