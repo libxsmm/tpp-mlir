@@ -40,6 +40,7 @@ struct VectorContractToNanoKernels
     if (cpuName == "SRF") {
        x86::populateVectorContractBF16ToFMAPatterns(patterns);
        x86::populateShuffleVectorFMAOpsPatterns(patterns);
+       x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
     }
 
     if (cpuName == "CPX_SPR")

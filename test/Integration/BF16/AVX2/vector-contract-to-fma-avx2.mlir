@@ -1,5 +1,5 @@
 // RUN: tpp-run -e gemm_splat --entry-point-result=void --disable-vnni-packing -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e gemm_splat --entry-point-result=void -print --disable-vnni-packing --vector-to-kernels --registerBlocking=4,16,1  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: tpp-run -e gemm_splat --entry-point-result=void -print --disable-vnni-packing --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=4,16,1  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 func.func @gemm_splat(%arg0: tensor<8x32x32x32xbf16>, %arg1: tensor<32x32x32x32xbf16>, %arg2: tensor<8x32x32x32xbf16>) -> tensor<8x32x32x32xbf16> {
@@ -15,7 +15,7 @@ func.func @gemm_splat(%arg0: tensor<8x32x32x32xbf16>, %arg1: tensor<32x32x32x32x
 // -----
 
 // RUN: tpp-run -e mlp_splat --entry-point-result=void --disable-vnni-packing -print --splat-to-random --init-type normal  -seed 123  %s > %t.1
-// RUN: tpp-run -e mlp_splat --entry-point-result=void -print --disable-vnni-packing --vector-to-kernels --registerBlocking=4,16,1  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
+// RUN: tpp-run -e mlp_splat --entry-point-result=void -print --disable-vnni-packing --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=4,16,1  --splat-to-random --init-type normal  -seed 123 %s  > %t.2
 // RUN: fpcmp -r 0.01 %t.1 %t.2
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
