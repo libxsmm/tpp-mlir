@@ -1,7 +1,7 @@
-// RUN: tpp-opt --default-tpp-passes="vector-to-kernel registerBlocking=32,32,64" %s | FileCheck %s -check-prefix=IR
+// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | FileCheck %s -check-prefix=IR
 
 // RUN: tpp-run -e entry --entry-point-result=void -print --splat-to-random --init-type mixed -seed 123  %s > %t.1
-// RUN: tpp-opt --default-tpp-passes="vector-to-kernel registerBlocking=32,32,64" %s | tpp-run -e entry --target-feature="-avx, -avx2, +amx_tile, +amx_int8" --entry-point-result=void --print --splat-to-random -seed 123 --init-type mixed %s > %t.2
+// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | tpp-run -e entry --target-feature="-avx, -avx2, +amx_tile, +amx_int8" --entry-point-result=void --print --splat-to-random -seed 123 --init-type mixed %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 // IR-COUNT-4: amx.tile_muli

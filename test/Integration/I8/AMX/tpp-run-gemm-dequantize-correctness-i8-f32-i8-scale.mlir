@@ -1,21 +1,22 @@
-// RUN: tpp-opt --default-tpp-passes="vector-to-kernel registerBlocking=32,32,64" %s | FileCheck %s -check-prefix=IR
+// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | FileCheck %s -check-prefix=IR
 
 // RUN: tpp-run -e entry --entry-point-result=void --linalg-to-loops -print --splat-to-random --init-type quant -seed 123  %s > %t.1
 // RUN: tpp-run -e entry --entry-point-result=void -print --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --splat-to-random -seed 123 --init-type quant %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
+// IR-COUNT-4: amx.tile_zero
 // IR-COUNT-4: amx.tile_muli
+// IR-COUNT-4: amx.tile_store
 
 // IR: scf.for
-// IR-COUNT-2:     vector.transfer_read
-// IR: vector.broadcast
-// IR-COUNT-1:     vector.transfer_read
-// IR: vector.shape_cast
-// IR:     arith.extf
-// IR:     arith.mulf
-// IR:     arith.sitofp
-// IR:     arith.mulf
-// IR:     vector.transfer_write
+// IR:   vector.transfer_read
+// IR:   vector.broadcast
+// IR:   arith.extf
+// IR:   arith.mulf
+// IR:   vector.transfer_read
+// IR:   arith.sitofp
+// IR:   arith.mulf
+// IR:   vector.transfer_write
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
 #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
