@@ -22,8 +22,8 @@ Examples:
 // Runs tpp-run on file.mlir and compares linalg-to-loops with the default pipeline
 ./scripts/debug/check_accuracy.sh -i file.mlir
 
-// Compares linalg-to-loops with vector-to-kernels to 0.005 precision in outputs
-./scripts/debug/check_accuracy.sh -i file.mlir -o "--vector-to-kernels" -d 0.005
+// Compares linalg-to-loops with nano-kernels to 0.005 precision in outputs
+./scripts/debug/check_accuracy.sh -i file.mlir -o "--nano-kernels" -d 0.005
 ```
 
 ## Debug All Passes

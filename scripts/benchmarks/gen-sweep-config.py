@@ -31,7 +31,7 @@ DTYPES = {
             "--quant-type=dequantize"
         ),
         "run_args": (
-            "--def-parallel --vector-to-kernels "
+            "--def-parallel --nano-kernels --gemm-unrolling=16,16,16 "
             "--registerBlocking=32,32,64 --sfc-order=true "
             "--init-type=quant --seed=123"
         ),
@@ -45,7 +45,7 @@ DTYPES = {
             "--layers={K},{N} --tiles=32,32,32 --vnni=2"
         ),
         "run_args": (
-            "--def-parallel --vector-to-kernels "
+            "--def-parallel --nano-kernels --gemm-unrolling=16,16,16 "
             "--registerBlocking=32,32,32 --sfc-order=true "
             "--init-type=normal --seed=123"
         ),

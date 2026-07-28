@@ -4,7 +4,7 @@
 #
 # 1. PERFORMANCE: reuse benchmarks/driver.py with a generated sweep JSON.
 # 2. CORRECTNESS: per-shape diff of default tpp-run vs
-#                 tpp-run --vector-to-kernels --registerBlocking=... (same
+#                 tpp-run --nano-kernels --registerBlocking=... (same
 #                 flags as the perf config).
 # 3. PLOT:        TFLOPS vs shape (one line per dtype) via
 #                 benchmarks/scripts/plot_benchmarks.py --mode=lines-tflops.
@@ -132,8 +132,8 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   # --seed=123 makes both baseline and test runs see identical inputs.
   gen_args_i8="--kernel=args --data-type=mx-i8-f32 --tiles=32,32,64 --vnni=4 --quant-type=dequantize --seed=123"
   gen_args_bf16="--kernel=args --data-type=mx-bf16 --tiles=32,32,32 --vnni=2 --seed=123"
-  vk_args_i8="--def-parallel --vector-to-kernels --registerBlocking=32,32,64 --sfc-order=true"
-  vk_args_bf16="--def-parallel --vector-to-kernels --registerBlocking=32,32,32 --sfc-order=true"
+  vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --sfc-order=true"
+  vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --sfc-order=true"
 
   IFS=',' read -ra DTYPES <<< "${DTYPES_CSV}"
   IFS=',' read -ra SHAPES <<< "${SHAPES_CSV}"
@@ -177,7 +177,7 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
               echo "+ tpp-run (baseline)"
               "${TPP_RUN}" -e entry -entry-point-result=void -print \
                 --splat-to-random --seed=123 "${ir}" > "${ref_out}" || exit 20
-              echo "+ tpp-run (vector-to-kernels)"
+              echo "+ tpp-run (nano-kernels)"
               "${TPP_RUN}" -e entry -entry-point-result=void -print \
                 --splat-to-random --seed=123 ${vk_args} "${ir}" > "${test_out}" || exit 30
               echo "+ fpcmp"

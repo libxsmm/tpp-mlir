@@ -51,24 +51,27 @@ export NUM_ITER=${NUM_ITER:=1000}
 
 pushd ${BENCH_DIR}
 
+run_bench_on_dir() {
+  local DIR=$1
+  if [ ! -d "${DIR}" ]; then
+    echo "Directory ${DIR} does not exist"
+    exit 1
+  fi
+  for cfg in ${DIR}/*.json ; do
+    echo_run ./driver.py -vv \
+             -n ${NUM_ITER} \
+             -c "${cfg}" \
+             --build "${BUILD_DIR}"
+  done
+}
+
 echo " ========= Base Benchmarks ==========="
-echo_run ./driver.py -vv \
-         -n ${NUM_ITER} \
-         -c "${CONFIG_DIR}/base/base.json" \
-         --build "${BUILD_DIR}"
+run_bench_on_dir "${CONFIG_DIR}/base"
 
 echo " ========= PyTorch Benchmarks ==========="
-echo_run ./driver.py -vv \
-         -n ${NUM_ITER} \
-         -c "${CONFIG_DIR}/pytorch/torch_dynamo.json" \
-         --build "${BUILD_DIR}"
+run_bench_on_dir "${CONFIG_DIR}/pytorch"
 
 echo " ========= OpenMP Benchmarks ==========="
-for cfg in dnn-fp32 dnn-bf16 mlir-fp32 mlir-bf16 mlir-fp32-vector-to-kernel; do
-  echo_run ./driver.py -vv \
-           -n ${NUM_ITER} \
-           -c "${CONFIG_DIR}/omp/${cfg}.json" \
-           --build "${BUILD_DIR}"
-done
+run_bench_on_dir "${CONFIG_DIR}/omp"
 
 popd

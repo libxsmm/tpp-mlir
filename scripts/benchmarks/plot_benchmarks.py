@@ -110,7 +110,7 @@ def plot_lines_tflops(data, output_path):
 
     ax.set_xlabel("Shape (MxNxK)", fontsize=11)
     ax.set_ylabel("Performance (TFLOPS)", fontsize=11)
-    ax.set_title("tpp-run GEMM sweep — TFLOPS vs shape (vector-to-kernels)",
+    ax.set_title("tpp-run GEMM sweep — TFLOPS vs shape (nano-kernels)",
                  fontsize=12, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=90, fontsize=7)
