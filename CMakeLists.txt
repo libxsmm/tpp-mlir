@@ -77,12 +77,11 @@ set(CONFIG_DIR "${BENCHMARK_DIR}/config")
 set(BENCH_CFGS
   ${CONFIG_DIR}/base/base.json
   ${CONFIG_DIR}/base/mha.json
-  ${CONFIG_DIR}/base/named-ops.json
-  ${CONFIG_DIR}/base/fp8.json
+  ${CONFIG_DIR}/base/torch-dynamo.json
 )
 string(JOIN ',' BENCH_CFGS_STR ${BENCH_CFGS})
 # Run a small set of benchmarks with small iterations to test the benchmarks and run locally on small machines
-add_custom_target(benchmarks ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BINARY_DIR} -n 10
+add_custom_target(benchmarks ${BENCHMARK_DIR}/driver.py -vvv --build ${PROJECT_BINARY_DIR} -n 10
                   -c ${BENCH_CFGS_STR}
                   DEPENDS tpp-opt tpp-run xsmm_dnn_mlp
                   WORKING_DIRECTORY ${BENCHMARK_DIR}
@@ -102,22 +101,11 @@ set(BENCH_OMP_CFGS
   ${CONFIG_DIR}/omp/torch-dynamo-vector.json
 )
 string(JOIN ',' BENCH_OMP_CFGS_STR ${BENCH_OMP_CFGS})
-add_custom_target(benchmarks-omp ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BINARY_DIR} -n 10
+add_custom_target(benchmarks-omp ${BENCHMARK_DIR}/driver.py -vvv --build ${PROJECT_BINARY_DIR} -n 10
                   -c ${BENCH_OMP_CFGS_STR}
                   DEPENDS tpp-opt tpp-run xsmm_dnn_mlp
                   WORKING_DIRECTORY ${BENCHMARK_DIR}
                   COMMENT Run Benchmarks)
-
-# Run PyTorch Dynamo generated models as benchmarks
-set(BENCH_PT_CFGS
-  ${CONFIG_DIR}/pytorch/torch_dynamo.json
-)
-string(JOIN ',' BENCH_PT_CFGS_STR ${BENCH_PT_CFGS})
-add_custom_target(benchmarks-pt ${BENCHMARK_DIR}/driver.py -v --build ${PROJECT_BINARY_DIR} -n 10
-                  -c ${BENCH_PT_CFGS_STR}
-                  DEPENDS tpp-opt tpp-run
-                  WORKING_DIRECTORY ${BENCHMARK_DIR}
-                  COMMENT Run PyTorch Models)
 
 # Code reformat
 set(CI_DIR "${PROJECT_SOURCE_DIR}/scripts/ci")
