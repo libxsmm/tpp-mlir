@@ -56,6 +56,12 @@ private:
     // Canonicalize.
     pm.addPass(createCleanup());
 
+    // Packing only works on generic matmuls
+    LinalgMorphOpsPassOptions options;
+    options.namedToGeneric = true;
+    options.categoryToGeneric = true;
+    pm.addPass(createLinalgMorphOpsPass(options));
+
     // Convert ops to packed layouts.
     pm.addPass(createPackMatmul());
 

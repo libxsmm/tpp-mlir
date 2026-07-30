@@ -54,8 +54,15 @@ class MLIRGenerator {
   ///
   SmallVector<int64_t> registerUnroll;
 
-  /// Data type (element type of all tensors)
-  SmallVector<Type> dataTypes;
+  /// Data types (element types) of the different tensors.
+  struct DataTypes {
+    Type input{};
+    Type output{};
+    Type accumulator{};
+    Type inputScale{};
+    Type weightScale{};
+  };
+  DataTypes dataTypes;
 
   /// Random seed
   int seed;
@@ -116,6 +123,7 @@ class MLIRGenerator {
     PACK_INPUT,
     PACK_WEIGHT,
     PACK_OUTPUT,
+    PACK_ACCUMULATOR,
     PACK_INTERMEDIATE,
     INPUT_SCALE,
     WEIGHT_SCALE
@@ -169,6 +177,7 @@ class MLIRGenerator {
     Arg bias;
     Arg intermediate; // For quantdequant validation
     Arg output;
+    Arg accumulator;
   };
 
   /// Return affine map (packed if requested)
@@ -190,23 +199,23 @@ class MLIRGenerator {
   /// Args: Contains A, B, C
   /// Boolean indicates if mixed type (quantization) is used.
   /// Returns the chain value to be used in the next op
-  Value lowerMatmul(LayerArgs &args, bool);
+  Value lowerMatmul(LayerArgs &args);
 
   /// Creates linalg generic matmul
-  Value lowerGenericMatmul(Value, Value, Value);
+  Value lowerGenericMatmul(LayerArgs &args, Value chain);
 
   /// Creates linalg named matmul
-  Value lowerNamedMatmul(Value, Value, Value);
+  Value lowerNamedMatmul(LayerArgs &args, Value chain);
 
   /// Creates linalg contract
-  Value lowerContract(Value, Value, Value);
+  Value lowerContract(LayerArgs &args, Value chain);
 
   /// Computes scaling factor for the given input. Returns the scaling factor of
   /// same shape as input.
   SmallVector<Value> computeScalingFactor(Value input);
 
   /// Creates a matmul quantization kernel
-  Value quantizeGemm(LayerArgs &args, Value chain, Value scale);
+  Value quantizeGemm(LayerArgs &args, Value chain);
 
   /// Creates a matmul dequantization kernel
   Value dequantizeGemm(LayerArgs &args, Value chain);
@@ -214,28 +223,25 @@ class MLIRGenerator {
   Value testQuantDequant(LayerArgs &args, Value input);
 
   /// Creates a bias add in the current function
-  /// Args: Input, Output (same for in-place)
+  /// Args: LayerArgs, Chain
   /// Returns the chain value to be used in the next op
-  Value lowerBiasAdd(Value, Value, Value);
+  Value lowerBiasAdd(LayerArgs &args, Value chain);
 
   /// Creates linalg named bias add
-  Value lowerNamedBiasAdd(Value, Value, Value);
+  Value lowerNamedBiasAdd(LayerArgs &args, Value chain);
 
   /// Creates a relu in the current function
-  /// Args: Input, Output (same for in-place)
+  /// Args: LayerArgs, Chain
   /// Returns the chain value to be used in the next op
-  Value lowerRelu(Value, Value);
+  Value lowerRelu(LayerArgs &args, Value chain);
 
   /// Creates linalg named relu
-  Value lowerNamedRelu(Value, Value);
+  Value lowerNamedRelu(LayerArgs &args, Value chain);
 
   /// Creates a softmax in the current function
-  /// Args: Input, Output (same for in-place)
+  /// Args: LayerArgs, Chain
   /// Returns the chain value to be used in the next op
-  Value lowerSoftmax(Value, Value);
-
-  /// Creates linalg named softmax
-  Value lowerNamedSoftmax(Value, Value);
+  Value lowerSoftmax(LayerArgs &args, Value chain);
 
   // ============================ Main API
 
@@ -252,12 +258,12 @@ class MLIRGenerator {
 
   /// Creates a layer function, to be called by the kernel. Boolean indicates
   /// if mixed type (quantization) is used.
-  Value createLayer(LayerArgs &, bool hasMixedType = false);
+  Value createLayer(LayerArgs &);
 
   /// Creates a kernel (N * {GEMM + AddBias + ReLU} + Softmax)
   /// AddBias, ReLU and Softmax are optional. Boolean indicates if mixed type
   /// (quantization) is used.
-  void createKernel(bool hasMixedType = false);
+  void createKernel();
 
 public:
   /// Creates a specific module. Different configurations need different modules
@@ -271,7 +277,7 @@ public:
   /// Generates the whole IR and write to file
   /// Return 0 on success, 1 on failure. 'hasMixedType' indicates simple mixed
   /// type without quant.
-  int generate(StringRef filename, bool hasMixedType = false);
+  int generate(StringRef filename);
 };
 
 } // namespace mlir

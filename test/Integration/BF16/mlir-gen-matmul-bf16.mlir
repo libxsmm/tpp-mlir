@@ -2,8 +2,6 @@
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=2 2>&1 | FileCheck %s --check-prefix=DP2
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=DP4
 
-// RUN: not --crash mlir-gen --output=named --kernel=args --seed=0 --data-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 --vnni=2 2>&1 | FileCheck %s --check-prefix=VNNI-TODO
-
 // BF16: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // BF16: // RUN{{.*}}-e entry -entry-point-result=void
 // BF16: // BENCH_TOTAL_FLOPS: 452984832

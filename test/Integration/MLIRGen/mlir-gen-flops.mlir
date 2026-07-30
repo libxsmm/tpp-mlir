@@ -21,11 +21,11 @@
 // RUN: mlir-gen --output=named --kernel=const --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,1024,1024 2>&1 | FileCheck %s --check-prefix=MLP-LARGE-NAMED
 // Large sizes + tiling
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MATMUL-LARGE
-// RUN: mlir-gen --output=named --kernel=args --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MATMUL-LARGE-NAMED
+// RUN: mlir-gen --output=contract --kernel=args --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MATMUL-LARGE-NAMED
 // RUN: mlir-gen --kernel=args --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=FC-LARGE
-// RUN: mlir-gen --output=named --kernel=args --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=FC-LARGE-NAMED
+// RUN: mlir-gen --output=contract --kernel=args --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,4096 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=FC-LARGE-NAMED
 // RUN: mlir-gen --kernel=const --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,1024,1024 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MLP-LARGE
-// RUN: mlir-gen --output=named --kernel=const --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,1024,1024 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MLP-LARGE-NAMED
+// RUN: mlir-gen --output=contract --kernel=const --bias --relu --seed=0 --data-type=f32 --batch=128 --layers=1024,1024,1024 --tiles=64,64,64 2>&1 | FileCheck %s --check-prefix=MLP-LARGE-NAMED
 
 // Validate that flops are computed correctly
 // MATMUL-UNIT: // BENCH_TOTAL_FLOPS: 2

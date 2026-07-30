@@ -1,8 +1,5 @@
 // MLP with Softmax version
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 --softmax | tpp-run -e entry -entry-point-result=void
-// RUN: not --crash mlir-gen --output=named --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 --softmax 2>&1 | FileCheck %s --check-prefix=SOFTMAX-TODO
-// SOFTMAX-TODO: Linalg named ops for softmax not implemented yet
-// SOFTMAX-TODO: UNREACHABLE executed
 
 // MLP without softmax
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=10 --layers=10,10,10 | tpp-run -e entry -entry-point-result=void
