@@ -56,6 +56,8 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
       return failure();
     }
 
+    auto invokeDataType =
+        xsmm::utils::getDataType(rewriter, op.getOperand(1).getType());
     auto attributesSetup = *brgemmFlags;
     attributesSetup.push_back(xsmm::GemmFlagsAttr::get(
         rewriter.getContext(), xsmm::GemmFlags::NO_RESET_TILECONFIG));
@@ -66,7 +68,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
             dyn_cast<DispatchOpTy>(op.getOperand(0).getDefiningOp())
                 .getInputs()),
         rewriter.getArrayAttr(attributesSetup),
-        xsmm::utils::getDataType(rewriter, op.getOperand(1).getType()));
+        invokeDataType, xsmm::DataTypeAttr());
 
     SmallVector<Attribute> attributesReset = *brgemmFlags;
     attributesReset.push_back(xsmm::GemmFlagsAttr::get(
@@ -78,7 +80,7 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
             dyn_cast<DispatchOpTy>(op.getOperand(0).getDefiningOp())
                 .getInputs()),
         rewriter.getArrayAttr(attributesReset),
-        xsmm::utils::getDataType(rewriter, op.getOperand(1).getType()));
+        invokeDataType, xsmm::DataTypeAttr());
 
     SmallVector<Attribute> attributesBrgemm = *brgemmFlags;
     attributesBrgemm.push_back(xsmm::GemmFlagsAttr::get(
@@ -102,10 +104,14 @@ struct IntelAMXTileConfig : OpRewritePattern<InvokeOpTy> {
     auto opItr = op->getOperands().begin();
     std::advance(opItr, 1);
     invokeOperands.append(opItr, op->getOperands().end());
-    InvokeOpTy::create(rewriter, 
-        op.getLoc(),
-        xsmm::utils::getDataType(rewriter, op.getOperand(1).getType()),
-        invokeOperands);
+
+    if constexpr (std::is_same_v<InvokeOpTy, xsmm::FusedBrgemmOp>) {
+      InvokeOpTy::create(rewriter, op.getLoc(), invokeDataType, invokeOperands);
+    } else {
+      // Preserve the (optional) output type when recreating the invoke.
+      InvokeOpTy::create(rewriter, op.getLoc(), invokeDataType,
+                         op.getOutTypeAttr(), invokeOperands);
+    }
 
     SmallVector<Value> tileResetInputs{alloca};
     mlir::xsmm::IntelAMXTileConfigOp::create(rewriter, 

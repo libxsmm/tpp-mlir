@@ -320,6 +320,19 @@ static LogicalResult buildDispatchOp(RewriterBase &rewriter, OpTy dispatchOp,
       loc, integer64, cast<TypedAttr>(dispatchOp.getDataTypeAttr())));
   dispatchOperandTypes.push_back(integer64);
 
+  // Gemm-like dispatch also carries the output type, which may differ from the
+  // input `data_type` (e.g. bf16 inputs accumulating into an f32 output). When
+  // absent it defaults to `data_type`.
+  if constexpr (std::is_same<OpTy, xsmm::GemmDispatchOp>::value ||
+                std::is_same<OpTy, xsmm::BrgemmDispatchOp>::value) {
+    auto outTypeAttr = dispatchOp.getOutTypeAttr()
+                           ? cast<TypedAttr>(dispatchOp.getOutTypeAttr())
+                           : cast<TypedAttr>(dispatchOp.getDataTypeAttr());
+    dispatchOperands.push_back(
+        arith::ConstantOp::create(rewriter, loc, integer64, outTypeAttr));
+    dispatchOperandTypes.push_back(integer64);
+  }
+
   // Dispatch the inputs.
   ArrayRef<int64_t> integers = dispatchOp.getInputsAttr().asArrayRef();
   size_t arrayAttrSize = integers.size();

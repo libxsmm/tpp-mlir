@@ -439,8 +439,14 @@ static void replaceOpWithGemmLikeOp(RewriterBase &rewriter,
   int64_t strideA = brgemmInfo.strideA;
   int64_t strideB = brgemmInfo.strideB;
 
+  // The data type follows the inputs (compute/input precision). When the output
+  // C accumulates in a wider type (e.g. bf16 inputs with an f32 output), the
+  // output type is carried separately via `out_type`.
   auto dtype =
+      xsmm::utils::getDataType(rewriter, linalgOp.getDpsInputs()[0].getType());
+  auto outDtype =
       xsmm::utils::getDataType(rewriter, linalgOp.getDpsInits()[0].getType());
+  xsmm::DataTypeAttr outType = (outDtype != dtype) ? outDtype : nullptr;
   IntegerType integer64 = IntegerType::get(rewriter.getContext(), 64);
   Location loc = linalgOp.getLoc();
   xsmm::GemmFlagsAttr gemmFlags;
@@ -473,23 +479,24 @@ static void replaceOpWithGemmLikeOp(RewriterBase &rewriter,
     DenseI64ArrayAttr dims = DenseI64ArrayAttr::get(
         rewriter.getContext(),
         ArrayRef<int64_t>{m, n, k, lda, ldb, ldc, strideA, strideB});
-    Value dispatched = xsmm::BrgemmDispatchOp::create(rewriter, 
-        loc, integer64, dims, flags, dtype);
+    Value dispatched = xsmm::BrgemmDispatchOp::create(
+        rewriter, loc, integer64, dims, flags, dtype, outType);
     Value batchDim = arith::ConstantOp::create(rewriter, 
         loc, integer64, rewriter.getIntegerAttr(integer64, batch));
     invokeOperands.push_back(dispatched);
     invokeOperands.append(inputs);
     invokeOperands.push_back(batchDim);
-    rewriter.replaceOpWithNewOp<xsmm::BrgemmOp>(linalgOp, dtype,
+    rewriter.replaceOpWithNewOp<xsmm::BrgemmOp>(linalgOp, dtype, outType,
                                                 invokeOperands);
   } else {
     DenseI64ArrayAttr dims = DenseI64ArrayAttr::get(
         rewriter.getContext(), ArrayRef<int64_t>{m, n, k, lda, ldb, ldc});
-    Value dispatched = xsmm::GemmDispatchOp::create(rewriter, 
-        loc, integer64, dims, flags, dtype);
+    Value dispatched = xsmm::GemmDispatchOp::create(
+        rewriter, loc, integer64, dims, flags, dtype, outType);
     invokeOperands.push_back(dispatched);
     invokeOperands.append(inputs);
-    rewriter.replaceOpWithNewOp<xsmm::GemmOp>(linalgOp, dtype, invokeOperands);
+    rewriter.replaceOpWithNewOp<xsmm::GemmOp>(linalgOp, dtype, outType,
+                                              invokeOperands);
   }
 }
 

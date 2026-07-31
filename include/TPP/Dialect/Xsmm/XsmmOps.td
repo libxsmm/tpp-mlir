@@ -99,7 +99,9 @@ def GemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16, F8E5M2, F8E4M3FN], [2
 
 def Xsmm_GemmOp : Xsmm_Op<"gemm", [MemoryEffects<[MemWrite, MemRead]>]> {
   let summary = "matmul call operation.";
-  let arguments = (ins Xsmm_DataType:$data_type, Variadic<GemmMemRef>:$inputs);
+  let arguments = (ins Xsmm_DataType:$data_type,
+                       OptionalAttr<Xsmm_DataType>:$out_type,
+                       Variadic<GemmMemRef>:$inputs);
 
   let assemblyFormat = [{
     `(` `data_type` `=` $data_type `,` $inputs `)`
@@ -127,7 +129,9 @@ def BrgemmMemRef : AnyTypeOf<[StaticMemRefRankOf<[F32, BF16, F8E5M2, F8E4M3FN], 
 
 def Xsmm_BrgemmOp : Xsmm_Op<"brgemm", [MemoryEffects<[MemWrite, MemRead]>]> {
   let summary = "brgemm call operation.";
-  let arguments = (ins Xsmm_DataType:$data_type, Variadic<BrgemmMemRef>:$inputs);
+  let arguments = (ins Xsmm_DataType:$data_type,
+                       OptionalAttr<Xsmm_DataType>:$out_type,
+                       Variadic<BrgemmMemRef>:$inputs);
 
   let assemblyFormat = [{
     `(` `data_type` `=` $data_type `,` $inputs `)`
@@ -245,7 +249,8 @@ class Xsmm_GemmLikeOp<string mnemonic, list<Trait> traits = []> :
     ConfinedAttr<DenseI64ArrayAttr,
                 [DenseArrayNonNegative<DenseI64ArrayAttr>]>:$inputs,
     TypedArrayAttrBase<Xsmm_GemmFlags, "gemm flags">:$flags,
-    Xsmm_DataType:$data_type);
+    Xsmm_DataType:$data_type,
+    OptionalAttr<Xsmm_DataType>:$out_type);
 
   let results = (outs I64:$results);
   let hasCustomAssemblyFormat = 1;
