@@ -6,6 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+// GCC emits a false-positive -Wmaybe-uninitialized in LLVM's Hashing.h from the
+// generated computePropertiesHash(); LLVM builds with -Werror. The pragma must
+// precede the includes so it is active while Hashing.h is parsed. Guarded
+// because clang rejects the unknown -Wmaybe-uninitialized group under -Werror.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include "TPP/Dialect/Xsmm/XsmmOps.h"
 #include "TPP/Dialect/Xsmm/XsmmEnum.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
