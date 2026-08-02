@@ -6,14 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// GCC emits a false-positive -Wmaybe-uninitialized in LLVM's Hashing.h from the
-// generated computePropertiesHash(); LLVM builds with -Werror. The pragma must
-// precede the includes so it is active while Hashing.h is parsed. Guarded
-// because clang rejects the unknown -Wmaybe-uninitialized group under -Werror.
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
 #include "TPP/Dialect/Xsmm/XsmmOps.h"
 #include "TPP/Dialect/Xsmm/XsmmEnum.h"
 #include "TPP/Transforms/Utils/VNNIUtils.h"
@@ -23,6 +15,19 @@
 #include "mlir/IR/TypeUtilities.h"
 
 using namespace mlir;
+
+// TableGen's computePropertiesHash() for ops with empty properties calls the
+// empty-pack llvm::hash_combine<>(), whose uninitialized staging buffer trips a
+// GCC -Wmaybe-uninitialized false positive under -Werror. Providing a
+// behavior-identical specialization keeps that body from being instantiated
+// here without a diagnostic pragma or an LLVM-header change.
+#include "llvm/ADT/Hashing.h"
+namespace llvm {
+template <> inline hash_code hash_combine<>() {
+  std::array<char, 1> buf{};
+  return hashing::detail::combine_bytes(buf.data(), 0);
+}
+} // namespace llvm
 
 #define GET_OP_CLASSES
 #include "TPP/Dialect/Xsmm/XsmmOps.cpp.inc"
