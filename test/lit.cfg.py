@@ -1,5 +1,6 @@
 # -*- Python -*-
 
+import inspect
 import os
 import lit.formats
 import lit.util
@@ -14,9 +15,15 @@ from lit.llvm import llvm_config
 # name: The name of this test suite.
 config.name = "TPP_OPT"
 
-config.test_format = lit.formats.ShTest(
-    execute_external=True, force_execute_external=True
-)
+# Force external shell execution (some tests rely on the real `diff`, etc.).
+# LLVM-23+ lit requires `force_execute_external` to opt into the deprecated
+# external shell; older lit versions don't accept that keyword.
+if "force_execute_external" in inspect.signature(lit.formats.ShTest.__init__).parameters:
+    config.test_format = lit.formats.ShTest(
+        execute_external=True, force_execute_external=True
+    )
+else:
+    config.test_format = lit.formats.ShTest(execute_external=True)
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = [".mlir"]
