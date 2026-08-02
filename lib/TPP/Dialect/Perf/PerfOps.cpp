@@ -55,7 +55,7 @@ void BenchOp::getSuccessorRegions(RegionBranchPoint parentReg,
   // The `body` region branch back to the parent operation. Drop the first
   // argument which is the timer value.
   if (!parentReg.isParent()) {
-    regions.push_back(RegionSuccessor::parent());
+    regions.push_back(RegionSuccessor(getOperation()));
     return;
   }
 
@@ -64,7 +64,7 @@ void BenchOp::getSuccessorRegions(RegionBranchPoint parentReg,
 }
 
 ValueRange BenchOp::getSuccessorInputs(RegionSuccessor successor) {
-  if (successor.isParent())
+  if (successor.isOperation())
     return getBodyResults().drop_front();
   return getIterArgs();
 }

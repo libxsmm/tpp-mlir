@@ -8,10 +8,10 @@ func.func @entry(%arg0: tensor<128x512xf32>, %arg1: tensor<512x256xf32>, %arg2: 
   return %0 : tensor<128x256xf32>
 }
 
-// BEFORE: IR Dump Before Bufferize (bufferize)
+// BEFORE: IR Dump Before Bufferize{{.*}}bufferize
 // BEFORE-LABEL: @_entry(
 // BEFORE: linalg.batch_reduce_matmul{{.*}}tensor<
 
-// AFTER: IR Dump After Bufferize (bufferize)
+// AFTER: IR Dump After Bufferize{{.*}}bufferize
 // AFTER-LABEL: @_entry(
 // AFTER: linalg.batch_reduce_matmul{{.*}}memref<
