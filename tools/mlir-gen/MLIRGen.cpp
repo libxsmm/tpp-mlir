@@ -126,6 +126,9 @@ static Value downcastToOutput(OpBuilder &builder, Location loc,
   if (accElem == outElem || (!sameFloat && !sameInt))
     return accumulator;
 
+  // So far, only the accumulator was created by the matmul. If they're of the same type
+  // we have returned above. If not, then we need to allocate a new buffer, since they
+  // have different types. This will be the `chain` to the next operation.
   auto resultTy = RankedTensorType::get(accTy.getShape(), outElem);
   Value dest = tensor::EmptyOp::create(builder, loc, resultTy, ValueRange{});
   int64_t rank = accTy.getRank();
@@ -604,25 +607,6 @@ void MLIRGenerator::computeElementwiseScalingFlops(ShapedType outputShape) {
   flops += 2 * scalingFlops;
 }
 
-Value MLIRGenerator::lowerNamedMatmul(LayerArgs &args, Value chain) {
-  // VNNI produces mixed shape args, say 4D input and 5D weight. All
-  // linalg named ops for matrix multiplication expects arguments of same
-  // number of dimensions. Hence, such matmul patterns are not compatible to be
-  // matched using named ops.
-  auto inputShape = cast<ShapedType>(chain.getType());
-  assert((vnniFactor != 0 || inputShape.getRank() == 2) &&
-         "Unsupported Lowering for VNNI/input rank > 2. "
-         "Try 'generic' or 'contract' lowering");
-
-  Value output = linalg::MatmulOp::create(
-                     builder, loc, TypeRange{args.accumulator.value.getType()},
-                     ValueRange{chain, args.weight.value},
-                     ValueRange{args.accumulator.value})
-                     .getResult(0);
-
-  return downcastToOutput(builder, loc, output, args.output.type);
-}
-
 Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto inputType = cast<ShapedType>(args.input.value.getType());
   auto outputType = cast<ShapedType>(args.output.value.getType());
@@ -671,14 +655,20 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   }
 
   computeMatmulFlops(inputType, outputType);
-  if (outputOpKind == OutputOpKind::Generic)
-    return lowerGenericMatmul(args, args.input.value);
-  if (outputOpKind == OutputOpKind::Contract)
-    return lowerContract(args, args.input.value);
-  if (outputOpKind == OutputOpKind::NamedOp)
-    return lowerNamedMatmul(args, args.input.value);
+  Value accumulator;
+  switch(outputOpKind) {
+    case OutputOpKind::Generic:
+      accumulator = lowerGenericMatmul(args, args.input.value);
+      break;
+    case OutputOpKind::Contract:
+      accumulator = lowerContract(args, args.input.value);
+      break;
+    case OutputOpKind::NamedOp:
+      accumulator = lowerNamedMatmul(args, args.input.value);
+      break;
+  }
 
-  llvm_unreachable("Unsupported output op kind");
+  return downcastToOutput(builder, loc, accumulator, args.output.type);
 }
 
 Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
@@ -686,59 +676,60 @@ Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
   auto map1 = getMap(chain, MAP_MATMUL_INPUT);   // { 0, 2 }
   auto map2 = getMap(args.weight.value, MAP_MATMUL_WEIGHT); // { 2, 1 }
   auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT); // { 0, 1 }
-  auto output =
-      linalg::GenericOp::create(builder, 
-              loc, args.accumulator.value.getType(), ValueRange{chain, args.weight.value},
-              ValueRange{args.accumulator.value}, ArrayRef<AffineMap>{map1, map2, map3},
-              getIterators(MAP_MATMUL),
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange blockArgs) {
-                auto arg0 = blockArgs[0];
-                auto arg1 = blockArgs[1];
-                auto arg2 = blockArgs[2];
-                // If input and output type differs, up cast input to output
-                // type using arith.extf/arith.extsi.
-                Type inputElementType =
-                    cast<ShapedType>(chain.getType()).getElementType();
-                Type weightElementType =
-                    cast<ShapedType>(args.weight.value.getType()).getElementType();
-                Type outputElementType =
-                    cast<ShapedType>(args.accumulator.value.getType()).getElementType();
-                if (inputElementType != outputElementType) {
-                  if (inputElementType.isFloat()) {
-                    arg0 = arith::ExtFOp::create(nestedBuilder, 
-                        nestedLoc, outputElementType, arg0);
-                  } else {
-                    arg0 = arith::ExtSIOp::create(nestedBuilder, 
-                        nestedLoc, outputElementType, arg0);
-                  }
-                }
+  return linalg::GenericOp::create(
+             builder, loc, args.accumulator.value.getType(),
+             ValueRange{chain, args.weight.value},
+             ValueRange{args.accumulator.value},
+             ArrayRef<AffineMap>{map1, map2, map3}, getIterators(MAP_MATMUL),
+             [&](OpBuilder &nestedBuilder, Location nestedLoc,
+                 ValueRange blockArgs) {
+               auto arg0 = blockArgs[0];
+               auto arg1 = blockArgs[1];
+               auto arg2 = blockArgs[2];
+               // If input and output type differs, up cast input to output
+               // type using arith.extf/arith.extsi.
+               Type inputElementType =
+                   cast<ShapedType>(chain.getType()).getElementType();
+               Type weightElementType =
+                   cast<ShapedType>(args.weight.value.getType())
+                       .getElementType();
+               Type outputElementType =
+                   cast<ShapedType>(args.accumulator.value.getType())
+                       .getElementType();
+               if (inputElementType != outputElementType) {
+                 if (inputElementType.isFloat()) {
+                   arg0 = arith::ExtFOp::create(nestedBuilder, nestedLoc,
+                                                outputElementType, arg0);
+                 } else {
+                   arg0 = arith::ExtSIOp::create(nestedBuilder, nestedLoc,
+                                                 outputElementType, arg0);
+                 }
+               }
 
-                if (weightElementType != outputElementType) {
-                  if (weightElementType.isFloat()) {
-                    arg1 = arith::ExtFOp::create(nestedBuilder, 
-                        nestedLoc, outputElementType, arg1);
-                  } else {
-                    arg1 = arith::ExtSIOp::create(nestedBuilder, 
-                        nestedLoc, outputElementType, arg1);
-                  }
-                }
+               if (weightElementType != outputElementType) {
+                 if (weightElementType.isFloat()) {
+                   arg1 = arith::ExtFOp::create(nestedBuilder, nestedLoc,
+                                                outputElementType, arg1);
+                 } else {
+                   arg1 = arith::ExtSIOp::create(nestedBuilder, nestedLoc,
+                                                 outputElementType, arg1);
+                 }
+               }
 
-                auto *mul =
-                    outputElementType.isFloat()
-                        ? arith::MulFOp::create(nestedBuilder, nestedLoc, arg0, arg1)
-                        : arith::MulIOp::create(nestedBuilder, nestedLoc, arg0, arg1);
-                auto *add = outputElementType.isFloat()
-                                ? arith::AddFOp::create(nestedBuilder, 
-                                      nestedLoc, arg2, mul->getResult(0))
-                                : arith::AddIOp::create(nestedBuilder, 
-                                      nestedLoc, arg2, mul->getResult(0));
-                linalg::YieldOp::create(nestedBuilder, 
-                    nestedLoc, ValueRange{add->getResults()});
-              })
-          .getResult(0);
-
-  return downcastToOutput(builder, loc, output, args.output.type);
+               auto *mul = outputElementType.isFloat()
+                               ? arith::MulFOp::create(nestedBuilder, nestedLoc,
+                                                       arg0, arg1)
+                               : arith::MulIOp::create(nestedBuilder, nestedLoc,
+                                                       arg0, arg1);
+               auto *add = outputElementType.isFloat()
+                               ? arith::AddFOp::create(nestedBuilder, nestedLoc,
+                                                       arg2, mul->getResult(0))
+                               : arith::AddIOp::create(nestedBuilder, nestedLoc,
+                                                       arg2, mul->getResult(0));
+               linalg::YieldOp::create(nestedBuilder, nestedLoc,
+                                       ValueRange{add->getResults()});
+             })
+      .getResult(0);
 }
 
 Value MLIRGenerator::lowerContract(LayerArgs &args, Value chain) {
@@ -747,12 +738,28 @@ Value MLIRGenerator::lowerContract(LayerArgs &args, Value chain) {
   maps.push_back(AffineMapAttr::get(getMap(chain, MAP_MATMUL_INPUT)));   // { 0, 2 }
   maps.push_back(AffineMapAttr::get(getMap(args.weight.value, MAP_MATMUL_WEIGHT))); // { 2, 1 }
   maps.push_back(AffineMapAttr::get(getMap(args.accumulator.value, MAP_MATMUL_OUTPUT))); // { 0, 1 }
-  auto output = linalg::ContractOp::create(builder, 
-                          loc, args.accumulator.value.getType(), ValueRange{chain, args.weight.value}, ValueRange{args.accumulator.value},
-                          builder.getArrayAttr(maps))
-                      .getResult(0);
+  return linalg::ContractOp::create(
+             builder, loc, args.accumulator.value.getType(),
+             ValueRange{chain, args.weight.value},
+             ValueRange{args.accumulator.value}, builder.getArrayAttr(maps))
+      .getResult(0);
+}
 
-  return downcastToOutput(builder, loc, output, args.output.type);
+Value MLIRGenerator::lowerNamedMatmul(LayerArgs &args, Value chain) {
+  // VNNI produces mixed shape args, say 4D input and 5D weight. All
+  // linalg named ops for matrix multiplication expects arguments of same
+  // number of dimensions. Hence, such matmul patterns are not compatible to be
+  // matched using named ops.
+  auto inputShape = cast<ShapedType>(chain.getType());
+  assert((vnniFactor != 0 || inputShape.getRank() == 2) &&
+         "Unsupported Lowering for VNNI/input rank > 2. "
+         "Try 'generic' or 'contract' lowering");
+
+  return linalg::MatmulOp::create(builder, loc,
+                                  TypeRange{args.accumulator.value.getType()},
+                                  ValueRange{chain, args.weight.value},
+                                  ValueRange{args.accumulator.value})
+      .getResult(0);
 }
 
 SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
