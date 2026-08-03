@@ -9,10 +9,12 @@
 // Kernel - matmul
 // RUN: mlir-gen --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
 // RUN: mlir-gen --output=contract --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
+// RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
 
 // Kernel - fc
 // RUN: mlir-gen --kernel=args --bias --relu --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-FC-BF16
 // RUN: mlir-gen --output=contract --kernel=args --bias --relu --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-FC-BF16
+// RUN: mlir-gen --output=named --kernel=args --bias --relu --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-FC-BF16
 
 // BF16/VNNI execution
 // RUN: mlir-gen --kernel=const --bias --relu --seed=123 --batch=16 --layers=16,16 --tiles=8,8,8 --data-type=bf16 | tpp-run -e entry -entry-point-result=void -n 10 | FileCheck %s --check-prefix=PERF
