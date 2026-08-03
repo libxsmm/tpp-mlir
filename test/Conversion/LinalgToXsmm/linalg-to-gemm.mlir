@@ -185,6 +185,44 @@ module attributes {
 #map = affine_map<(d0, d1, d2, d3) -> (d1, d3, d0)>
 #map1 = affine_map<(d0, d1, d2, d3) -> (d3, d2, d0)>
 #map2 = affine_map<(d0, d1, d2, d3) -> (d1, d2)>
+// Mixed-precision: bf16 inputs are extended to f32 and accumulated into an f32
+// output. The kernel input `data_type` stays bf16 while the wider output type
+// is carried via `out_type` (f32 = 1).
+module attributes {
+  "#dlti.sys_spec" = #dlti.target_system_spec<"CPU"
+    = #dlti.target_device_spec<"vnni" = 2 : i32>>
+} {
+  func.func @square_vnni_gemm_f32_acc(%arg0: memref<64x32x2xbf16, strided<[64, 2, 1], offset: ?>>,
+    %arg1: memref<32x64x2xbf16>, %arg2: memref<64x64xf32, strided<[64, 1], offset: ?>>) {
+    linalg.generic {
+      indexing_maps = [#map, #map1, #map2],
+      iterator_types = ["reduction", "parallel", "parallel", "reduction"]}
+      ins(%arg0, %arg1 : memref<64x32x2xbf16, strided<[64, 2, 1], offset: ?>>, memref<32x64x2xbf16>)
+      outs(%arg2 : memref<64x64xf32, strided<[64, 1], offset: ?>>) {
+        ^bb0(%in: bf16, %in_2: bf16, %out: f32):
+          %e0 = arith.extf %in : bf16 to f32
+          %e1 = arith.extf %in_2 : bf16 to f32
+          %1 = arith.mulf %e0, %e1 : f32
+          %2 = arith.addf %out, %1 : f32
+          linalg.yield %2 : f32
+      }
+    return
+  }
+}
+
+// CHECK-LABEL: square_vnni_gemm_f32_acc
+// CHECK-SAME:  %[[ARG0:.+]]: memref<64x32x2xbf16, strided<[64, 2, 1], offset: ?>>,
+// CHECK-SAME:  %[[ARG1:.+]]: memref<32x64x2xbf16>,
+// CHECK-SAME:  %[[ARG2:.+]]: memref<64x64xf32, strided<[64, 1], offset: ?>>
+// CHECK: %[[COLLAPSE:.+]] = memref.collapse_shape %[[ARG0]] {{\[}}[0], [1, 2]]
+// CHECK: %[[DIS:.+]] = xsmm.gemm.dispatch [64, 64, 64, 64, 64, 64] flags = (vnni_b) data_type = bf16 {out_type = 1 : i64}
+// CHECK: xsmm.gemm(data_type = bf16, %[[DIS]], %[[COLLAPSE]], %[[ARG1]], %[[ARG2]]) {out_type = 1 : i64}
+
+// -----
+
+#map = affine_map<(d0, d1, d2, d3) -> (d1, d3, d0)>
+#map1 = affine_map<(d0, d1, d2, d3) -> (d3, d2, d0)>
+#map2 = affine_map<(d0, d1, d2, d3) -> (d1, d2)>
 module attributes {
   "#dlti.sys_spec" = #dlti.target_system_spec<"CPU"
     = #dlti.target_device_spec<"vnni" = 2 : i32>>

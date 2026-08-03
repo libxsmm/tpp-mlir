@@ -59,8 +59,12 @@ std::pair<bool, bool> isMatmulVnniOp(linalg::GenericOp linalgOp,
           .input(MatchOne(0), HasMap(ProjectedPermutation(), &mapOperandA))
           .input(MatchOne(1), HasMap(ProjectedPermutation(), &mapOperandB))
           .output(MatchOne(0), HasMap(BroadcastableProjectedPermutation(), &mapOperandC))
-          .region(MatchOne(0),
-                  WithOpChain<arith::MulFOp, arith::AddFOp>(operands));
+          .region(MatchOne(0), [&](Region *region, Operation *op) {
+            // Match plain or mixed-precision (bf16/fp8 extension) bodies.
+            return WithOpChain<arith::MulFOp, arith::AddFOp>(operands)(region, op) ||
+                   WithOpChain<arith::ExtFOp, arith::ExtFOp, arith::MulFOp,
+                               arith::AddFOp>(operands)(region, op);
+          });
   // clang-format on
   if (!matmulMatcher.match(linalgOp))
     return std::make_pair(false, hasBatch);
