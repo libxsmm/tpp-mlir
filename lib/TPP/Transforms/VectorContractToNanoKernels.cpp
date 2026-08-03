@@ -36,18 +36,21 @@ struct VectorContractToNanoKernels
 
     x86::populateVectorContractToFMAPatterns(patterns);
 
+    if (vnni::utils::hasAMX())
+      x86::populateVectorContractToAMXDotProductPatterns(patterns);
+
     auto cpuName = vnni::utils::getTargetArchName();
     if (cpuName == "SRF") {
+       x86::populateMoveAccumulatorForContractLoopPatterns(patterns);
        x86::populateVectorContractBF16ToFMAPatterns(patterns);
        x86::populateShuffleVectorFMAOpsPatterns(patterns);
        x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
     }
 
-    if (cpuName == "CPX_SPR")
+    if (cpuName == "CPX_SPR") {
+       x86::populateMoveAccumulatorForContractLoopPatterns(patterns);
        x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
-
-    if (vnni::utils::hasAMX())
-      x86::populateVectorContractToAMXDotProductPatterns(patterns);
+    }
 
     x86::populateSinkVectorProducerOpsPatterns(patterns);
 
