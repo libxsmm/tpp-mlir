@@ -105,32 +105,6 @@ def VectorContractToOuterproduct : Pass<
                            "vector::VectorDialect"];
 }
 
-def VectorContractToFMA : Pass<
-    "vector-contract-to-fma"> {
-  let summary = "Perform vector fma lowering of vector contraction ops";
-  let dependentDialects = ["memref::MemRefDialect",
-                           "scf::SCFDialect",
-                           "tensor::TensorDialect",
-                           "vector::VectorDialect",
-                           "arith::ArithDialect"];
-  let options = [
-         Option<"targetFeature", "target-feature", "std::string", "",
-                "Target feature for a given architecture">,
-  ];
-}
-
-def VectorContractToAMX : Pass<
-    "vector-contract-to-amx"> {
-  let summary = "Perform vector amx lowering of vector contraction ops";
-  let dependentDialects = ["memref::MemRefDialect",
-                           "scf::SCFDialect",
-                           "tensor::TensorDialect",
-                           "vector::VectorDialect",
-                           "arith::ArithDialect",
-                           "x86::X86Dialect"];
-}
-
-
 def BrgemmLinalgTiling : Pass<"tile-brgemm-linalg"> {
   let summary = "Tile bregmm  matmul and reduction dimension.";
   let description = [{
@@ -142,15 +116,6 @@ def BrgemmLinalgTiling : Pass<"tile-brgemm-linalg"> {
   let options = [
          ListOption<"registerTileShape", "registerBlocking", "unsigned", "Input for the register blocking tile shapes for a brgemm operation">,
   ];
-}
-
-
-def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
-   let summary = "Perform avx512bf16 dot product lowering of vector contraction operation for bf16 type with vnni layout=2";
-   let description = [{
-     Perform avx512bf16 dot product lowering of vector contraction operation for bf16 type with vnni layout=2.
-   }];
-   let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86::X86Dialect" ];
 }
 
 def ConvertLinalgGenericTo32BitAccumulation : Pass<"convert-linalg-generic-to-32-bit-acc"> {
