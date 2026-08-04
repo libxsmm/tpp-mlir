@@ -153,34 +153,6 @@ def BF16DotProduct : Pass<"vector-contract-to-bf16dp"> {
    let dependentDialects = [ "vector::VectorDialect", "scf::SCFDialect", "x86::X86Dialect" ];
 }
 
-def MicroKernels : Pass<"vector-contract-to-micro-kernels"> {
-   let summary = "Perform  lowering of vector contraction operation";
-   let description = [{Add commentMore actions
-     Perform  micro kernel lowering of vector contraction operation.
-   }];
-   let dependentDialects = [ "vector::VectorDialect", 
-			     "scf::SCFDialect", 
-			     "arith::ArithDialect",
-			     "x86::X86Dialect" ];
-  let options = [
-         Option<"targetFeature", "target-feature", "std::string", "",
-                "Target feature for a given architecture">,
-  ];
-}
-
-def MicroKernelsAMX : Pass<"vector-contract-to-micro-kernels-amx"> {
-   let summary = "Perform AMX target lowering of vector contraction operation";
-   let description = [{
-     Perform  flat layout AMX target micro kernel lowering of vector contraction operation.
-   }];
-   let dependentDialects = [ "vector::VectorDialect",
-                             "memref::MemRefDialect",
-                             "linalg::LinalgDialect",
-                             "scf::SCFDialect",
-                             "arith::ArithDialect",
-                             "x86::X86Dialect" ];
-}
-
 def ConvertLinalgGenericTo32BitAccumulation : Pass<"convert-linalg-generic-to-32-bit-acc"> {
    let summary = "Convert linalg.generic op from bf16/i8 to f32/i32 accumulation.";
    let description = [{

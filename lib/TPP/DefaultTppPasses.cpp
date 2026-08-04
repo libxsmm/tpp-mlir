@@ -82,14 +82,11 @@ private:
   }
 
   // Vectorize the remaining Linalg operations and, optionally, lower vector
-  // patterns to micro-kernels (`vector-to-kernel`) or nano-kernels
-  // (`nano-kernel`).
+  // patterns to nano-kernels.
   void addVectorizationPasses() {
-    if (nanoKernel) {
-      pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
-      pm.addNestedPass<func::FuncOp>(
-          createConvertLinalgGenericTo32BitAccumulation());
-    }
+    pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+    pm.addNestedPass<func::FuncOp>(
+        createConvertLinalgGenericTo32BitAccumulation());
 
     // Vectorizes the remaining Linalg operations
     pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
@@ -99,28 +96,16 @@ private:
       pm.addNestedPass<func::FuncOp>(createTileElementWiseOps());
     pm.addNestedPass<func::FuncOp>(createVectorizationPass());
 
-    if (nanoKernel) {
-      tpp::RegisterUnrollOptions unrollOpts;
-      unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
-      pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
-      pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
-      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-      pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
-      pm.addPass(createBufferize());
-      pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
-      pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
-      pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
-    }
-
-    // Please note, canonicalizer should be after hoisting pass because
-    // it fuses outer tiling loops and it results in no pattern
-    // matching for hoisting pass. Moved inside VectorToKernel Path.
-    // This path will be soon replaced by the nanoKernel path.
-    if (vectorToKernel) {
-      VectorToKernelOptions options;
-      options.vecBundleCpuTargetFeature = defBundleCpuTargetFeature;
-      pm.addPass(createVectorToKernel(options));
-    }
+    tpp::RegisterUnrollOptions unrollOpts;
+    unrollOpts.gemmUnroll = SmallVector<int64_t>{*gemmUnroll};
+    pm.addNestedPass<func::FuncOp>(createRegisterUnroll(unrollOpts));
+    pm.addNestedPass<func::FuncOp>(createHoistLoopInvariantSubsets());
+    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+    pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
+    pm.addPass(createBufferize());
+    pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
+    pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+    pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
   }
 
   // Default TPP lowering: map and pack at the linalg level, bufferize, lower to
@@ -158,7 +143,7 @@ private:
     // No-op unless the benchmark producer requested replication.
     pm.addPass(createReplicateBenchArgs());
 
-    if (vectorToKernel || nanoKernel)
+    if (nanoKernel)
       // Lower Linalg to Vector.
       addVectorizationPasses();
     else
@@ -171,7 +156,7 @@ private:
 
   // Convert to parallel loops and apply low-level parallelization. The
   // vectorization path lowers vector to SCF, while the XSMM path (also
-  // used by `vector-to-kernel` and `nano-kernel`) applies AMX tile
+  // used by `nano-kernel`) applies AMX tile
   // configuration and lowers XSMM to function calls.
   void addParallelizationPasses() {
     // Convert forAll to parallel loops should run after bufferization
@@ -188,7 +173,7 @@ private:
 
     // TODO: These passes have been moved out of low level parallelization
     // pass since these apply on xsmm dialect.
-    if (!(vectorToKernel || nanoKernel)) {
+    if (!nanoKernel) {
       pm.addNestedPass<func::FuncOp>(createIntelAMXTileConfigInsertionPass());
       pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
       pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
@@ -205,9 +190,7 @@ private:
     //  * Linalg-to-Loops: Enable with `linalg-to-loops`. Skips all TPP
     //    transformations and lowers linalg directly to loops.
     //  * Linalg-to-XSMM: the default path, no options needed.
-    //  * Vector-to-Kernel / Nano-Kernel: Enable with `vector-to-kernel` or
-    //    `nano-kernel`. Both require vectorization and lower vector patterns to
-    //    libxsmm-like micro-/nano-kernels via specialized lowering.
+    //  * Nano-Kernel: Enable with `nano-kernel`. No XSMM calls.
     pm.addPass(createFoldAddIntoDest());
 
     if (linalgToLoops)

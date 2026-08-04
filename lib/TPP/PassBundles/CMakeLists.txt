@@ -8,7 +8,6 @@ add_mlir_library(TPPPassBundles
   LowLevelParallelization.cpp
   PostProcessing.cpp
   TppMapping.cpp
-  VectorToKernel.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/TPP

@@ -38,9 +38,6 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
            "use sfc order">,
     ListOption<"parallelTaskGrid", "parallel-task-grid",
            "unsigned", "Grid-sizes for parallel tasks.">,
-    Option<"vectorToKernel", "vector-to-kernel",
-           "bool", /*default=*/"false",
-           "Lower vector patterns to micro-kernels.">,
     Option<"nanoKernel", "nano-kernel",
            "bool", /*default=*/"false",
            "Lower vector.contract patterns to nano-kernels.">,
@@ -91,16 +88,6 @@ def LinalgLowering : Pass<"linalg-lowering", "func::FuncOp"> {
   let dependentDialects = ["xsmm::XsmmDialect",
                            "scf::SCFDialect",
                            "memref::MemRefDialect"];
-}
-
-def VectorToKernel : Pass<"vector-to-kernel", "ModuleOp"> {
-  let summary = "Lower Vector operations to micro-kernel special lowering.";
-  let dependentDialects = ["vector::VectorDialect",
-                           "scf::SCFDialect"];
-  let options= [
-    Option<"vecBundleCpuTargetFeature", "target-feature", "std::string", "",
-                "Target feature for a given architecture">
-  ];
 }
 
 def LowLevelParallelization : Pass<"low-level-parallel", "ModuleOp"> {
