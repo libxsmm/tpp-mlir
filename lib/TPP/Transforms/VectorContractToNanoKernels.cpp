@@ -47,10 +47,9 @@ struct VectorContractToNanoKernels
        x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
     }
 
-    if (cpuName == "CPX_SPR") {
-       x86::populateMoveAccumulatorForContractLoopPatterns(patterns);
+    if (cpuName == "CPX_SPR")
        x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
-    }
+    
 
     x86::populateSinkVectorProducerOpsPatterns(patterns);
 
