@@ -36,9 +36,6 @@ struct VectorContractToNanoKernels
 
     x86::populateVectorContractToFMAPatterns(patterns);
 
-    if (vnni::utils::hasAMX())
-      x86::populateVectorContractToAMXDotProductPatterns(patterns);
-
     auto cpuName = vnni::utils::getTargetArchName();
     if (cpuName == "SRF") {
        x86::populateMoveAccumulatorForContractLoopPatterns(patterns);
