@@ -11,7 +11,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/ADT/Hashing.h"
 
 #define GET_OP_CLASSES
 #include "TPP/Dialect/Perf/PerfOps.cpp.inc"

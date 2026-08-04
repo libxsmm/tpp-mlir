@@ -50,6 +50,8 @@ struct VectorContractToNanoKernels
     if (cpuName == "CPX_SPR")
        x86::populateVectorContractToPackedTypeDotProductPatterns(patterns);
     
+    if (vnni::utils::hasAMX())
+      x86::populateVectorContractToAMXDotProductPatterns(patterns);
 
     x86::populateSinkVectorProducerOpsPatterns(patterns);
 
