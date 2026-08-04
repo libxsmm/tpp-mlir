@@ -440,11 +440,24 @@ static LogicalResult verifyXsmmCommon(OpTy invokeOp,
   if (llvm::is_one_of<OpTy, xsmm::BrgemmOp, xsmm::FusedBrgemmOp>::value)
     upTo--;
 
+  // Gemm-like ops may accumulate into an output C whose type differs from the
+  // input `data_type` (e.g. bf16 inputs with an f32 output). That output type
+  // is carried by the optional `out_type` attribute.
+  Value gemmOutput = nullptr;
+  xsmm::DataType outType = invokeOp.getDataType();
+  if constexpr (llvm::is_one_of<OpTy, xsmm::GemmOp, xsmm::BrgemmOp>::value) {
+    gemmOutput = invokeOp.getOutput();
+    if (auto outTypeAttr = invokeOp.getOutTypeAttr())
+      outType = outTypeAttr.getValue();
+  }
+
   for (size_t idx = 1; idx < upTo; idx++) {
     Type elementType = getElementTypeOrSelf(inputs[idx].getType());
-    if (!isCompatible(invokeOp.getDataType(), elementType)) {
+    bool isOutput = gemmOutput && inputs[idx] == gemmOutput;
+    xsmm::DataType expected = isOutput ? outType : invokeOp.getDataType();
+    if (!isCompatible(expected, elementType)) {
       return invokeOp.emitOpError()
-             << "expect " << xsmm::stringifyDataType(invokeOp.getDataType())
+             << "expect " << xsmm::stringifyDataType(expected)
              << " but got: " << elementType << " for operand at index: " << idx;
     }
   }

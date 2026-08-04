@@ -30,7 +30,7 @@ func.func @matmul_static(%A : !A_tensor_t, %B : !B_tensor_t, %C : !C_tensor_t, %
   // IR-DAG: %[[C16:.+]] = arith.constant 16 : i64
   // IR-DAG: %[[C64:.+]] = arith.constant 64 : i64
   // IR-DAG: %[[C0:.+]] = arith.constant 0 : i64
-  // IR: xsmm_brgemm_dispatch(%[[C1]], %[[C2]], %[[C2]], %[[C4]], %[[C8]], %[[C16]], %[[C2]], %[[C4]], %[[C64]], %[[C0]])
+  // IR: xsmm_brgemm_dispatch(%[[C1]], %[[C1]], %[[C2]], %[[C2]], %[[C4]], %[[C8]], %[[C16]], %[[C2]], %[[C4]], %[[C64]], %[[C0]])
   // Parameters:
   // 1) kind
   // 2) m = 2

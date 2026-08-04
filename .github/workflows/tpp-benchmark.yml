@@ -47,7 +47,7 @@ jobs:
       - name: Emerald Rapids Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+               ${{ github.workspace }}/scripts/github/benchmark.sh -b"
           ${{ env.SRUN }} --partition=emr --time=0:30:00 --constraint=\"notrb\" -- $CMD
 
   TPP-MLIR-EMR-OMP:
@@ -77,7 +77,7 @@ jobs:
       - name: Zen5 Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-               ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+               ${{ github.workspace }}/scripts/github/benchmark.sh -b"
           ${{ env.SRUN }} --partition=zen5 --time=0:30:00 -- $CMD
 
   TPP-MLIR-ZEN-OMP:
@@ -97,7 +97,6 @@ jobs:
   TPP-MLIR-ARL-BASE:
     runs-on: pcl-tiergarten
     if: |
-      (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && inputs.RUN_ARL_BENCH) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
@@ -106,13 +105,12 @@ jobs:
       - name: ARL Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p"
+                ${{ github.workspace }}/scripts/github/benchmark.sh -b"
           ${{ env.SRUN }} --partition=arl --time=0:30:00 -- $CMD
 
   TPP-MLIR-ARL-OMP:
     runs-on: pcl-tiergarten
     if: |
-      (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && inputs.RUN_ARL_BENCH) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM

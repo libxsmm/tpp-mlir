@@ -52,4 +52,4 @@ jobs:
           KIND=Release COMPILER=clang \
           ${{ github.workspace }}/scripts/github/build_llvm.sh
           KIND=Release COMPILER=clang LINKER=lld  CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
-                ${{ github.workspace }}/scripts/github/benchmark.sh -b -p -o
+                ${{ github.workspace }}/scripts/github/benchmark.sh -b -o

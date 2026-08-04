@@ -127,9 +127,10 @@ extern "C" void xsmm_gemm_invoke(const libxsmm_datatype dType, int64_t addr,
   sgemm.gemm(&gemm_param);
 }
 
-extern "C" int64_t xsmm_gemm_dispatch(const libxsmm_datatype dtype, int64_t m,
-                                      int64_t n, int64_t k, int64_t lda,
-                                      int64_t ldb, int64_t ldc,
+extern "C" int64_t xsmm_gemm_dispatch(const libxsmm_datatype dtype,
+                                      const libxsmm_datatype out_dtype,
+                                      int64_t m, int64_t n, int64_t k,
+                                      int64_t lda, int64_t ldb, int64_t ldc,
                                       const libxsmm_gemm_flags flags) {
   // std::cout << "lda: " << lda << "\n";
   // std::cout << "ldb: " << ldb << "\n";
@@ -158,7 +159,7 @@ extern "C" int64_t xsmm_gemm_dispatch(const libxsmm_datatype dtype, int64_t m,
   l_shape.ldc = ldc;
   l_shape.a_in_type = dtype;
   l_shape.b_in_type = dtype;
-  l_shape.out_type = dtype;
+  l_shape.out_type = out_dtype;
   // Retarget computation type from bf16/fp8 to f32 due to missing hardware
   // support.
   l_shape.comp_type = getCompDataType(dtype);
@@ -340,9 +341,10 @@ extern "C" void xsmm_brgemm_invoke(const libxsmm_datatype dType, int64_t addr,
   sgemm.gemm(&gemm_param);
 }
 
-extern "C" int64_t xsmm_brgemm_dispatch(const libxsmm_datatype dtype, int64_t m,
-                                        int64_t n, int64_t k, int64_t lda,
-                                        int64_t ldb, int64_t ldc,
+extern "C" int64_t xsmm_brgemm_dispatch(const libxsmm_datatype dtype,
+                                        const libxsmm_datatype out_dtype,
+                                        int64_t m, int64_t n, int64_t k,
+                                        int64_t lda, int64_t ldb, int64_t ldc,
                                         int64_t stride_a, int64_t stride_b,
                                         const libxsmm_gemm_flags flags) {
   // std::cout << "lda: " << lda << "\n";
@@ -372,7 +374,7 @@ extern "C" int64_t xsmm_brgemm_dispatch(const libxsmm_datatype dtype, int64_t m,
   l_shape.ldc = ldc_int;
   l_shape.a_in_type = dtype;
   l_shape.b_in_type = dtype;
-  l_shape.out_type = dtype;
+  l_shape.out_type = out_dtype;
   // Retarget computation type from bf16/fp8 to f32 due to missing hardware
   // support.
   l_shape.comp_type = getCompDataType(dtype);

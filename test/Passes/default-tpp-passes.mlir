@@ -266,7 +266,7 @@ func.func @gemm_with_zero(%arg0: tensor<3x3xf32>, %arg1: tensor<3x3xf32>) -> ten
 // XSMM-DAG: %[[C3:.+]] = arith.constant 3 : i64
 // XSMM-DAG: %[[C4:.+]] = arith.constant 4 : i64
 // XSMM-NOT: xsmm_unary_dispatch
-// XSMM: %[[DIS:.+]] = call @xsmm_gemm_dispatch(%[[C1]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C4]])
+// XSMM: %[[DIS:.+]] = call @xsmm_gemm_dispatch(%[[C1]], %[[C1]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C3]], %[[C4]])
 // XSMM: %[[INT_PTR_ARG0:.+]] = memref.extract_aligned_pointer_as_index
 // XSMM: %[[CAST_ARG0:.+]] = arith.index_cast %[[INT_PTR_ARG0]] : index to i64
 // XSMM: %[[LLVM_PTR_ARG0:.+]] = llvm.inttoptr %[[CAST_ARG0]] : i64 to !llvm.ptr

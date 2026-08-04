@@ -112,6 +112,47 @@ static Value createCastToFloat(OpBuilder &builder, Location loc, Value value,
   return castToFloat;
 }
 
+// Downcasts the matmul accumulator to the output element type when they differ
+// and share the same domain (float or integer), via an element-wise
+// linalg.generic using arith.truncf/arith.trunci. Cross-domain conversions
+// (e.g. quantization/dequantization) are handled by their dedicated lowerings.
+static Value downcastToOutput(OpBuilder &builder, Location loc,
+                              Value accumulator, ShapedType outputType) {
+  auto accTy = cast<ShapedType>(accumulator.getType());
+  Type accElem = accTy.getElementType();
+  Type outElem = outputType.getElementType();
+  bool sameFloat = outElem.isFloat() && accElem.isFloat();
+  bool sameInt = outElem.isInteger() && accElem.isInteger();
+  if (accElem == outElem || (!sameFloat && !sameInt))
+    return accumulator;
+
+  // So far, only the accumulator was created by the matmul. If they're of the same type
+  // we have returned above. If not, then we need to allocate a new buffer, since they
+  // have different types. This will be the `chain` to the next operation.
+  auto resultTy = RankedTensorType::get(accTy.getShape(), outElem);
+  Value dest = tensor::EmptyOp::create(builder, loc, resultTy, ValueRange{});
+  int64_t rank = accTy.getRank();
+  SmallVector<AffineMap> maps(2, builder.getMultiDimIdentityMap(rank));
+  SmallVector<utils::IteratorType> iterators(rank,
+                                             utils::IteratorType::parallel);
+  return linalg::GenericOp::create(
+             builder, loc, resultTy, ValueRange{accumulator}, ValueRange{dest},
+             maps, iterators,
+             [&](OpBuilder &nestedBuilder, Location nestedLoc,
+                 ValueRange blockArgs) {
+               Value trunc;
+               if (sameFloat)
+                 trunc = arith::TruncFOp::create(nestedBuilder, nestedLoc,
+                                                 outElem, blockArgs[0]);
+               else
+                 trunc = arith::TruncIOp::create(nestedBuilder, nestedLoc,
+                                                 outElem, blockArgs[0]);
+               linalg::YieldOp::create(nestedBuilder, nestedLoc,
+                                       ValueRange{trunc});
+             })
+      .getResult(0);
+}
+
 } // anonymous namespace
 
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
@@ -166,36 +207,46 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   assert((registerUnroll.size() == 0 || registerUnroll.size() == 3) &&
          "Must have 3 register unrolling or none");
 
-  // Pick data types
-  auto elementType =
-      llvm::StringSwitch<std::optional<SmallVector<mlir::Type>>>(dataType)
-          .CaseLower("f32", SmallVector<Type>{builder.getF32Type(),
-                                              builder.getF32Type()})
-          .CaseLower("f16", SmallVector<Type>{builder.getF16Type(),
-                                              builder.getF16Type()})
-          .CaseLower("bf16", SmallVector<Type>{builder.getBF16Type(),
-                                               builder.getBF16Type()})
+  // Pick data types. Each case sets {input, output, accumulator}; the scale
+  // types are filled in below.
+  dataTypes =
+      llvm::StringSwitch<DataTypes>(dataType)
+          .CaseLower("f32", DataTypes{builder.getF32Type(),
+                                      builder.getF32Type(),
+                                      builder.getF32Type()})
+          .CaseLower("f16", DataTypes{builder.getF16Type(),
+                                      builder.getF16Type(),
+                                      builder.getF32Type()})
+          .CaseLower("bf16", DataTypes{builder.getBF16Type(),
+                                       builder.getBF16Type(),
+                                       builder.getF32Type()})
           // FP8 pure types. E5M2 is named bf8 and E4M3 is named hf8 by libxsmm.
-          .CaseLower("bf8", SmallVector<Type>{builder.getF8E5M2Type(),
-                                              builder.getF8E5M2Type()})
-          .CaseLower("hf8", SmallVector<Type>{builder.getF8E4M3FNType(),
-                                              builder.getF8E4M3FNType()})
-          .CaseLower("mx-bf16", SmallVector<Type>{builder.getBF16Type(),
-                                                  builder.getF32Type()})
-          .CaseLower("mx-f16", SmallVector<Type>{builder.getF16Type(),
-                                                 builder.getF32Type()})
-          .CaseLower("mx-i8", SmallVector<Type>{builder.getIntegerType(8),
-                                                builder.getI32Type()})
-          .CaseLower("mx-i8-i32", SmallVector<Type>{builder.getIntegerType(8),
-                                                    builder.getI32Type()})
-          .CaseLower("mx-i8-f32", SmallVector<Type>{builder.getIntegerType(8),
-                                                    builder.getF32Type()})
-          .CaseLower("mx-f32-i8", SmallVector<Type>{builder.getF32Type(),
-                                                    builder.getIntegerType(8)})
-          .Default(std::nullopt);
-  assert(elementType && "Unsupported data type");
-  dataTypes.push_back((*elementType)[0]);
-  dataTypes.push_back((*elementType)[1]);
+          .CaseLower("bf8", DataTypes{builder.getF8E5M2Type(),
+                                      builder.getF8E5M2Type(),
+                                      builder.getF8E5M2Type()})
+          .CaseLower("hf8", DataTypes{builder.getF8E4M3FNType(),
+                                      builder.getF8E4M3FNType(),
+                                      builder.getF8E4M3FNType()})
+          .CaseLower("mx-bf16", DataTypes{builder.getBF16Type(),
+                                          builder.getF32Type(),
+                                          builder.getF32Type()})
+          .CaseLower("mx-f16", DataTypes{builder.getF16Type(),
+                                         builder.getF32Type(),
+                                         builder.getF32Type()})
+          .CaseLower("mx-i8", DataTypes{builder.getIntegerType(8),
+                                        builder.getI32Type(),
+                                        builder.getI32Type()})
+          .CaseLower("mx-i8-i32", DataTypes{builder.getIntegerType(8),
+                                            builder.getI32Type(),
+                                            builder.getI32Type()})
+          .CaseLower("mx-i8-f32", DataTypes{builder.getIntegerType(8),
+                                            builder.getF32Type(),
+                                            builder.getF32Type()})
+          .CaseLower("mx-f32-i8", DataTypes{builder.getF32Type(),
+                                            builder.getIntegerType(8),
+                                            builder.getIntegerType(8)})
+          .Default(DataTypes{});
+  assert(dataTypes.input && "Unsupported data type");
 
   auto scaleTypeOpt = llvm::StringSwitch<std::optional<Type>>(scaleType)
                           .CaseLower("f32", builder.getF32Type())
@@ -203,7 +254,8 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                           .CaseLower("", builder.getF32Type())
                           .Default(std::nullopt);
   assert(scaleTypeOpt && "Unsupported scale type");
-  dataTypes.push_back(*scaleTypeOpt);
+  dataTypes.inputScale = *scaleTypeOpt;
+  dataTypes.weightScale = *scaleTypeOpt;
 
   // Parse quantization type
   auto optQuantType =
@@ -218,8 +270,7 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   // If the target type contains "mx", it is a mixed precision type. If
   // quantization type is not explicitly specified, we will default to Mixed
   // quantization type for mixed precision target types.
-  bool hasMixedType = !dataType.empty() && dataType.contains("mx");
-  if (hasMixedType && quantType == QuantizationType::None)
+  if (quantType == QuantizationType::None && !dataType.empty() && dataType.contains("mx"))
     quantType = QuantizationType::Mixed;
 
   // const kernelType is only supported for non quantization kernel.
@@ -232,9 +283,9 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
     outputOpKind = OutputOpKind::Contract;
 
   // Disable VNNI packing if it is not a F16/BF16/I8/FP8 data type
-  if (!dataTypes[0].isBF16() && !dataTypes[0].isF16() &&
-      !dataTypes[0].isInteger(8) &&
-      !llvm::isa<Float8E5M2Type, Float8E4M3FNType>(dataTypes[0]))
+  if (!dataTypes.input.isBF16() && !dataTypes.input.isF16() &&
+      !dataTypes.input.isInteger(8) &&
+      !llvm::isa<Float8E5M2Type, Float8E4M3FNType>(dataTypes.input))
     vnniFactor = 0;
   assert(((vnniFactor >= 0) && (vnniFactor % 2 == 0)) &&
          "Invalid VNNI packing factor");
@@ -281,6 +332,8 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
     if (quantType == QuantizationType::Dequant)
       arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
+    // TODO: Bias should be of accumulator type when it differs from the output
+    // type AND we want to propagate the truncation through the element-wise ops.
     arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
 
     // For QuantDequant, such as F32->i8->F32, we need an intermediate type to
@@ -290,6 +343,7 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
       arg.output.type = getShape({batch, outputSize}, PACK_INPUT);
     } else {
       arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
+      arg.accumulator.type = getShape({batch, outputSize}, PACK_ACCUMULATOR);
     }
     args.push_back(arg);
 
@@ -302,7 +356,7 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
 // This is mainly to validate the quantization scheme.
 Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
   SmallVector<Value> scalingFactors = computeScalingFactor(input);
-  Value chain = quantizeGemm(args, input, scalingFactors[0]);
+  Value chain = quantizeGemm(args, input);
   Value reScaleFactor = scalingFactors[1];
   Type rescaleType = reScaleFactor.getType();
   auto castedOutput =
@@ -317,7 +371,7 @@ Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
                   ValueRange blockArgs) {
                 auto arg0 = blockArgs[0];
                 auto casted = arith::SIToFPOp::create(nestedBuilder, 
-                    loc, dataTypes[2], arg0);
+                    loc, dataTypes.inputScale, arg0);
                 linalg::YieldOp::create(nestedBuilder, loc, ValueRange{casted});
               })
           .getResult(0);
@@ -328,18 +382,17 @@ Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
   return castedVal;
 }
 
-Value MLIRGenerator::createLayer(LayerArgs &args, bool hasMixedType) {
+Value MLIRGenerator::createLayer(LayerArgs &args) {
   OpBuilder::InsertionGuard guard(builder);
 
   Value chain;
-  chain = lowerMatmul(args, hasMixedType);
+  chain = lowerMatmul(args);
 
   if (quantType == QuantizationType::QuantDequant)
     return testQuantDequant(args, chain);
 
   if (quantType == QuantizationType::Quant) {
-    SmallVector<Value> scalingFactors = computeScalingFactor(chain);
-    chain = quantizeGemm(args, chain, scalingFactors[0]);
+    chain = quantizeGemm(args, chain);
   }
 
   if (quantType == QuantizationType::Dequant)
@@ -347,27 +400,22 @@ Value MLIRGenerator::createLayer(LayerArgs &args, bool hasMixedType) {
 
   // These are optional and only emitted if enabled
   if (outputOpKind == OutputOpKind::Generic) {
-    chain = lowerBiasAdd(chain, args.bias.value, args.output.value);
-    chain = lowerRelu(chain, args.output.value);
+    chain = lowerBiasAdd(args, chain);
+    chain = lowerRelu(args, chain);
   } else {
-    chain = lowerNamedBiasAdd(chain, args.bias.value, args.output.value);
-    chain = lowerNamedRelu(chain, args.output.value);
+    chain = lowerNamedBiasAdd(args, chain);
+    chain = lowerNamedRelu(args, chain);
   }
 
   // Last layer may output softmax
-  if (args.index == layers.size() - 1) {
-    if (outputOpKind == OutputOpKind::Generic) {
-      chain = lowerSoftmax(chain, args.output.value);
-    } else {
-      chain = lowerNamedSoftmax(chain, args.output.value);
-    }
-  }
+  if (args.index == layers.size() - 1)
+    chain = lowerSoftmax(args, chain);
 
   // Return output tensor to the next layer
   return chain;
 }
 
-void MLIRGenerator::createKernel(bool hasMixedType) {
+void MLIRGenerator::createKernel() {
   assert(((kernelType == KernelType::Const) ||
           (kernelType == KernelType::Args)) &&
          "Invalid kernel type");
@@ -474,16 +522,16 @@ void MLIRGenerator::createKernel(bool hasMixedType) {
       arg.output.value = getZeroInitTensor(arg.output.type);
     }
 
-    lastOutput = createLayer(arg, hasMixedType);
+    lastOutput = createLayer(arg);
     arg.output.value = lastOutput;
   }
   // Data is now output
   func::ReturnOp::create(builder, loc, lastArg.output.value);
 }
 
-int MLIRGenerator::generate(StringRef filename, bool hasMixedType) {
+int MLIRGenerator::generate(StringRef filename) {
   // First, populate the module with all functions
-  createKernel(hasMixedType);
+  createKernel();
 
   // Verify
   if (failed(module.verify())) {
@@ -559,69 +607,27 @@ void MLIRGenerator::computeElementwiseScalingFlops(ShapedType outputShape) {
   flops += 2 * scalingFlops;
 }
 
-Value MLIRGenerator::lowerNamedMatmul(Value input, Value weight, Value output) {
-  auto inputShape = cast<ShapedType>(input.getType());
-  auto weightShape = cast<ShapedType>(weight.getType());
-
-  // TODO: VNNI produces mixed shape args, say 4D input and 5D weight. All
-  // linalg named ops for matrix multiplication expects arguments of same
-  // number of dimensions. Hence, such matmul patterns are not compatible to be
-  // matched using named ops. Having a tuple or vector type as the element of
-  // tensor had been discussed and can be revisited as potential solution.
-  if (vnniFactor != 0) {
-    llvm_unreachable(
-        "Unsupported Lowering for VNNI, Try 'generic' or 'contract' lowering");
-  }
-
-  Value namedMatmul;
-  if (inputShape.getRank() == 2) {
-    namedMatmul = linalg::MatmulOp::create(builder, 
-                          loc, TypeRange{output.getType()},
-                          ValueRange{input, weight}, ValueRange{output})
-                      .getResult(0);
-  } else if (inputShape.getRank() == 4) {
-    SmallVector<OpFoldResult, 4> dims =
-        tensor::getMixedSizes(builder, loc, weight);
-    applyPermutationToVector(dims, {0, 1, 3, 2});
-    Value emptyTensor = tensor::EmptyOp::create(builder, 
-        loc, dims, weightShape.getElementType());
-
-    Value transpose = linalg::TransposeOp::create(builder, loc, weight, emptyTensor,
-                                         ArrayRef<int64_t>{0, 1, 3, 2})
-            .getResults()[0];
-    namedMatmul = linalg::Mmt4DOp::create(builder, loc, TypeRange{output.getType()},
-                                               ValueRange{input, transpose},
-                                               ValueRange{output})
-                      .getResult(0);
-  }
-
-  return namedMatmul;
-}
-
-Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
-  Value chain;
-  Value input = args.input.value;
-  Value weight = args.weight.value;
-  Value output = args.output.value;
-  auto inputType = cast<ShapedType>(input.getType());
-  auto outputType = cast<ShapedType>(output.getType());
+Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
+  auto inputType = cast<ShapedType>(args.input.value.getType());
+  auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
-  auto zeroType = RankedTensorType::get(shape, inputType.getElementType());
 
-  // For quant, derive the output type from input type.
-  // TODO: Revisit to check we really need zero initalizer for mixed precision
-  // float type?
+  // Select the matmul accumulator tensor.
   if (quantType == QuantizationType::Quant) {
-    output = getZeroInitTensor(zeroType);
-  } else if (quantType == QuantizationType::Dequant ||
-             quantType == QuantizationType::Mixed) {
-    Type elementType = inputType.getElementType();
-    if (elementType.isInteger(8)) {
-      // Get integer tensor accumulator type for dequantization.
-      TensorType intAccumulatorType =
-          RankedTensorType::get(shape, builder.getIntegerType(32));
-      output = getZeroInitTensor(intAccumulatorType);
-    }
+    // Quantization casts the result later; accumulate in the input type.
+    args.accumulator.value = getZeroInitTensor(
+        RankedTensorType::get(shape, inputType.getElementType()));
+  } else if (quantType == QuantizationType::Dequant) {
+    // Integer GEMM accumulates in i32; dequantization casts it later.
+    args.accumulator.value = getZeroInitTensor(
+        RankedTensorType::get(shape, builder.getIntegerType(32)));
+  } else if (!args.accumulator.type ||
+             args.accumulator.type.getElementType() ==
+                 outputType.getElementType()) {
+    // Accumulator matches the output type; accumulate directly into it.
+    args.accumulator.value = args.output.value;
+  } else {
+    args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
   if (vnniPacked) {
@@ -629,7 +635,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
     vnniShape.back() = vnniShape.back() / vnniFactor;
     vnniShape.push_back(vnniFactor);
 
-    auto weightShape = cast<ShapedType>(weight.getType()).getShape();
+    auto weightShape = cast<ShapedType>(args.weight.value.getType()).getShape();
     assert(weightShape.size() >= 3 && "Expected VNNI weights");
     assert(vnniShape.back() == weightShape.back() &&
            vnniShape.end()[-2] == weightShape.end()[-3] &&
@@ -644,95 +650,116 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args, bool hasMixedType = false) {
       reassociationIndices.push_back({index});
     reassociationIndices.push_back({inputRank - 1, inputRank});
 
-    input = tensor::ExpandShapeOp::create(builder, loc, vnniType, input,
-                                                  reassociationIndices);
-  }
-
-  if (outputOpKind == OutputOpKind::Generic) {
-    chain = lowerGenericMatmul(input, weight, output);
-  } else if (outputOpKind == OutputOpKind::Contract) {
-    chain = lowerContract(input, weight, output);
-  } else if (outputOpKind == OutputOpKind::NamedOp) {
-    chain = lowerNamedMatmul(input, weight, output);
+    args.input.value = tensor::ExpandShapeOp::create(
+        builder, loc, vnniType, args.input.value, reassociationIndices);
   }
 
   computeMatmulFlops(inputType, outputType);
-  return chain;
+  Value accumulator;
+  switch(outputOpKind) {
+    case OutputOpKind::Generic:
+      accumulator = lowerGenericMatmul(args, args.input.value);
+      break;
+    case OutputOpKind::Contract:
+      accumulator = lowerContract(args, args.input.value);
+      break;
+    case OutputOpKind::NamedOp:
+      accumulator = lowerNamedMatmul(args, args.input.value);
+      break;
+  }
+
+  return downcastToOutput(builder, loc, accumulator, args.output.type);
 }
 
-Value MLIRGenerator::lowerGenericMatmul(Value input, Value weight,
-                                        Value output) {
+Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
   // Matmul as a linalg.generic
-  auto map1 = getMap(input, MAP_MATMUL_INPUT);   // { 0, 2 }
-  auto map2 = getMap(weight, MAP_MATMUL_WEIGHT); // { 2, 1 }
-  auto map3 = getMap(output, MAP_MATMUL_OUTPUT); // { 0, 1 }
-  auto matmul =
-      linalg::GenericOp::create(builder, 
-              loc, output.getType(), ValueRange{input, weight},
-              ValueRange{output}, ArrayRef<AffineMap>{map1, map2, map3},
-              getIterators(MAP_MATMUL),
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange blockArgs) {
-                auto arg0 = blockArgs[0];
-                auto arg1 = blockArgs[1];
-                auto arg2 = blockArgs[2];
-                // If input and output type differs, up cast input to output
-                // type using arith.extf/arith.extsi.
-                Type inputElementType =
-                    cast<ShapedType>(input.getType()).getElementType();
-                Type weightElementType =
-                    cast<ShapedType>(weight.getType()).getElementType();
-                Type outputElementType =
-                    cast<ShapedType>(output.getType()).getElementType();
-                if (inputElementType != outputElementType) {
-                  if (inputElementType.isFloat()) {
-                    arg0 = arith::ExtFOp::create(builder, 
-                        loc, outputElementType, arg0);
-                  } else {
-                    arg0 = arith::ExtSIOp::create(nestedBuilder, 
-                        loc, outputElementType, arg0);
-                  }
-                }
+  auto map1 = getMap(chain, MAP_MATMUL_INPUT);   // { 0, 2 }
+  auto map2 = getMap(args.weight.value, MAP_MATMUL_WEIGHT); // { 2, 1 }
+  auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT); // { 0, 1 }
+  return linalg::GenericOp::create(
+             builder, loc, args.accumulator.value.getType(),
+             ValueRange{chain, args.weight.value},
+             ValueRange{args.accumulator.value},
+             ArrayRef<AffineMap>{map1, map2, map3}, getIterators(MAP_MATMUL),
+             [&](OpBuilder &nestedBuilder, Location nestedLoc,
+                 ValueRange blockArgs) {
+               auto arg0 = blockArgs[0];
+               auto arg1 = blockArgs[1];
+               auto arg2 = blockArgs[2];
+               // If input and output type differs, up cast input to output
+               // type using arith.extf/arith.extsi.
+               Type inputElementType =
+                   cast<ShapedType>(chain.getType()).getElementType();
+               Type weightElementType =
+                   cast<ShapedType>(args.weight.value.getType())
+                       .getElementType();
+               Type outputElementType =
+                   cast<ShapedType>(args.accumulator.value.getType())
+                       .getElementType();
+               if (inputElementType != outputElementType) {
+                 if (inputElementType.isFloat()) {
+                   arg0 = arith::ExtFOp::create(nestedBuilder, nestedLoc,
+                                                outputElementType, arg0);
+                 } else {
+                   arg0 = arith::ExtSIOp::create(nestedBuilder, nestedLoc,
+                                                 outputElementType, arg0);
+                 }
+               }
 
-                if (weightElementType != outputElementType) {
-                  if (weightElementType.isFloat()) {
-                    arg1 = arith::ExtFOp::create(builder, 
-                        loc, outputElementType, arg1);
-                  } else {
-                    arg1 = arith::ExtSIOp::create(nestedBuilder, 
-                        loc, outputElementType, arg1);
-                  }
-                }
+               if (weightElementType != outputElementType) {
+                 if (weightElementType.isFloat()) {
+                   arg1 = arith::ExtFOp::create(nestedBuilder, nestedLoc,
+                                                outputElementType, arg1);
+                 } else {
+                   arg1 = arith::ExtSIOp::create(nestedBuilder, nestedLoc,
+                                                 outputElementType, arg1);
+                 }
+               }
 
-                auto *mul =
-                    outputElementType.isFloat()
-                        ? arith::MulFOp::create(nestedBuilder, loc, arg0, arg1)
-                        : arith::MulIOp::create(nestedBuilder, loc, arg0, arg1);
-                auto *add = outputElementType.isFloat()
-                                ? arith::AddFOp::create(nestedBuilder, 
-                                      loc, arg2, mul->getResult(0))
-                                : arith::AddIOp::create(nestedBuilder, 
-                                      loc, arg2, mul->getResult(0));
-                linalg::YieldOp::create(nestedBuilder, 
-                    loc, ValueRange{add->getResults()});
-              })
-          .getResult(0);
-
-  return matmul;
+               auto *mul = outputElementType.isFloat()
+                               ? arith::MulFOp::create(nestedBuilder, nestedLoc,
+                                                       arg0, arg1)
+                               : arith::MulIOp::create(nestedBuilder, nestedLoc,
+                                                       arg0, arg1);
+               auto *add = outputElementType.isFloat()
+                               ? arith::AddFOp::create(nestedBuilder, nestedLoc,
+                                                       arg2, mul->getResult(0))
+                               : arith::AddIOp::create(nestedBuilder, nestedLoc,
+                                                       arg2, mul->getResult(0));
+               linalg::YieldOp::create(nestedBuilder, nestedLoc,
+                                       ValueRange{add->getResults()});
+             })
+      .getResult(0);
 }
 
-Value MLIRGenerator::lowerContract(Value input, Value weight, Value output) {
+Value MLIRGenerator::lowerContract(LayerArgs &args, Value chain) {
   // Matmul as a linalg.contract
   SmallVector<Attribute> maps;
-  maps.push_back(AffineMapAttr::get(getMap(input, MAP_MATMUL_INPUT)));   // { 0, 2 }
-  maps.push_back(AffineMapAttr::get(getMap(weight, MAP_MATMUL_WEIGHT))); // { 2, 1 }
-  maps.push_back(AffineMapAttr::get(getMap(output, MAP_MATMUL_OUTPUT))); // { 0, 1 }
-  auto contract = linalg::ContractOp::create(builder, 
-                          loc, output.getType(), ValueRange{input, weight}, ValueRange{output},
-                          builder.getArrayAttr(maps))
-                      .getResult(0);
+  maps.push_back(AffineMapAttr::get(getMap(chain, MAP_MATMUL_INPUT)));   // { 0, 2 }
+  maps.push_back(AffineMapAttr::get(getMap(args.weight.value, MAP_MATMUL_WEIGHT))); // { 2, 1 }
+  maps.push_back(AffineMapAttr::get(getMap(args.accumulator.value, MAP_MATMUL_OUTPUT))); // { 0, 1 }
+  return linalg::ContractOp::create(
+             builder, loc, args.accumulator.value.getType(),
+             ValueRange{chain, args.weight.value},
+             ValueRange{args.accumulator.value}, builder.getArrayAttr(maps))
+      .getResult(0);
+}
 
-  return contract;
+Value MLIRGenerator::lowerNamedMatmul(LayerArgs &args, Value chain) {
+  // VNNI produces mixed shape args, say 4D input and 5D weight. All
+  // linalg named ops for matrix multiplication expects arguments of same
+  // number of dimensions. Hence, such matmul patterns are not compatible to be
+  // matched using named ops.
+  auto inputShape = cast<ShapedType>(chain.getType());
+  assert((vnniFactor != 0 || inputShape.getRank() == 2) &&
+         "Unsupported Lowering for VNNI/input rank > 2. "
+         "Try 'generic' or 'contract' lowering");
+
+  return linalg::MatmulOp::create(builder, loc,
+                                  TypeRange{args.accumulator.value.getType()},
+                                  ValueRange{chain, args.weight.value},
+                                  ValueRange{args.accumulator.value})
+      .getResult(0);
 }
 
 SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
@@ -844,8 +871,8 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
   return scalingFactors;
 }
 
-Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain,
-                                  Value scaleFactor) {
+Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {
+  Value scaleFactor = computeScalingFactor(chain)[0];
   Value input = args.input.value;
   Value weight = args.weight.value;
   Type outputType = quantType == QuantizationType::QuantDequant
@@ -906,12 +933,12 @@ Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
   // resultant scaleand then multiply the result with the contract output.
   auto inputScaleTy = cast<ShapedType>(inputScale.getType());
   assert(inputScaleTy.getRank() == 1 && "Input scale must be a vector");
-  assert(inputScaleTy.getElementType() == dataTypes[2] &&
+  assert(inputScaleTy.getElementType() == dataTypes.inputScale &&
          "Input scale must be of scale type");
 
   auto weightScaleTy = cast<ShapedType>(weightScale.getType());
   assert(weightScaleTy.getRank() == 1 && "Weight scale must be a vector");
-  assert(weightScaleTy.getElementType() == dataTypes[2] &&
+  assert(weightScaleTy.getElementType() == dataTypes.weightScale &&
          "Weight scale must be of scale type");
 
   // Create a 2-D ouput scale shape using input and weight scales
@@ -1004,8 +1031,9 @@ Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
             // float scales before computing the resultant scale by
             // multiplying the two scales.
             auto floatTy = builder.getF32Type();
-            bool isNarrowFloatType = dataTypes[2].isFloat() &&
-                                     dataTypes[2].getIntOrFloatBitWidth() < 32;
+            bool isNarrowFloatType =
+                dataTypes.inputScale.isFloat() &&
+                dataTypes.inputScale.getIntOrFloatBitWidth() < 32;
             arith::FastMathFlags fmf = isNarrowFloatType
                                            ? arith::FastMathFlags::nnan
                                            : arith::FastMathFlags::none;
@@ -1032,16 +1060,16 @@ Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
   return result;
 }
 
-Value MLIRGenerator::lowerBiasAdd(Value input, Value bias, Value output) {
+Value MLIRGenerator::lowerBiasAdd(LayerArgs &args, Value chain) {
   if (!enableBias)
-    return input;
+    return chain;
 
-  auto outTy = cast<ShapedType>(input.getType());
-  auto mapA = getMap(input, MAP_BROADCAST);
-  auto mapB = getMap(input, MAP_PARALLEL);
+  auto outTy = cast<ShapedType>(chain.getType());
+  auto mapA = getMap(chain, MAP_BROADCAST);
+  auto mapB = getMap(chain, MAP_PARALLEL);
   auto sum =
       linalg::GenericOp::create(builder, 
-              loc, outTy, ValueRange{bias}, ValueRange{input},
+              loc, outTy, ValueRange{args.bias.value}, ValueRange{chain},
               ArrayRef<AffineMap>{mapA, mapB}, getIterators(MAP_PARALLEL),
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
@@ -1056,12 +1084,12 @@ Value MLIRGenerator::lowerBiasAdd(Value input, Value bias, Value output) {
   return sum;
 }
 
-Value MLIRGenerator::lowerNamedBiasAdd(Value input, Value bias, Value output) {
+Value MLIRGenerator::lowerNamedBiasAdd(LayerArgs &args, Value chain) {
   if (!enableBias)
-    return input;
+    return chain;
 
-  auto outTy = cast<ShapedType>(input.getType());
-  auto biasTy = cast<ShapedType>(bias.getType());
+  auto outTy = cast<ShapedType>(chain.getType());
+  auto biasTy = cast<ShapedType>(args.bias.value.getType());
   Value emptyTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
   SmallVector<int64_t> addedDimensions;
   SmallVector<bool> dimsNeeded =
@@ -1072,10 +1100,10 @@ Value MLIRGenerator::lowerNamedBiasAdd(Value input, Value bias, Value output) {
   }
 
   Value broadcast =
-      linalg::BroadcastOp::create(builder, loc, bias, emptyTensor, addedDimensions)
+      linalg::BroadcastOp::create(builder, loc, args.bias.value, emptyTensor, addedDimensions)
           .getResult()[0];
-  Value biasAdd = linalg::AddOp::create(builder, loc, TypeRange{output.getType()},
-                                             ValueRange{broadcast, input},
+  Value biasAdd = linalg::AddOp::create(builder, loc, TypeRange{args.output.value.getType()},
+                                             ValueRange{broadcast, chain},
                                              ValueRange{emptyTensor})
                       .getResult(0);
 
@@ -1083,34 +1111,36 @@ Value MLIRGenerator::lowerNamedBiasAdd(Value input, Value bias, Value output) {
   return biasAdd;
 }
 
-Value MLIRGenerator::lowerNamedRelu(Value input, Value output) {
+Value MLIRGenerator::lowerNamedRelu(LayerArgs &args, Value chain) {
   if (!enableRelu)
-    return input;
+    return chain;
 
-  auto outTy = cast<ShapedType>(input.getType());
+  auto outTy = cast<ShapedType>(chain.getType());
   auto zero =
       getConstFloat(builder, 0.0, cast<FloatType>(outTy.getElementType()));
   Value emptyTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
   auto fill =
       linalg::FillOp::create(builder, loc, zero, emptyTensor)->getResult(0);
-  Value relu = linalg::MaxOp::create(builder, loc, TypeRange{output.getType()},
-                                 ValueRange{input, fill}, ValueRange{emptyTensor})
+  Value relu = linalg::MaxOp::create(builder, loc, TypeRange{args.output.value.getType()},
+                                 ValueRange{chain, fill}, ValueRange{emptyTensor})
           .getResult(0);
 
   computeBiasOrReluFlops(outTy);
   return relu;
 }
 
-Value MLIRGenerator::lowerRelu(Value input, Value output) {
+Value MLIRGenerator::lowerRelu(LayerArgs &args, Value chain) {
   if (!enableRelu)
-    return input;
+    return chain;
 
-  auto zero = getConstFloat(builder, 0.0, cast<FloatType>(dataTypes[0]));
-  auto outTy = cast<ShapedType>(input.getType());
-  auto map = getMap(input, MAP_PARALLEL);
+  auto zero = getConstFloat(
+      builder, 0.0,
+      cast<FloatType>(cast<ShapedType>(chain.getType()).getElementType()));
+  auto outTy = cast<ShapedType>(chain.getType());
+  auto map = getMap(chain, MAP_PARALLEL);
   auto relu =
       linalg::GenericOp::create(builder, 
-              loc, outTy, ValueRange{}, ValueRange{input},
+              loc, outTy, ValueRange{}, ValueRange{chain},
               ArrayRef<AffineMap>{map}, getIterators(MAP_PARALLEL),
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
@@ -1125,37 +1155,20 @@ Value MLIRGenerator::lowerRelu(Value input, Value output) {
   return relu;
 }
 
-Value MLIRGenerator::lowerNamedSoftmax(Value input, Value output) {
+Value MLIRGenerator::lowerSoftmax(LayerArgs &args, Value chain) {
   if (!enableSoftmax)
-    return input;
+    return chain;
 
-  // TODO: Add lowering of softmax to sequence of named Ops
-  llvm_unreachable("Linalg named ops for softmax not implemented yet");
-  
-  auto outTy = cast<ShapedType>(input.getType());
-  // Softmax flops = 4 * M * N = 4 * prod(outputDims)
-  int64_t softmaxFlops = 1;
-  for (int i = 0, max = outTy.getRank(); i < max; i++)
-    softmaxFlops *= outTy.getDimSize(i);
-  flops += 4 * softmaxFlops;
-
-  return input;
-}
-
-Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
-  if (!enableSoftmax)
-    return input;
-
-  assert(cast<ShapedType>(input.getType()).getRank() == 2 &&
+  assert(cast<ShapedType>(chain.getType()).getRank() == 2 &&
          "Packed softmax not implemented yet");
-  auto map1 = getMap(input, MAP_PARALLEL);
-  auto map2 = getMap(input, MAP_REDUCTION);
-  auto outTy = cast<ShapedType>(input.getType());
+  auto map1 = getMap(chain, MAP_PARALLEL);
+  auto map2 = getMap(chain, MAP_REDUCTION);
+  auto outTy = cast<ShapedType>(chain.getType());
 
   // First, we calculate the element-wise exp
   Value expTensor = tensor::EmptyOp::create(builder, loc, outTy, ValueRange{});
   auto exp = linalg::GenericOp::create(builder, 
-      loc, outTy, ValueRange{input}, ValueRange{expTensor},
+      loc, outTy, ValueRange{chain}, ValueRange{expTensor},
       ArrayRef<AffineMap>{map1, map1}, getIterators(MAP_PARALLEL),
       [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange blockArgs) {
         auto arg0 = blockArgs[0];
@@ -1168,7 +1181,7 @@ Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
   auto redTy = getShape(dims, PACK_OUTPUT);
   Value redTensor =
       tensor::EmptyOp::create(builder, loc, dims, outTy.getElementType());
-  auto zero = getConstFloat(builder, 0.0, cast<FloatType>(dataTypes[0]));
+  auto zero = getConstFloat(builder, 0.0, cast<FloatType>(dataTypes.input));
   auto fill = linalg::FillOp::create(builder, loc, zero, redTensor);
   auto redux = linalg::GenericOp::create(builder, 
       loc, redTy, ValueRange{exp.getResult(0)}, ValueRange{fill.getResult(0)},
@@ -1193,7 +1206,7 @@ Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
   auto softmax =
       linalg::GenericOp::create(builder, 
               loc, outTy, ValueRange{exp.getResult(0), mean.getResult(0)},
-              ValueRange{output}, ArrayRef<AffineMap>{map1, map1, map1},
+              ValueRange{args.output.value}, ArrayRef<AffineMap>{map1, map1, map1},
               getIterators(MAP_PARALLEL),
               [&](OpBuilder &nestedBuilder, Location nestedLoc,
                   ValueRange blockArgs) {
@@ -1216,23 +1229,27 @@ Value MLIRGenerator::lowerSoftmax(Value input, Value output) {
 TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   // Already packed type, just return ND tensor
   if (dims.size() > 2)
-    return RankedTensorType::get(dims, type == PACK_OUTPUT ? dataTypes[1]
-                                                           : dataTypes[0]);
+    return RankedTensorType::get(dims, type == PACK_OUTPUT ? dataTypes.output
+                                                           : dataTypes.input);
 
   if (!tiles.size()) {
     if (quantType != QuantizationType::None) {
       if (type == INPUT_SCALE || type == WEIGHT_SCALE) {
-        return RankedTensorType::get(dims, dataTypes[2]);
+        return RankedTensorType::get(dims, type == INPUT_SCALE
+                                               ? dataTypes.inputScale
+                                               : dataTypes.weightScale);
       } else if (type == PACK_OUTPUT) {
-        return RankedTensorType::get(dims, dataTypes[1]);
+        return RankedTensorType::get(dims, dataTypes.output);
+      } else if (type == PACK_ACCUMULATOR) {
+        return RankedTensorType::get(dims, dataTypes.accumulator);
       } else if (type == PACK_INPUT) {
-        return RankedTensorType::get(dims, dataTypes[0]);
+        return RankedTensorType::get(dims, dataTypes.input);
       } else if (type == PACK_INTERMEDIATE) {
-        return RankedTensorType::get(dims, dataTypes[1]);
+        return RankedTensorType::get(dims, dataTypes.output);
       }
     }
     // Unpacked type, just return 2D tensor
-    return RankedTensorType::get(dims, dataTypes[0]);
+    return RankedTensorType::get(dims, dataTypes.input);
   }
 
   // Packed types block by tile size
@@ -1249,7 +1266,7 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
     assert(x % n == 0 && "Invalid tile size for N dim");
     assert(y % c == 0 && "Invalid tile size for C dim");
     // N x C -> BN x BC x bn x bc
-    return RankedTensorType::get({x / n, y / c, n, c}, dataTypes[0]);
+    return RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
   case PACK_WEIGHT:
     // VNNI packing can be done via tpp-opt --vnni-pack
     assert(x % k == 0 && "Invalid tile size for K dim");
@@ -1258,24 +1275,34 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
     // VNNI: C x K -> BK x BC x bc/vnni x bk x vnni
     if (vnniFactor != 0)
       return RankedTensorType::get(
-          {y / k, x / c, c / vnniFactor, k, vnniFactor}, dataTypes[0]);
+          {y / k, x / c, c / vnniFactor, k, vnniFactor}, dataTypes.input);
 
     // C x K -> BK x BC x bc x bk
-    return RankedTensorType::get({y / k, x / c, c, k}, dataTypes[0]);
+    return RankedTensorType::get({y / k, x / c, c, k}, dataTypes.input);
   case PACK_OUTPUT:
     assert(x % n == 0 && "Invalid tile size for N dim");
 
     // Broadcast 1D -> 2D is Bk x bk only
     if (!y)
-      return RankedTensorType::get({x / k, k}, dataTypes[1]);
+      return RankedTensorType::get({x / k, k}, dataTypes.output);
 
     // N x K -> BN x BK x bn x bk
     assert(y % k == 0 && "Invalid tile size for K dim");
-    return RankedTensorType::get({x / n, y / k, n, k}, dataTypes[1]);
+    return RankedTensorType::get({x / n, y / k, n, k}, dataTypes.output);
+  case PACK_ACCUMULATOR:
+    assert(x % n == 0 && "Invalid tile size for N dim");
+
+    // Broadcast 1D -> 2D is Bk x bk only
+    if (!y)
+      return RankedTensorType::get({x / k, k}, dataTypes.accumulator);
+
+    // N x K -> BN x BK x bn x bk
+    assert(y % k == 0 && "Invalid tile size for K dim");
+    return RankedTensorType::get({x / n, y / k, n, k}, dataTypes.accumulator);
   case INPUT_SCALE:
-    return RankedTensorType::get({dims[0]}, dataTypes[2]);
+    return RankedTensorType::get({dims[0]}, dataTypes.inputScale);
   case WEIGHT_SCALE:
-    return RankedTensorType::get({dims[0]}, dataTypes[2]);
+    return RankedTensorType::get({dims[0]}, dataTypes.weightScale);
   case PACK_INTERMEDIATE:
     llvm_unreachable("Unknown intermediate packing type");
   }

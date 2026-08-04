@@ -1,64 +1,126 @@
 [
   {
-  "gemm_fp32_torch_vector_kernel" : {
+  "gemm_fp32_torch_vector_kernel_avx2" : {
     "fp32_3x1024_omp_2_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     }
   }},
   {
-  "mlp_fp32_torch_vector_kernel" : {
+  "mlp_fp32_torch_vector_kernel_avx2" : {
     "fp32_3x1024_omp_2_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_4_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_8_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
     },
     "fp32_3x1024_omp_16_mlir": {
       "type": "MLIR",
       "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
       "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --vector-to-kernels --registerBlocking=8,32,1 '" ],
-      "extensions": [ ]
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx2.*" ]
+    }
+  }},
+  {
+  "gemm_fp32_torch_vector_kernel_avx512" : {
+    "fp32_3x1024_omp_2_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_4_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_8_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_16_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-gemm-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    }
+  }},
+  {
+  "mlp_fp32_torch_vector_kernel_avx512" : {
+    "fp32_3x1024_omp_2_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "2", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,16  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_4_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "4", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=8,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_8_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=4,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
+    },
+    "fp32_3x1024_omp_16_mlir": {
+      "type": "MLIR",
+      "benchmark": "pytorch/torch-dynamo-mlp-fp32-3x1024.mlir",
+      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
+      "flags": [ "-n", "100", "-run-args='--def-parallel --parallel-task-grid=2,8  --nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,1 '" ],
+      "extensions": [ "avx512.*" ]
     }
   }}
 ]

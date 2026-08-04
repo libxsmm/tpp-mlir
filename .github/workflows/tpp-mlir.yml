@@ -2,6 +2,11 @@ name: TPP-MLIR Base Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      RUN_AVX2:
+        description: "Run AVX2 specific CI"
+        type: boolean
+        default: false
   push:
   pull_request:
 
@@ -56,6 +61,10 @@ jobs:
 
   TPP-MLIR-avx2:
     runs-on: pcl-tiergarten
+    if: |
+      (github.event_name == 'push') || 
+      (github.event_name == 'workflow_dispatch' && inputs.RUN_AVX2) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'avx2'))
     needs: Check_LLVM
     steps:
       - uses: actions/checkout@v4
