@@ -46,6 +46,15 @@ void parseStringList(StringRef str, SmallVector<int64_t> &list) {
 }
 
 /// Returns the vector of boolean for the required broadcast dimensions
+// Swap outer/inner tile pairs of a packed 4D type: [a,b,c,d] -> [b,a,d,c].
+static TensorType transposePackedType(TensorType type) {
+  auto rt = cast<RankedTensorType>(type);
+  auto shape = rt.getShape();
+  assert(shape.size() == 4 && "Expected a packed 4D type");
+  return RankedTensorType::get({shape[1], shape[0], shape[3], shape[2]},
+                              rt.getElementType());
+}
+
 static SmallVector<bool> getBroadcastDims(ArrayRef<int64_t> sourceShape,
                                           ArrayRef<int64_t> targetShape) {
   SmallVector<bool> broadcastDims;
@@ -354,6 +363,12 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     } else {
       arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
       arg.accumulator.type = getShape({batch, outputSize}, PACK_ACCUMULATOR);
+      // Plain transposed-A GEMMs feed every layer a transposed input, so each
+      // producing layer (except the last) stores its output transposed.
+      if (transposeA && vnniFactor == 0 && i != max - 1) {
+        arg.output.type = transposePackedType(arg.output.type);
+        arg.accumulator.type = transposePackedType(arg.accumulator.type);
+      }
     }
     args.push_back(arg);
 
@@ -622,9 +637,19 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
 
-  // Only the first layer reads the external, transposed A argument. Later
-  // layers consume normal-layout activations produced by the previous layer.
-  transposeActiveInput = transposeA && (args.index == 1);
+  // Every layer reads a transposed A. For the plain GEMM each producing layer
+  // (except the last) stores its output transposed so the next layer can read
+  // it as a transposed input. VNNI transposed A uses a pre-packed 5D argument
+  // that is not reachable by reshaping an activation, so only the first layer
+  // reads a transposed input there.
+  bool isLastMatmul = args.index == layers.size() - 1;
+  if (vnniPacked) {
+    transposeActiveInput = transposeA && (args.index == 1);
+    transposeActiveOutput = false;
+  } else {
+    transposeActiveInput = transposeA;
+    transposeActiveOutput = transposeA && !isLastMatmul;
+  }
 
   // Select the matmul accumulator tensor.
   if (quantType == QuantizationType::Quant) {
@@ -1383,8 +1408,9 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
     break;
   case MAP_BROADCAST:
     // Broadcast from ND to (N+1)D is (0, 1) -> (1)
-    // Packed broadcast (BN, bn) is (0, 1, 2, 3) -> (1, 3)
-    for (unsigned i = 1; i < n; i+=2)
+    // Packed broadcast (BN, bn) is (0, 1, 2, 3) -> (1, 3). A transposed output
+    // swaps the N and K tile pairs, so the bias (per-K) indexes even dims.
+    for (unsigned i = transposeActiveOutput ? 0 : 1; i < n; i += 2)
       pushDim(i, iter);
     break;
   case MAP_MATMUL_INPUT:
@@ -1426,7 +1452,9 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
       n += 1;
       getDims({0, 1, 4, 5});
     } else if (packed)
-      getDims({0, 1, 3, 4});
+      // Transposed output swaps the N and K tile pairs.
+      getDims(transposeActiveOutput ? ArrayRef<int64_t>{1, 0, 4, 3}
+                                    : ArrayRef<int64_t>{0, 1, 3, 4});
     else
       getDims({0, 1});
     break;

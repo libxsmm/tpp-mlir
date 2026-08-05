@@ -124,6 +124,10 @@ class MLIRGenerator {
   /// activations are produced in normal layout.
   bool transposeActiveInput = false;
 
+  /// Whether the current layer stores its output transposed so the next layer
+  /// can read it as a transposed A operand (plain multi-layer transpose-A).
+  bool transposeActiveOutput = false;
+
   // ============================ Helpers
 
   /// Return current random seed, update next
