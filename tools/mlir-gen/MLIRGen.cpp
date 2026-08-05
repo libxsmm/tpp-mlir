@@ -355,6 +355,20 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     // type AND we want to propagate the truncation through the element-wise ops.
     arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
 
+    // Every layer reads a transposed A. For the plain GEMM each producing layer
+    // (except the last) stores its output transposed so the next layer can read
+    // it as a transposed input. VNNI transposed A uses a pre-packed 5D argument
+    // that is not reachable by reshaping an activation, so only the first layer
+    // reads a transposed input there.
+    bool isLast = (i == max - 1);
+    if (vnniPacked) {
+      arg.transposeInput = transposeA && (i == 1);
+      arg.transposeOutput = false;
+    } else {
+      arg.transposeInput = transposeA;
+      arg.transposeOutput = transposeA && !isLast;
+    }
+
     // For QuantDequant, such as F32->i8->F32, we need an intermediate type to
     // hold the quantized value.
     if (quantType == QuantizationType::QuantDequant) {
@@ -363,9 +377,8 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     } else {
       arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
       arg.accumulator.type = getShape({batch, outputSize}, PACK_ACCUMULATOR);
-      // Plain transposed-A GEMMs feed every layer a transposed input, so each
-      // producing layer (except the last) stores its output transposed.
-      if (transposeA && vnniFactor == 0 && i != max - 1) {
+      // A transposed output stores its tile pairs swapped.
+      if (arg.transposeOutput) {
         arg.output.type = transposePackedType(arg.output.type);
         arg.accumulator.type = transposePackedType(arg.accumulator.type);
       }
@@ -637,20 +650,6 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
 
-  // Every layer reads a transposed A. For the plain GEMM each producing layer
-  // (except the last) stores its output transposed so the next layer can read
-  // it as a transposed input. VNNI transposed A uses a pre-packed 5D argument
-  // that is not reachable by reshaping an activation, so only the first layer
-  // reads a transposed input there.
-  bool isLastMatmul = args.index == layers.size() - 1;
-  if (vnniPacked) {
-    transposeActiveInput = transposeA && (args.index == 1);
-    transposeActiveOutput = false;
-  } else {
-    transposeActiveInput = transposeA;
-    transposeActiveOutput = transposeA && !isLastMatmul;
-  }
-
   // Select the matmul accumulator tensor.
   if (quantType == QuantizationType::Quant) {
     // Quantization casts the result later; accumulate in the input type.
@@ -669,7 +668,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (vnniPacked && !transposeActiveInput) {
+  if (vnniPacked && !args.transposeInput) {
     SmallVector<int64_t> vnniShape{inputType.getShape()};
     vnniShape.back() = vnniShape.back() / vnniFactor;
     vnniShape.push_back(vnniFactor);
@@ -712,9 +711,10 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
 
 Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
   // Matmul as a linalg.generic
-  auto map1 = getMap(chain, MAP_MATMUL_INPUT);   // { 0, 2 }
+  auto map1 = getMap(chain, MAP_MATMUL_INPUT, args.transposeInput);   // { 0, 2 }
   auto map2 = getMap(args.weight.value, MAP_MATMUL_WEIGHT); // { 2, 1 }
-  auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT); // { 0, 1 }
+  auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT,
+                     args.transposeOutput); // { 0, 1 }
   return linalg::GenericOp::create(
              builder, loc, args.accumulator.value.getType(),
              ValueRange{chain, args.weight.value},
@@ -774,9 +774,11 @@ Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
 Value MLIRGenerator::lowerContract(LayerArgs &args, Value chain) {
   // Matmul as a linalg.contract
   SmallVector<Attribute> maps;
-  maps.push_back(AffineMapAttr::get(getMap(chain, MAP_MATMUL_INPUT)));   // { 0, 2 }
+  maps.push_back(AffineMapAttr::get(
+      getMap(chain, MAP_MATMUL_INPUT, args.transposeInput)));   // { 0, 2 }
   maps.push_back(AffineMapAttr::get(getMap(args.weight.value, MAP_MATMUL_WEIGHT))); // { 2, 1 }
-  maps.push_back(AffineMapAttr::get(getMap(args.accumulator.value, MAP_MATMUL_OUTPUT))); // { 0, 1 }
+  maps.push_back(AffineMapAttr::get(getMap(
+      args.accumulator.value, MAP_MATMUL_OUTPUT, args.transposeOutput))); // { 0, 1 }
   return linalg::ContractOp::create(
              builder, loc, args.accumulator.value.getType(),
              ValueRange{chain, args.weight.value},
@@ -929,9 +931,11 @@ Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {
   auto castedOutput =
       tensor::EmptyOp::create(builder, loc, outputShapedTy, ValueRange{});
   SmallVector<Attribute> maps;
-  maps.push_back(AffineMapAttr::get(getMap(input, MAP_MATMUL_INPUT)));
+  maps.push_back(AffineMapAttr::get(
+      getMap(input, MAP_MATMUL_INPUT, args.transposeInput)));
   maps.push_back(AffineMapAttr::get(getMap(weight, MAP_MATMUL_WEIGHT)));
-  maps.push_back(AffineMapAttr::get(getMap(castedOutput, MAP_MATMUL_OUTPUT)));
+  maps.push_back(AffineMapAttr::get(
+      getMap(castedOutput, MAP_MATMUL_OUTPUT, args.transposeOutput)));
   auto dquantVal = getZeroInitTensor(contractOutputTy);
 
   auto dquantRes = linalg::MulOp::create(builder, loc, chain.getType(),
@@ -1104,7 +1108,7 @@ Value MLIRGenerator::lowerBiasAdd(LayerArgs &args, Value chain) {
     return chain;
 
   auto outTy = cast<ShapedType>(chain.getType());
-  auto mapA = getMap(chain, MAP_BROADCAST);
+  auto mapA = getMap(chain, MAP_BROADCAST, args.transposeOutput);
   auto mapB = getMap(chain, MAP_PARALLEL);
   auto sum =
       linalg::GenericOp::create(builder, 
@@ -1367,7 +1371,7 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   llvm_unreachable("Unknown packing type");
 }
 
-AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
+AffineMap MLIRGenerator::getMap(Value tensor, MapType type, bool transpose) {
   auto n = cast<ShapedType>(tensor.getType()).getRank();
   // Packed tensors are either 4 or 5 dim, map needs to be 6 or 7
   bool packed = (n > 2);
@@ -1410,7 +1414,7 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
     // Broadcast from ND to (N+1)D is (0, 1) -> (1)
     // Packed broadcast (BN, bn) is (0, 1, 2, 3) -> (1, 3). A transposed output
     // swaps the N and K tile pairs, so the bias (per-K) indexes even dims.
-    for (unsigned i = transposeActiveOutput ? 0 : 1; i < n; i += 2)
+    for (unsigned i = transpose ? 0 : 1; i < n; i += 2)
       pushDim(i, iter);
     break;
   case MAP_MATMUL_INPUT:
@@ -1420,15 +1424,15 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
       // Extra VNNI packing reduction dim
       n += 1;
       // Transposed VNNI A swaps the N and C tile pairs (vnni stays innermost).
-      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0, 6, 4, 3}
-                                   : ArrayRef<int64_t>{0, 2, 4, 6, 3});
+      getDims(transpose ? ArrayRef<int64_t>{2, 0, 6, 4, 3}
+                        : ArrayRef<int64_t>{0, 2, 4, 6, 3});
     } else if (packed)
       // Transposed A layout swaps N and C tile pairs.
-      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0, 5, 3}
-                                   : ArrayRef<int64_t>{0, 2, 3, 5});
+      getDims(transpose ? ArrayRef<int64_t>{2, 0, 5, 3}
+                        : ArrayRef<int64_t>{0, 2, 3, 5});
     else
-      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0}
-                                   : ArrayRef<int64_t>{0, 2});
+      getDims(transpose ? ArrayRef<int64_t>{2, 0}
+                        : ArrayRef<int64_t>{0, 2});
     break;
   case MAP_MATMUL_WEIGHT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)
@@ -1453,8 +1457,8 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
       getDims({0, 1, 4, 5});
     } else if (packed)
       // Transposed output swaps the N and K tile pairs.
-      getDims(transposeActiveOutput ? ArrayRef<int64_t>{1, 0, 4, 3}
-                                    : ArrayRef<int64_t>{0, 1, 3, 4});
+      getDims(transpose ? ArrayRef<int64_t>{1, 0, 4, 3}
+                        : ArrayRef<int64_t>{0, 1, 3, 4});
     else
       getDims({0, 1});
     break;

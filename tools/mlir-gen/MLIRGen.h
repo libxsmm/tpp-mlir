@@ -119,15 +119,6 @@ class MLIRGenerator {
   /// Store the B (weight) operand transposed
   bool transposeB;
 
-  /// Whether the current layer's input operand is stored transposed. Only the
-  /// first layer consumes the external (transposed) A argument; intermediate
-  /// activations are produced in normal layout.
-  bool transposeActiveInput = false;
-
-  /// Whether the current layer stores its output transposed so the next layer
-  /// can read it as a transposed A operand (plain multi-layer transpose-A).
-  bool transposeActiveOutput = false;
-
   // ============================ Helpers
 
   /// Return current random seed, update next
@@ -193,13 +184,17 @@ class MLIRGenerator {
     Arg intermediate; // For quantdequant validation
     Arg output;
     Arg accumulator;
+    // Whether this layer reads its input / writes its output transposed.
+    bool transposeInput = false;
+    bool transposeOutput = false;
   };
 
   /// Return affine map (packed if requested)
   /// If order is not empty, re-order the dims in that order
   /// If dims is passed, force number of dims, otherwise, take from tensor
   /// If reduction is true, emit zeroExpr for the tail reduction
-  AffineMap getMap(Value, MapType);
+  /// If transpose is true, emit the transposed matmul input/output/broadcast map
+  AffineMap getMap(Value, MapType, bool transpose = false);
 
   /// Return the iterator types for a particular map type
   /// Add iterators if the types are packed
