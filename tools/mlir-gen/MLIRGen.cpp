@@ -296,12 +296,12 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   vnniPacked = tiles.size() > 0 && vnniFactor != 0;
 
   // Transposing the input (A) is supported for both the plain and the VNNI
-  // GEMM, but requires a single matmul so the layer chaining stays consistent.
+  // GEMM. Only the first layer consumes the external (transposed) A argument;
+  // intermediate activations are produced in normal layout, so multi-layer
+  // GEMMs are supported.
   // Transposing the weight (B) is only supported for the plain GEMM.
   assert(!(transposeB && vnniFactor != 0) &&
          "Transposing B is not supported with VNNI packing");
-  assert(!(transposeA && layers.size() != 2) &&
-         "Transposing A is only supported for a single matmul (2 layers)");
 
   // Initialize random seed, if needed
   if (seed) {
@@ -622,6 +622,10 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
 
+  // Only the first layer reads the external, transposed A argument. Later
+  // layers consume normal-layout activations produced by the previous layer.
+  transposeActiveInput = transposeA && (args.index == 1);
+
   // Select the matmul accumulator tensor.
   if (quantType == QuantizationType::Quant) {
     // Quantization casts the result later; accumulate in the input type.
@@ -640,7 +644,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (vnniPacked && !transposeA) {
+  if (vnniPacked && !transposeActiveInput) {
     SmallVector<int64_t> vnniShape{inputType.getShape()};
     vnniShape.back() = vnniShape.back() / vnniFactor;
     vnniShape.push_back(vnniFactor);
@@ -1390,14 +1394,15 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
       // Extra VNNI packing reduction dim
       n += 1;
       // Transposed VNNI A swaps the N and C tile pairs (vnni stays innermost).
-      getDims(transposeA ? ArrayRef<int64_t>{2, 0, 6, 4, 3}
-                         : ArrayRef<int64_t>{0, 2, 4, 6, 3});
+      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0, 6, 4, 3}
+                                   : ArrayRef<int64_t>{0, 2, 4, 6, 3});
     } else if (packed)
       // Transposed A layout swaps N and C tile pairs.
-      getDims(transposeA ? ArrayRef<int64_t>{2, 0, 5, 3}
-                         : ArrayRef<int64_t>{0, 2, 3, 5});
+      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0, 5, 3}
+                                   : ArrayRef<int64_t>{0, 2, 3, 5});
     else
-      getDims(transposeA ? ArrayRef<int64_t>{2, 0} : ArrayRef<int64_t>{0, 2});
+      getDims(transposeActiveInput ? ArrayRef<int64_t>{2, 0}
+                                   : ArrayRef<int64_t>{0, 2});
     break;
   case MAP_MATMUL_WEIGHT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)

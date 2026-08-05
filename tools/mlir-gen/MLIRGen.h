@@ -119,6 +119,11 @@ class MLIRGenerator {
   /// Store the B (weight) operand transposed
   bool transposeB;
 
+  /// Whether the current layer's input operand is stored transposed. Only the
+  /// first layer consumes the external (transposed) A argument; intermediate
+  /// activations are produced in normal layout.
+  bool transposeActiveInput = false;
+
   // ============================ Helpers
 
   /// Return current random seed, update next
