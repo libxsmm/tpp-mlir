@@ -122,6 +122,18 @@ llvm::cl::opt<int>
     vnni("vnni", llvm::cl::desc("VNNI packing factor (disabled if zero)"),
          llvm::cl::value_desc("0|2|4"), llvm::cl::init(0));
 
+// Transpose the A (input) operand layout
+llvm::cl::opt<bool>
+    transposeA("transpose-a",
+               llvm::cl::desc("Store the A (input) operand transposed"),
+               llvm::cl::value_desc("bool"), llvm::cl::init(false));
+
+// Transpose the B (weight) operand layout
+llvm::cl::opt<bool>
+    transposeB("transpose-b",
+               llvm::cl::desc("Store the B (weight) operand transposed"),
+               llvm::cl::value_desc("bool"), llvm::cl::init(false));
+
 int main(int argc, char **argv) {
   // Add the following to include *all* MLIR Core dialects, or selectively
   // include what you need like above. You only need to register dialects that
@@ -133,6 +145,6 @@ int main(int argc, char **argv) {
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, dataType,
                     scaleType, quantizationType, seed, identity, enableBias,
-                    enableRelu, enableSoftmax, vnni);
+                    enableRelu, enableSoftmax, vnni, transposeA, transposeB);
   return gen.generate(filename);
 }

@@ -113,6 +113,12 @@ class MLIRGenerator {
   /// Apply VNNI packing
   bool vnniPacked;
 
+  /// Store the A (input) operand transposed
+  bool transposeA;
+
+  /// Store the B (weight) operand transposed
+  bool transposeB;
+
   // ============================ Helpers
 
   /// Return current random seed, update next
@@ -270,7 +276,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, StringRef, int, bool, bool, bool, bool, int);
+                StringRef, StringRef, int, bool, bool, bool, bool, int, bool, bool);
 
   ~MLIRGenerator() { module->destroy(); }
 

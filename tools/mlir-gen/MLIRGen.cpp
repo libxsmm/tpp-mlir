@@ -161,11 +161,13 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              StringRef scaleType, StringRef quantizationTypeStr,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
-                             int vnniBlockingFactor)
+                             int vnniBlockingFactor, bool transposeA,
+                             bool transposeB)
     : builder(&context), loc(builder.getUnknownLoc()), batch(batch), seed(seed),
       identity(identity), flops(0), enableBias(enableBias),
       enableRelu(enableRelu), enableSoftmax(enableSoftmax),
-      vnniFactor(vnniBlockingFactor) {
+      vnniFactor(vnniBlockingFactor), transposeA(transposeA),
+      transposeB(transposeB) {
 
   // Register all necessary dialects
   context
@@ -292,6 +294,14 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
 
   // Use VNNI packed format if both tiles and VNNI factor are specified.
   vnniPacked = tiles.size() > 0 && vnniFactor != 0;
+
+  // Transposing the input (A) is supported for both the plain and the VNNI
+  // GEMM, but requires a single matmul so the layer chaining stays consistent.
+  // Transposing the weight (B) is only supported for the plain GEMM.
+  assert(!(transposeB && vnniFactor != 0) &&
+         "Transposing B is not supported with VNNI packing");
+  assert(!(transposeA && layers.size() != 2) &&
+         "Transposing A is only supported for a single matmul (2 layers)");
 
   // Initialize random seed, if needed
   if (seed) {
@@ -630,7 +640,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (vnniPacked) {
+  if (vnniPacked && !transposeA) {
     SmallVector<int64_t> vnniShape{inputType.getShape()};
     vnniShape.back() = vnniShape.back() / vnniFactor;
     vnniShape.push_back(vnniFactor);
@@ -1249,6 +1259,12 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
       }
     }
     // Unpacked type, just return 2D tensor
+    // Transposed A (N x C -> C x N) or B (C x K -> K x C) swaps the two dims.
+    if ((type == PACK_INPUT && transposeA) ||
+        (type == PACK_WEIGHT && transposeB)) {
+      assert(dims.size() == 2 && "Transpose requires a 2D operand");
+      return RankedTensorType::get({dims[1], dims[0]}, dataTypes.input);
+    }
     return RankedTensorType::get(dims, dataTypes.input);
   }
 
@@ -1265,6 +1281,14 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   case PACK_INPUT:
     assert(x % n == 0 && "Invalid tile size for N dim");
     assert(y % c == 0 && "Invalid tile size for C dim");
+    if (transposeA) {
+      // VNNI transposed A: C x N -> BC x BN x bc/vnni x bn x vnni
+      if (vnniFactor != 0)
+        return RankedTensorType::get(
+            {y / c, x / n, c / vnniFactor, n, vnniFactor}, dataTypes.input);
+      // Transposed A: C x N -> BC x BN x bc x bn
+      return RankedTensorType::get({y / c, x / n, c, n}, dataTypes.input);
+    }
     // N x C -> BN x BC x bn x bc
     return RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
   case PACK_WEIGHT:
@@ -1276,6 +1300,10 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
     if (vnniFactor != 0)
       return RankedTensorType::get(
           {y / k, x / c, c / vnniFactor, k, vnniFactor}, dataTypes.input);
+
+    // Transposed B: K x C -> BK x BC x bk x bc
+    if (transposeB)
+      return RankedTensorType::get({y / k, x / c, k, c}, dataTypes.input);
 
     // C x K -> BK x BC x bc x bk
     return RankedTensorType::get({y / k, x / c, c, k}, dataTypes.input);
@@ -1361,11 +1389,15 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
     if (vnniPacked) {
       // Extra VNNI packing reduction dim
       n += 1;
-      getDims({0, 2, 4, 6, 3});
+      // Transposed VNNI A swaps the N and C tile pairs (vnni stays innermost).
+      getDims(transposeA ? ArrayRef<int64_t>{2, 0, 6, 4, 3}
+                         : ArrayRef<int64_t>{0, 2, 4, 6, 3});
     } else if (packed)
-      getDims({0, 2, 3, 5});
+      // Transposed A layout swaps N and C tile pairs.
+      getDims(transposeA ? ArrayRef<int64_t>{2, 0, 5, 3}
+                         : ArrayRef<int64_t>{0, 2, 3, 5});
     else
-      getDims({0, 2});
+      getDims(transposeA ? ArrayRef<int64_t>{2, 0} : ArrayRef<int64_t>{0, 2});
     break;
   case MAP_MATMUL_WEIGHT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)
@@ -1375,9 +1407,11 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type) {
       n += 1;
       getDims({1, 2, 6, 5, 3});
     } else if (packed)
-      getDims({1, 2, 5, 4});
+      // Transposed B layout swaps the C and K inner tiles.
+      getDims(transposeB ? ArrayRef<int64_t>{1, 2, 4, 5}
+                         : ArrayRef<int64_t>{1, 2, 5, 4});
     else
-      getDims({2, 1});
+      getDims(transposeB ? ArrayRef<int64_t>{1, 2} : ArrayRef<int64_t>{2, 1});
     break;
   case MAP_MATMUL_OUTPUT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)

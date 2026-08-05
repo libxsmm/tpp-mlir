@@ -289,3 +289,169 @@
 // MXI8-I8SCALE-PACKED-DEQUANT:               arith.mulf
 // MXI8-I8SCALE-PACKED-DEQUANT:             linalg.yield
 // MXI8-I8SCALE-PACKED-DEQUANT:           } -> tensor<4x24x32x32xf32>
+
+
+// Transposed A/B operand layouts. The prefix encodes the layout: N = normal,
+// T = transposed; first letter is A, second is B (e.g. TN = A transposed, B
+// flat). Covers the four flat (packed, non-VNNI) combinations and the VNNI
+// (--transpose-a with --vnni) path for bf16, i8, bf8 and hf8.
+
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --tiles=32,32,32 --transpose-a=0 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=NN-BF16
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --tiles=32,32,32 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=TN-BF16
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --tiles=32,32,32 --transpose-a=0 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=NT-BF16
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --tiles=32,32,32 --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=TT-BF16
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=256 --layers=512,512 --tiles=32,32,64 --output=contract --transpose-a=0 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=NN-I8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=256 --layers=512,512 --tiles=32,32,64 --output=contract --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=TN-I8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=256 --layers=512,512 --tiles=32,32,64 --output=contract --transpose-a=0 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=NT-I8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=256 --layers=512,512 --tiles=32,32,64 --output=contract --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=TT-I8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=0 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=NN-BF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=TN-BF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=0 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=NT-BF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=TT-BF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=0 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=NN-HF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=TN-HF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=0 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=NT-HF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=TT-HF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --tiles=32,32,32 --vnni=2 --transpose-a=1 2>&1 | FileCheck %s --check-prefix=TA-VNNI-BF16
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=256 --layers=512,512 --tiles=32,32,64 --output=contract --vnni=4 2>&1 | FileCheck %s --check-prefix=VNNI-I8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --vnni=4 --transpose-a=1 2>&1 | FileCheck %s --check-prefix=TA-VNNI-BF8
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=VNNI-HF8
+
+
+// ===== bf16 flat combinations =====
+
+// NN-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NN-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// NN-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NN-BF16: func.func @entry(%arg0: tensor<8x16x32x32xbf16>, %arg1: tensor<16x16x32x32xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
+// NN-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TN-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TN-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// TN-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TN-BF16: func.func @entry(%arg0: tensor<16x8x32x32xbf16>, %arg1: tensor<16x16x32x32xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
+// TN-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// NT-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NT-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// NT-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NT-BF16: func.func @entry(%arg0: tensor<8x16x32x32xbf16>, %arg1: tensor<16x16x32x32xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
+// NT-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TT-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TT-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// TT-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TT-BF16: func.func @entry(%arg0: tensor<16x8x32x32xbf16>, %arg1: tensor<16x16x32x32xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
+// TT-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// ===== i8 flat combinations (mx-i8, linalg.contract) =====
+
+// NN-I8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NN-I8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// NN-I8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NN-I8: func.func @entry(%arg0: tensor<8x8x32x64xi8>, %arg1: tensor<16x8x64x32xi8>, %arg2: tensor<8x16x32x32xi32>) -> tensor<8x16x32x32xi32>
+// NN-I8: linalg.contract indexing_maps = [#map, #map1, #map2] ins(%arg0, %arg1 : tensor<8x8x32x64xi8>, tensor<16x8x64x32xi8>) outs(%arg2 : tensor<8x16x32x32xi32>)
+
+// TN-I8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TN-I8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// TN-I8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TN-I8: func.func @entry(%arg0: tensor<8x8x64x32xi8>, %arg1: tensor<16x8x64x32xi8>, %arg2: tensor<8x16x32x32xi32>) -> tensor<8x16x32x32xi32>
+// TN-I8: linalg.contract indexing_maps = [#map, #map1, #map2] ins(%arg0, %arg1 : tensor<8x8x64x32xi8>, tensor<16x8x64x32xi8>) outs(%arg2 : tensor<8x16x32x32xi32>)
+
+// NT-I8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NT-I8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// NT-I8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NT-I8: func.func @entry(%arg0: tensor<8x8x32x64xi8>, %arg1: tensor<16x8x32x64xi8>, %arg2: tensor<8x16x32x32xi32>) -> tensor<8x16x32x32xi32>
+// NT-I8: linalg.contract indexing_maps = [#map, #map1, #map2] ins(%arg0, %arg1 : tensor<8x8x32x64xi8>, tensor<16x8x32x64xi8>) outs(%arg2 : tensor<8x16x32x32xi32>)
+
+// TT-I8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TT-I8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// TT-I8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TT-I8: func.func @entry(%arg0: tensor<8x8x64x32xi8>, %arg1: tensor<16x8x32x64xi8>, %arg2: tensor<8x16x32x32xi32>) -> tensor<8x16x32x32xi32>
+// TT-I8: linalg.contract indexing_maps = [#map, #map1, #map2] ins(%arg0, %arg1 : tensor<8x8x64x32xi8>, tensor<16x8x32x64xi8>) outs(%arg2 : tensor<8x16x32x32xi32>)
+
+// ===== bf8 flat combinations =====
+
+// NN-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NN-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// NN-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NN-BF8: func.func @entry(%arg0: tensor<8x8x32x64xf8E5M2>, %arg1: tensor<16x8x64x32xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
+// NN-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TN-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TN-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// TN-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TN-BF8: func.func @entry(%arg0: tensor<8x8x64x32xf8E5M2>, %arg1: tensor<16x8x64x32xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
+// TN-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// NT-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NT-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// NT-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NT-BF8: func.func @entry(%arg0: tensor<8x8x32x64xf8E5M2>, %arg1: tensor<16x8x32x64xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
+// NT-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TT-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TT-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// TT-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TT-BF8: func.func @entry(%arg0: tensor<8x8x64x32xf8E5M2>, %arg1: tensor<16x8x32x64xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
+// TT-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// ===== hf8 flat combinations =====
+
+// NN-HF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NN-HF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// NN-HF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NN-HF8: func.func @entry(%arg0: tensor<8x8x32x64xf8E4M3FN>, %arg1: tensor<16x8x64x32xf8E4M3FN>, %arg2: tensor<8x16x32x32xf8E4M3FN>) -> tensor<8x16x32x32xf8E4M3FN>
+// NN-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TN-HF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TN-HF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
+// TN-HF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TN-HF8: func.func @entry(%arg0: tensor<8x8x64x32xf8E4M3FN>, %arg1: tensor<16x8x64x32xf8E4M3FN>, %arg2: tensor<8x16x32x32xf8E4M3FN>) -> tensor<8x16x32x32xf8E4M3FN>
+// TN-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// NT-HF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
+// NT-HF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// NT-HF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// NT-HF8: func.func @entry(%arg0: tensor<8x8x32x64xf8E4M3FN>, %arg1: tensor<16x8x32x64xf8E4M3FN>, %arg2: tensor<8x16x32x32xf8E4M3FN>) -> tensor<8x16x32x32xf8E4M3FN>
+// NT-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// TT-HF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
+// TT-HF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
+// TT-HF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
+// TT-HF8: func.func @entry(%arg0: tensor<8x8x64x32xf8E4M3FN>, %arg1: tensor<16x8x32x64xf8E4M3FN>, %arg2: tensor<8x16x32x32xf8E4M3FN>) -> tensor<8x16x32x32xf8E4M3FN>
+// TT-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]
+
+// ===== VNNI transpose combinations =====
+
+// bf16, VNNI, A transposed + VNNI packed (5D pre-packed arg, no expand_shape).
+// TA-VNNI-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d2, d0, d6, d4, d3)>
+// TA-VNNI-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+// TA-VNNI-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+// TA-VNNI-BF16: func.func @entry(%arg0: tensor<16x8x16x32x2xbf16>, %arg1: tensor<16x16x16x32x2xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
+// TA-VNNI-BF16-NOT: tensor.expand_shape %arg0
+// TA-VNNI-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
+
+// i8, VNNI, A flat + B VNNI: A stays 4D and is expanded internally.
+// VNNI-I8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
+// VNNI-I8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+// VNNI-I8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+// VNNI-I8: func.func @entry(%arg0: tensor<8x8x32x64xi8>, %arg1: tensor<16x8x16x32x4xi8>, %arg2: tensor<8x16x32x32xi32>) -> tensor<8x16x32x32xi32>
+// VNNI-I8: tensor.expand_shape %arg0 {{\[\[}}0], [1], [2], [3, 4]] output_shape [8, 8, 32, 16, 4] : tensor<8x8x32x64xi8> into tensor<8x8x32x16x4xi8>
+// VNNI-I8: linalg.contract indexing_maps = [#map, #map1, #map2]
+
+// bf8, VNNI, A transposed + VNNI packed.
+// TA-VNNI-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d2, d0, d6, d4, d3)>
+// TA-VNNI-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+// TA-VNNI-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+// TA-VNNI-BF8: func.func @entry(%arg0: tensor<8x8x16x32x4xf8E5M2>, %arg1: tensor<16x8x16x32x4xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
+// TA-VNNI-BF8-NOT: tensor.expand_shape %arg0
+// TA-VNNI-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
+
+// hf8, VNNI, A flat + B VNNI.
+// VNNI-HF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
+// VNNI-HF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+// VNNI-HF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+// VNNI-HF8: func.func @entry(%arg0: tensor<8x8x32x64xf8E4M3FN>, %arg1: tensor<16x8x16x32x4xf8E4M3FN>, %arg2: tensor<8x16x32x32xf8E4M3FN>) -> tensor<8x16x32x32xf8E4M3FN>
+// VNNI-HF8: tensor.expand_shape %arg0 {{\[\[}}0], [1], [2], [3, 4]] output_shape [8, 8, 32, 16, 4] : tensor<8x8x32x64xf8E4M3FN> into tensor<8x8x32x16x4xf8E4M3FN>
+// VNNI-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
