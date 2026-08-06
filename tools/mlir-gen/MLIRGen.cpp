@@ -45,16 +45,20 @@ void parseStringList(StringRef str, SmallVector<int64_t> &list) {
   }
 }
 
-/// Returns the vector of boolean for the required broadcast dimensions
-// Swap outer/inner tile pairs of a packed 4D type: [a,b,c,d] -> [b,a,d,c].
+/// Swap the outer/inner tile pairs of a packed type, keeping any trailing VNNI
+/// factor innermost: 4D [a,b,c,d] -> [b,a,d,c]; 5D [a,b,c,d,v] -> [b,a,d,c,v].
 static TensorType transposePackedType(TensorType type) {
   auto rt = cast<RankedTensorType>(type);
   auto shape = rt.getShape();
-  assert(shape.size() == 4 && "Expected a packed 4D type");
-  return RankedTensorType::get({shape[1], shape[0], shape[3], shape[2]},
-                              rt.getElementType());
+  assert((shape.size() == 4 || shape.size() == 5) &&
+         "Expected a packed 4D or VNNI 5D type");
+  SmallVector<int64_t> transposed{shape[1], shape[0], shape[3], shape[2]};
+  if (shape.size() == 5)
+    transposed.push_back(shape[4]);
+  return RankedTensorType::get(transposed, rt.getElementType());
 }
 
+/// Returns the vector of boolean for the required broadcast dimensions.
 static SmallVector<bool> getBroadcastDims(ArrayRef<int64_t> sourceShape,
                                           ArrayRef<int64_t> targetShape) {
   SmallVector<bool> broadcastDims;
@@ -1327,19 +1331,23 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   auto y = dims.size() == 2 ? dims[1] : 0;
 
   switch (type) {
-  case PACK_INPUT:
+  case PACK_INPUT: {
     assert(x % n == 0 && "Invalid tile size for N dim");
     assert(y % c == 0 && "Invalid tile size for C dim");
     if (transposeA) {
-      // VNNI transposed A: C x N -> BC x BN x bc/vnni x bn x vnni
-      if (vnniFactor != 0)
-        return RankedTensorType::get(
-            {y / c, x / n, c / vnniFactor, n, vnniFactor}, dataTypes.input);
-      // Transposed A: C x N -> BC x BN x bc x bn
-      return RankedTensorType::get({y / c, x / n, c, n}, dataTypes.input);
+      // Transposed A swaps the N and C tile pairs of the normal packed layout
+      // (VNNI splits bc into bc/vnni x vnni and keeps vnni innermost).
+      TensorType normal =
+          vnniFactor != 0
+              ? RankedTensorType::get(
+                    {x / n, y / c, n, c / vnniFactor, vnniFactor},
+                    dataTypes.input)
+              : RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
+      return transposePackedType(normal);
     }
     // N x C -> BN x BC x bn x bc
     return RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
+  }
   case PACK_WEIGHT:
     // VNNI packing can be done via tpp-opt --vnni-pack
     assert(x % k == 0 && "Invalid tile size for K dim");
