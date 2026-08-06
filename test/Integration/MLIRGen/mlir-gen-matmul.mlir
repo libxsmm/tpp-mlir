@@ -424,12 +424,15 @@
 
 // ===== VNNI transpose combinations =====
 
-// bf16, VNNI, A transposed + VNNI packed (5D pre-packed arg, no expand_shape).
-// TA-VNNI-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d2, d0, d6, d4, d3)>
+// bf16, VNNI, A transposed + VNNI packed (5D pre-packed arg). The transposed
+// layout is relaid out to the standard VNNI-A layout via linalg.transpose so
+// the contraction uses the normal input map and stays lowerable.
+// TA-VNNI-BF16-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
 // TA-VNNI-BF16-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
 // TA-VNNI-BF16-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
 // TA-VNNI-BF16: func.func @entry(%arg0: tensor<16x8x16x32x2xbf16>, %arg1: tensor<16x16x16x32x2xbf16>, %arg2: tensor<8x16x32x32xbf16>) -> tensor<8x16x32x32xbf16>
 // TA-VNNI-BF16-NOT: tensor.expand_shape %arg0
+// TA-VNNI-BF16: linalg.transpose ins(%arg0 : tensor<16x8x16x32x2xbf16>){{.*}}permutation = [1, 0, 3, 2, 4]
 // TA-VNNI-BF16: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
 
 // i8, VNNI, A flat + B VNNI: A stays 4D and is expanded internally.
@@ -440,12 +443,14 @@
 // VNNI-I8: tensor.expand_shape %arg0 {{\[\[}}0], [1], [2], [3, 4]] output_shape [8, 8, 32, 16, 4] : tensor<8x8x32x64xi8> into tensor<8x8x32x16x4xi8>
 // VNNI-I8: linalg.contract indexing_maps = [#map, #map1, #map2]
 
-// bf8, VNNI, A transposed + VNNI packed.
-// TA-VNNI-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d2, d0, d6, d4, d3)>
+// bf8, VNNI, A transposed + VNNI packed. Relaid out to standard VNNI-A layout
+// via linalg.transpose so the contraction stays lowerable.
+// TA-VNNI-BF8-DAG: #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
 // TA-VNNI-BF8-DAG: #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
 // TA-VNNI-BF8-DAG: #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
 // TA-VNNI-BF8: func.func @entry(%arg0: tensor<8x8x16x32x4xf8E5M2>, %arg1: tensor<16x8x16x32x4xf8E5M2>, %arg2: tensor<8x16x32x32xf8E5M2>) -> tensor<8x16x32x32xf8E5M2>
 // TA-VNNI-BF8-NOT: tensor.expand_shape %arg0
+// TA-VNNI-BF8: linalg.transpose ins(%arg0 : tensor<8x8x16x32x4xf8E5M2>){{.*}}permutation = [1, 0, 3, 2, 4]
 // TA-VNNI-BF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
 
 // hf8, VNNI, A flat + B VNNI.

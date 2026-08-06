@@ -668,7 +668,23 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (vnniPacked && !args.transposeInput) {
+  if (vnniPacked && args.transposeInput) {
+    // A is a pre-packed transposed VNNI operand {BC, BN, bc/vnni, bn, vnni}.
+    // The downstream AMX/VNNI lowering can't consume this layout directly, so
+    // materialize an explicit transpose to the standard VNNI-A layout
+    // {BN, BC, bn, bc/vnni, vnni} and let the contraction use the normal
+    // (non-transposed) input map.
+    auto tShape = inputType.getShape();
+    SmallVector<int64_t> stdShape{tShape[1], tShape[0], tShape[3], tShape[2],
+                                  tShape[4]};
+    Value init = tensor::EmptyOp::create(builder, loc, stdShape,
+                                         inputType.getElementType());
+    args.input.value =
+        linalg::TransposeOp::create(builder, loc, args.input.value, init,
+                                    ArrayRef<int64_t>{1, 0, 3, 2, 4})
+            ->getResult(0);
+    args.transposeInput = false;
+  } else if (vnniPacked) {
     SmallVector<int64_t> vnniShape{inputType.getShape()};
     vnniShape.back() = vnniShape.back() / vnniFactor;
     vnniShape.push_back(vnniFactor);
