@@ -96,6 +96,18 @@ def FlattenVectorOps : Pass<"flatten-vector-ops"> {
   let dependentDialects = [ "vector::VectorDialect" ];
 }
 
+def ConvertToStreamingStore : Pass<"convert-to-streaming-store"> {
+  let summary = "Convert write-only vector.transfer_write into a nontemporal vector.store.";
+  let description = [{
+    Rewrites a vector.transfer_write into a vector.store carrying the
+    nontemporal = true attribute when the destination buffer is never read
+    back (no immediate or future load from it within the function), e.g. the
+    output C matrix of a GEMM. Streaming such write-only stores avoids
+    polluting the cache with data that is not reused.
+  }];
+  let dependentDialects = [ "vector::VectorDialect" ];
+}
+
 def VectorContractToOuterproduct : Pass<
     "vector-contract-to-outerproduct"> {
   let summary = "Perform outerproduct lowering of vector contraction ops";
