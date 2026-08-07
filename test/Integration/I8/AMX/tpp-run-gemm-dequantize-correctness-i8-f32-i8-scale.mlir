@@ -16,7 +16,7 @@
 // IR:   vector.transfer_read
 // IR:   arith.sitofp
 // IR:   arith.mulf
-// IR:   vector.transfer_write
+// IR:   vector.store {{.*}}nontemporal = true
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
 #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>

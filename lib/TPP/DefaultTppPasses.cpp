@@ -103,9 +103,16 @@ private:
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
     pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
     pm.addPass(createBufferize());
+    // Replicate benchmark kernel arguments for cold-cache timing. Runs on
+    // bufferized memrefs so replicas are plain subviews (no allocs/copies).
+    // No-op unless the benchmark producer requested replication.
+    pm.addPass(createReplicateBenchArgs());
     pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
     pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
+    // Stream write-only stores (e.g. the output C matrix) with a nontemporal
+    // hint. Runs after flattening so the transfer_write is already 1-D.
+    pm.addNestedPass<func::FuncOp>(createConvertToStreamingStore());
   }
 
   // Default TPP lowering: map and pack at the linalg level, bufferize, lower to
@@ -135,13 +142,13 @@ private:
       pm.addPass(createSCFForAllLoopFlattenSFC());
 
     // Bufferize: tensor->memref.
-    if (!nanoKernel)
+    if (!nanoKernel) {
       pm.addPass(createBufferize());
-
-    // Replicate benchmark kernel arguments for cold-cache timing. Runs on
-    // bufferized memrefs so replicas are plain subviews (no allocs/copies).
-    // No-op unless the benchmark producer requested replication.
-    pm.addPass(createReplicateBenchArgs());
+      // Replicate benchmark kernel arguments for cold-cache timing. Runs on
+      // bufferized memrefs so replicas are plain subviews (no allocs/copies).
+      // No-op unless the benchmark producer requested replication.
+      pm.addPass(createReplicateBenchArgs());
+    }
 
     if (nanoKernel)
       // Lower Linalg to Vector.

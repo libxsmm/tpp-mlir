@@ -36,6 +36,7 @@ add_mlir_library(TPPTransforms
   HoistLoopInvariantSubsets.cpp
   VectorContractToNanoKernels.cpp
   FlattenVectorOps.cpp
+  ConvertToStreamingStore.cpp
   TileDequantElementwiseOps.cpp
   ConvertLinalgGenericTo32BitAccumulation.cpp
 
