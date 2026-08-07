@@ -61,6 +61,7 @@ class MLIRGenerator {
     Type accumulator{};
     Type inputScale{};
     Type weightScale{};
+    Type outputScale{};
   };
   DataTypes dataTypes;
 
@@ -126,8 +127,13 @@ class MLIRGenerator {
     PACK_ACCUMULATOR,
     PACK_INTERMEDIATE,
     INPUT_SCALE,
-    WEIGHT_SCALE
+    WEIGHT_SCALE,
+    OUTPUT_SCALE
   };
+
+  /// Returns true when generating an i8xi8->i32 GEMM that is requantized back
+  /// to i8 (quantize kernel with integer inputs).
+  bool isRequantization() const;
 
   /// Return shaped type (packed if requested)
   TensorType getShape(ArrayRef<int64_t>, PackingType);
@@ -174,6 +180,7 @@ class MLIRGenerator {
     Arg inputScale;
     Arg weight;
     Arg weightScale;
+    Arg outputScale;
     Arg bias;
     Arg intermediate; // For quantdequant validation
     Arg output;
@@ -216,6 +223,10 @@ class MLIRGenerator {
 
   /// Creates a matmul quantization kernel
   Value quantizeGemm(LayerArgs &args, Value chain);
+
+  /// Requantizes an i32 GEMM accumulator back to i8 using a per-output-channel
+  /// output scale argument.
+  Value requantizeGemm(LayerArgs &args, Value chain);
 
   /// Creates a matmul dequantization kernel
   Value dequantizeGemm(LayerArgs &args, Value chain);

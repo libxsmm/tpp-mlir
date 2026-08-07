@@ -1,6 +1,6 @@
 // RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | FileCheck %s -check-prefix=IR
 
-// RUN: tpp-run -e entry --entry-point-result=void --linalg-to-loops -print --splat-to-random --init-type quant -seed 123  %s > %t.1
+// RUN: tpp-run -e entry --entry-point-result=void -print --splat-to-random --init-type quant -seed 123  %s > %t.1
 // RUN: tpp-run -e entry --entry-point-result=void -print --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --splat-to-random -seed 123 --init-type quant %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
@@ -28,9 +28,9 @@
 module {
   func.func @entry(
       %arg0: tensor<4x36x64x64xi8>,
-      %arg1: tensor<256xf8E8M0FNU>,
+      %arg1: tensor<256xf8E8M0FNU> {tpp.quant_scale},
       %arg2: tensor<24x36x16x64x4xi8>,
-      %arg3: tensor<1536xf8E8M0FNU>,
+      %arg3: tensor<1536xf8E8M0FNU> {tpp.quant_scale},
       %arg4: tensor<4x24x64x64xf32>) -> tensor<4x24x64x64xf32> {
 
     %c0_i32 = arith.constant 0 : i32

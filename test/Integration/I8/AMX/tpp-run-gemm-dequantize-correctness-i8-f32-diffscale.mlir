@@ -1,4 +1,4 @@
-// RUN: tpp-run -e entry --entry-point-result=void --linalg-to-loops -print --splat-to-random --init-type quant -seed 123  %s > %t.1
+// RUN: tpp-run -e entry --entry-point-result=void -print --splat-to-random --init-type quant -seed 123  %s > %t.1
 // RUN: tpp-run -e entry --entry-point-result=void -print --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --splat-to-random -seed 123 --init-type quant %s > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
@@ -24,9 +24,9 @@
 
 func.func @entry(
     %arg0: tensor<2x2x64x64xi8>,
-    %arg1: tensor<128xf32>,
+    %arg1: tensor<128xf32> {tpp.quant_scale},
     %arg2: tensor<4x2x16x64x4xi8>,
-    %arg3: tensor<256xf32>,
+    %arg3: tensor<256xf32> {tpp.quant_scale},
     %arg4: tensor<2x4x64x64xf32>) -> tensor<2x4x64x64xf32> {
 
   %c0_i32 = arith.constant 0 : i32

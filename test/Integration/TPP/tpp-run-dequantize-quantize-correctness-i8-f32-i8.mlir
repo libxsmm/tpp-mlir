@@ -136,7 +136,7 @@ module {
     return %castToi8_val, %pos_exp2_val : !twoDimi8, !oneDimf32
   }
 
-  func.func @entry(%input : !twoDimi8, %scale : !oneDimf32, %output : !twoDimi8) -> (!twoDimi8) {
+  func.func @entry(%input : !twoDimi8, %scale : !oneDimf32 {tpp.quant_scale}, %output : !twoDimi8) -> (!twoDimi8) {
     %c0_f32 = arith.constant 0.0 : f32
     %c0_i8 = arith.constant 0 : i8
     %c0 = arith.constant 0 : index

@@ -109,8 +109,20 @@ void IdentityTensorInitFloat::fillData() {
 
 // Update internal buffer with rescale values.
 void QuantScaleTensorInitFloat::fillData() {
-  assert(scaleBuffer.size() > 0 && "scaleBuffer is empty");
-  for (size_t i = 0; i < scaleBuffer.size(); i++) {
-    push(scaleBuffer[i]);
+  // When paired with a quantized data matrix (dequantization), the scale buffer
+  // is populated externally. Otherwise (e.g. the requantization output scale)
+  // self-generate random positive per-channel scale factors.
+  if (!scaleBuffer.empty()) {
+    for (size_t i = 0; i < scaleBuffer.size(); i++) {
+      push(scaleBuffer[i]);
+    }
+    return;
+  }
+  for (size_t i = 0; i < size; i++) {
+    float value = distribution(generator);
+    if (value < 0.0f)
+      value = -value;
+    // Keep scales strictly positive and away from zero.
+    push(value + 1e-3f);
   }
 }
