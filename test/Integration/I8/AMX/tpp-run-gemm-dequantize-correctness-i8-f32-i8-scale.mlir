@@ -28,9 +28,9 @@
 module {
   func.func @entry(
       %arg0: tensor<4x36x64x64xi8>,
-      %arg1: tensor<256xf8E8M0FNU> {tpp.quant_scale},
+      %arg1: tensor<256xf8E8M0FNU>,
       %arg2: tensor<24x36x16x64x4xi8>,
-      %arg3: tensor<1536xf8E8M0FNU> {tpp.quant_scale},
+      %arg3: tensor<1536xf8E8M0FNU>,
       %arg4: tensor<4x24x64x64xf32>) -> tensor<4x24x64x64xf32> {
 
     %c0_i32 = arith.constant 0 : i32

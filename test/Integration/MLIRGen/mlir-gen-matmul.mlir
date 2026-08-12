@@ -156,9 +156,9 @@
 // MXBF16-DEQUANT-DAG: #[[$ATTR_5:.+]] = affine_map<(d0, d1) -> (d1)>
 // MXBF16-DEQUANT-LABEL:   func.func @entry(
 // MXBF16-DEQUANT-SAME:                     %arg0: tensor<128x2304xbf16>,
-// MXBF16-DEQUANT-SAME:                     %arg1: tensor<128xf32> {tpp.quant_scale},
+// MXBF16-DEQUANT-SAME:                     %arg1: tensor<128xf32>,
 // MXBF16-DEQUANT-SAME:                     %arg2: tensor<2304x768xbf16>,
-// MXBF16-DEQUANT-SAME:                     %arg3: tensor<768xf32> {tpp.quant_scale},
+// MXBF16-DEQUANT-SAME:                     %arg3: tensor<768xf32>,
 // MXBF16-DEQUANT-SAME:                     %arg4: tensor<128x768xf32>) -> tensor<128x768xf32> {
 // MXBF16-DEQUANT:           linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]]
 // MXBF16-DEQUANT:           linalg.generic  {indexing_maps = [#[[$ATTR_3]], #[[$ATTR_4]], #[[$ATTR_5]], #[[$ATTR_3]]], iterator_types = ["parallel", "parallel"]}
@@ -174,9 +174,9 @@
 // MXI8F32-DEQUANT-DAG: #[[$ATTR_5:.+]] = affine_map<(d0, d1) -> (d1)>
 // MXI8F32-DEQUANT-LABEL:   func.func @entry(
 // MXI8F32-DEQUANT-SAME:                     %arg0: tensor<128x2304xi8>,
-// MXI8F32-DEQUANT-SAME:                     %arg1: tensor<128xf32> {tpp.quant_scale},
+// MXI8F32-DEQUANT-SAME:                     %arg1: tensor<128xf32>,
 // MXI8F32-DEQUANT-SAME:                     %arg2: tensor<2304x768xi8>,
-// MXI8F32-DEQUANT-SAME:                     %arg3: tensor<768xf32> {tpp.quant_scale},
+// MXI8F32-DEQUANT-SAME:                     %arg3: tensor<768xf32>,
 // MXI8F32-DEQUANT-SAME:                     %arg4: tensor<128x768xf32>) -> tensor<128x768xf32> {
 // MXI8F32-DEQUANT:           linalg.contract indexing_maps = [#[[$ATTR_0:.+]], #[[$ATTR_1:.+]], #[[$ATTR_2:.+]]]
 // MXI8F32-DEQUANT:           linalg.generic  {indexing_maps = [#[[$ATTR_3:.+]], #[[$ATTR_4:.+]], #[[$ATTR_5:.+]], #[[$ATTR_3:.+]]], iterator_types = ["parallel", "parallel"]}
@@ -229,10 +229,10 @@
 // MXI8-REQUANT: #map5 = affine_map<(d0, d1) -> (d1)>
 // MXI8-REQUANT-LABEL:   func.func @entry(
 // MXI8-REQUANT-SAME:                     %[[ARG0:[a-z0-9_]+]]: tensor<128x2304xi8>,
-// MXI8-REQUANT-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf32> {tpp.quant_scale},
+// MXI8-REQUANT-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf32>,
 // MXI8-REQUANT-SAME:                     %[[ARG2:[a-z0-9_]+]]: tensor<2304x768xi8>,
-// MXI8-REQUANT-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf32> {tpp.quant_scale},
-// MXI8-REQUANT-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf32> {tpp.quant_scale},
+// MXI8-REQUANT-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf32>,
+// MXI8-REQUANT-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf32>,
 // MXI8-REQUANT-SAME:                     %[[ARG5:[a-z0-9_]+]]: tensor<128x768xi8>) -> tensor<128x768xi8> {
 // MXI8-REQUANT:           %[[ZERO:.*]] = arith.constant 0 : i32
 // MXI8-REQUANT:           linalg.fill ins(%[[ZERO]] : i32){{.*}} -> tensor<128x768xi32>
@@ -260,10 +260,10 @@
 // MXI8-REQUANT-PACKED: #map5 = affine_map<(d0, d1, d2, d3) -> (d1, 0, d3, 0)>
 // MXI8-REQUANT-PACKED-LABEL:   func.func @entry(
 // MXI8-REQUANT-PACKED-SAME:                     %[[ARG0:[a-z0-9_]+]]: tensor<4x36x32x64xi8>,
-// MXI8-REQUANT-PACKED-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf32> {tpp.quant_scale},
+// MXI8-REQUANT-PACKED-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf32>,
 // MXI8-REQUANT-PACKED-SAME:                     %[[ARG2:[a-z0-9_]+]]: tensor<24x36x16x32x4xi8>,
-// MXI8-REQUANT-PACKED-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf32> {tpp.quant_scale},
-// MXI8-REQUANT-PACKED-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf32> {tpp.quant_scale},
+// MXI8-REQUANT-PACKED-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf32>,
+// MXI8-REQUANT-PACKED-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf32>,
 // MXI8-REQUANT-PACKED-SAME:                     %[[ARG5:[a-z0-9_]+]]: tensor<4x24x32x32xi8>) -> tensor<4x24x32x32xi8> {
 // MXI8-REQUANT-PACKED:           linalg.fill{{.*}} -> tensor<4x24x32x32xi32>
 // MXI8-REQUANT-PACKED:           tensor.expand_shape %[[ARG0]]
@@ -293,10 +293,10 @@
 // MXI8-REQUANT-I8SCALE: #map5 = affine_map<(d0, d1) -> (d1)>
 // MXI8-REQUANT-I8SCALE-LABEL:   func.func @entry(
 // MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG0:[a-z0-9_]+]]: tensor<128x2304xi8>,
-// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf8E8M0FNU>,
 // MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG2:[a-z0-9_]+]]: tensor<2304x768xi8>,
-// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
-// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf8E8M0FNU>,
+// MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf8E8M0FNU>,
 // MXI8-REQUANT-I8SCALE-SAME:                     %[[ARG5:[a-z0-9_]+]]: tensor<128x768xi8>) -> tensor<128x768xi8> {
 // MXI8-REQUANT-I8SCALE:           %[[ZERO:.*]] = arith.constant 0 : i32
 // MXI8-REQUANT-I8SCALE:           linalg.fill ins(%[[ZERO]] : i32){{.*}} -> tensor<128x768xi32>
@@ -329,10 +329,10 @@
 // MXI8-REQUANT-I8SCALE-PACKED: #map5 = affine_map<(d0, d1, d2, d3) -> (d1, 0, d3, 0)>
 // MXI8-REQUANT-I8SCALE-PACKED-LABEL:   func.func @entry(
 // MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG0:[a-z0-9_]+]]: tensor<4x36x32x64xi8>,
-// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG1:[a-z0-9_]+]]: tensor<128xf8E8M0FNU>,
 // MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG2:[a-z0-9_]+]]: tensor<24x36x16x32x4xi8>,
-// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
-// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG3:[a-z0-9_]+]]: tensor<768xf8E8M0FNU>,
+// MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG4:[a-z0-9_]+]]: tensor<768xf8E8M0FNU>,
 // MXI8-REQUANT-I8SCALE-PACKED-SAME:                     %[[ARG5:[a-z0-9_]+]]: tensor<4x24x32x32xi8>) -> tensor<4x24x32x32xi8> {
 // MXI8-REQUANT-I8SCALE-PACKED:           linalg.fill{{.*}} -> tensor<4x24x32x32xi32>
 // MXI8-REQUANT-I8SCALE-PACKED:           tensor.expand_shape %[[ARG0]]
@@ -361,8 +361,8 @@
 // MXI8F32-PACKED-DEQUANT-DAG: #[[$ATTR_4:.+]] = affine_map<(d0, d1, d2, d3) -> (d0, 0, d2, 0)>
 // MXI8F32-PACKED-DEQUANT-LABEL:   func.func @entry(
 // MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<128x128x32x64xi8>,
-// MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<4096xf32> {tpp.quant_scale}, {{.*}}: tensor<128x128x16x32x4xi8>,
-// MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<4096xf32> {tpp.quant_scale},
+// MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<4096xf32>, {{.*}}: tensor<128x128x16x32x4xi8>,
+// MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<4096xf32>,
 // MXI8F32-PACKED-DEQUANT-SAME:                     {{.*}}: tensor<128x128x32x32xf32>) -> tensor<128x128x32x32xf32> {
 
 // MXI8F32-PACKED-DEQUANT:           linalg.fill
@@ -385,9 +385,9 @@
 // MXI8-I8SCALE-DEQUANT-DAG: #[[$ATTR_5:.+]] = affine_map<(d0, d1) -> (d1)>
 // MXI8-I8SCALE-DEQUANT-LABEL:   func.func @entry(
 // MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG0:.*]]: tensor<128x2304xi8>,
-// MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG1:.*]]: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG1:.*]]: tensor<128xf8E8M0FNU>,
 // MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG2:.*]]: tensor<2304x768xi8>,
-// MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG3:.*]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG3:.*]]: tensor<768xf8E8M0FNU>,
 // MXI8-I8SCALE-DEQUANT-SAME:                     %[[ARG4:.*]]: tensor<128x768xf32>) -> tensor<128x768xf32> {
 // MXI8-I8SCALE-DEQUANT:           arith.constant 0 : i32
 // MXI8-I8SCALE-DEQUANT:           tensor.empty() : tensor<128x768xi32>
@@ -411,9 +411,9 @@
 // MXI8-I8SCALE-PACKED-DEQUANT-DAG: #[[$ATTR_5:.+]] = affine_map<(d0, d1, d2, d3) -> (d1, 0, d3, 0)>
 // MXI8-I8SCALE-PACKED-DEQUANT-LABEL:   func.func @entry(
 // MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG0:.*]]: tensor<4x36x32x64xi8>,
-// MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG1:.*]]: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG1:.*]]: tensor<128xf8E8M0FNU>,
 // MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG2:.*]]: tensor<24x36x16x32x4xi8>,
-// MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG3:.*]]: tensor<768xf8E8M0FNU> {tpp.quant_scale},
+// MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG3:.*]]: tensor<768xf8E8M0FNU>,
 // MXI8-I8SCALE-PACKED-DEQUANT-SAME:                     %[[ARG4:.*]]: tensor<4x24x32x32xf32>) -> tensor<4x24x32x32xf32> {
 // MXI8-I8SCALE-PACKED-DEQUANT:           arith.constant 0 : i32
 // MXI8-I8SCALE-PACKED-DEQUANT:           tensor.empty() : tensor<4x24x32x32xi32>

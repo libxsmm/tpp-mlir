@@ -505,7 +505,6 @@ void MLIRGenerator::createKernel() {
   firstArg.input.value = func.getArgument(0);
   // Scales are needed for dequantization and requantization.
   if (quantType == QuantizationType::Dequant || isRequantization()) {
-    func.setArgAttr(1, "tpp.quant_scale", builder.getUnitAttr());
     firstArg.inputScale.value = func.getArgument(1);
   }
 
@@ -524,11 +523,9 @@ void MLIRGenerator::createKernel() {
     if (kernelType == KernelType::Args) {
       arg.weight.value = func.getArgument(argPos++);
       if (quantType == QuantizationType::Dequant || isRequantization()) {
-        func.setArgAttr(argPos, "tpp.quant_scale", builder.getUnitAttr());
         arg.weightScale.value = func.getArgument(argPos++);
       }
       if (isRequantization()) {
-        func.setArgAttr(argPos, "tpp.quant_scale", builder.getUnitAttr());
         arg.outputScale.value = func.getArgument(argPos++);
       }
       if (enableBias)

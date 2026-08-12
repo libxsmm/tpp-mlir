@@ -269,12 +269,13 @@ LogicalResult MLIRBench::createKernelArgs() {
       argInitType = TensorInitType::Normal;
     }
 
-    // Scale arguments are marked by the generator with the `tpp.quant_scale`
-    // argument attribute (used for input/weight dequant scales and the requant
-    // output scale).
+    // Scale arguments are paired with the input/weight matrices (positions 1
+    // and 3) and, for requantization, the output scale (position 4). The output
+    // matrix itself is forced to a Normal init above, so position 4 is only
+    // treated as a scale in the requant case.
     bool isScaleArgument =
         argInitType == TensorInitType::Quant &&
-        kernel.getArgAttr(argNum, "tpp.quant_scale") != nullptr;
+        (argNum == 1 || argNum == 3 || argNum == 4);
     auto arg =
         TypeSwitch<Type, std::optional<Value>>(argTy)
             .Case<MemRefType>([&](auto memRefTy) {

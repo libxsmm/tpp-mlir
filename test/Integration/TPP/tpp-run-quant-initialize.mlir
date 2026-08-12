@@ -19,7 +19,7 @@
 !oneDimScaleWeightf32 = tensor<4xf32>
 
 
-func.func @entry(%input : !twoDimInputi8, %iScale : !oneDimScaleInputf32 {tpp.quant_scale}, %weight : !twoDimWeighti8, %wScale : !oneDimScaleWeightf32 {tpp.quant_scale}) {
+func.func @entry(%input : !twoDimInputi8, %iScale : !oneDimScaleInputf32, %weight : !twoDimWeighti8, %wScale : !oneDimScaleWeightf32) {
   return
 }
 
@@ -39,7 +39,7 @@ func.func @entry(%input : !twoDimInputi8, %iScale : !oneDimScaleInputf32 {tpp.qu
 // UNPACKED: ( 15, -48, 66, 1, -4, -31, 68, 82, 22, 15, 10, 30, -2, -53, -37, 70 )
 // UNPACKED: ( 0.00390625, 0.00390625, 0.0078125, 0.00195312, 0.00390625, 0.0078125, 0.00390625, 0.000976562, 0.00390625, 0.00390625, 0.00390625, 0.0078125, 0.0078125, 0.00195312, 0.00390625, 0.00390625 )
 
-func.func @unpacked(%arg0: tensor<4x8xi8>, %arg1: tensor<4xf32> {tpp.quant_scale}, %arg2: tensor<8x16xi8>, %arg3: tensor<16xf32> {tpp.quant_scale}) {
+func.func @unpacked(%arg0: tensor<4x8xi8>, %arg1: tensor<4xf32>, %arg2: tensor<8x16xi8>, %arg3: tensor<16xf32>) {
   return
 }
 
@@ -85,6 +85,6 @@ func.func @unpacked(%arg0: tensor<4x8xi8>, %arg1: tensor<4xf32> {tpp.quant_scale
 // PACKED: ( -2, -53, -37, 70 )
 // PACKED: ( 0.00390625, 0.00390625, 0.0078125, 0.00195312, 0.00390625, 0.0078125, 0.00390625, 0.000976562, 0.00390625, 0.00390625, 0.00390625, 0.0078125, 0.0078125, 0.00195312, 0.00390625, 0.00390625 )
 
-func.func @packed(%arg0: tensor<2x2x2x4xi8>, %arg1: tensor<4xf32> {tpp.quant_scale}, %arg2: tensor<8x2x1x2x4xi8>, %arg3: tensor<16xf32> {tpp.quant_scale}) {
+func.func @packed(%arg0: tensor<2x2x2x4xi8>, %arg1: tensor<4xf32>, %arg2: tensor<8x2x1x2x4xi8>, %arg3: tensor<16xf32>) {
   return
 }

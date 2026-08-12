@@ -21,10 +21,10 @@
 // truncated to i8.
 func.func @entry(
     %arg0: tensor<2x2x64x64xi8>,
-    %arg1: tensor<128xf32> {tpp.quant_scale},
+    %arg1: tensor<128xf32>,
     %arg2: tensor<2x2x16x64x4xi8>,
-    %arg3: tensor<128xf32> {tpp.quant_scale},
-    %arg4: tensor<128xf32> {tpp.quant_scale},
+    %arg3: tensor<128xf32>,
+    %arg4: tensor<128xf32>,
     %arg5: tensor<2x2x64x64xi8>) -> tensor<2x2x64x64xi8> {
 
   %c0_i32 = arith.constant 0 : i32

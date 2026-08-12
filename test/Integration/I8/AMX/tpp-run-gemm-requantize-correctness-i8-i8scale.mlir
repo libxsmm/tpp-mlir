@@ -22,10 +22,10 @@
 // extended to f32 before being combined and applied.
 func.func @entry(
     %arg0: tensor<2x2x64x64xi8>,
-    %arg1: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+    %arg1: tensor<128xf8E8M0FNU>,
     %arg2: tensor<2x2x16x64x4xi8>,
-    %arg3: tensor<128xf8E8M0FNU> {tpp.quant_scale},
-    %arg4: tensor<128xf8E8M0FNU> {tpp.quant_scale},
+    %arg3: tensor<128xf8E8M0FNU>,
+    %arg4: tensor<128xf8E8M0FNU>,
     %arg5: tensor<2x2x64x64xi8>) -> tensor<2x2x64x64xi8> {
 
   %c0_i32 = arith.constant 0 : i32
