@@ -135,8 +135,10 @@ class MLIRGenerator {
     WEIGHT_SCALE
   };
 
-  /// Return shaped type (packed if requested)
-  TensorType getShape(ArrayRef<int64_t>, PackingType);
+  /// Return shaped type (packed if requested). \p nTile overrides the output
+  /// (N) tile size when non-zero; used to tile hidden-layer activations by the
+  /// contraction dim so multi-layer chains stay consistent.
+  TensorType getShape(ArrayRef<int64_t>, PackingType, int64_t nTile = 0);
 
   /// Return a zero-init tensor for matmul outputs
   Value getZeroInitTensor(TensorType);
@@ -184,9 +186,14 @@ class MLIRGenerator {
     Arg intermediate; // For quantdequant validation
     Arg output;
     Arg accumulator;
-    // Whether this layer reads its input / writes its output transposed.
+    // Whether this layer reads its input / weight or writes its output
+    // transposed.
     bool transposeInput = false;
     bool transposeOutput = false;
+    bool transposeWeight = false;
+    // Whether the (packed) input activation is relaid out with an explicit
+    // transpose before the contraction (tiled transposed-A hidden layers).
+    bool materializeInputTranspose = false;
   };
 
   /// Return affine map (packed if requested)
