@@ -1,5 +1,6 @@
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=f32 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP32
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=BF16
+// RUN: mlir-gen --kernel=args --data-type=bf16 --batch=8192 --layers=1024,4096 --tiles=32,32,32 --vnni=2 | FileCheck %s --check-prefix=BF16-TRUNCATE
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=f16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP16
 
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=I8-CONTRACT
@@ -39,6 +40,12 @@
 // BF16:         arith.mulf
 // BF16:         arith.addf
 // BF16-NOT: dealloc
+
+// Check that tensor.empty() not created to store the result of arith.truncf in the generic op.
+// The result of arith.truncf is directly stored in the output tensor.
+// BF16-TRUNCATE-COUNT-1: tensor.empty() : tensor<256x128x32x32xf32>
+// BF16-TRUNCATE-NOT: tensor.empty() : tensor<256x128x32x32xbf16>
+
 
 // FP16: // RUN{{.*}}tpp-run %s -n {{\d*}}
 // FP16: // RUN{{.*}}-e entry -entry-point-result=void

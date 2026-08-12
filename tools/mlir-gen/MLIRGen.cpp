@@ -117,7 +117,8 @@ static Value createCastToFloat(OpBuilder &builder, Location loc, Value value,
 // linalg.generic using arith.truncf/arith.trunci. Cross-domain conversions
 // (e.g. quantization/dequantization) are handled by their dedicated lowerings.
 static Value downcastToOutput(OpBuilder &builder, Location loc,
-                              Value accumulator, ShapedType outputType) {
+                              Value accumulator, Value output,
+                              ShapedType outputType) {
   auto accTy = cast<ShapedType>(accumulator.getType());
   Type accElem = accTy.getElementType();
   Type outElem = outputType.getElementType();
@@ -130,14 +131,13 @@ static Value downcastToOutput(OpBuilder &builder, Location loc,
   // we have returned above. If not, then we need to allocate a new buffer, since they
   // have different types. This will be the `chain` to the next operation.
   auto resultTy = RankedTensorType::get(accTy.getShape(), outElem);
-  Value dest = tensor::EmptyOp::create(builder, loc, resultTy, ValueRange{});
   int64_t rank = accTy.getRank();
   SmallVector<AffineMap> maps(2, builder.getMultiDimIdentityMap(rank));
   SmallVector<utils::IteratorType> iterators(rank,
                                              utils::IteratorType::parallel);
   return linalg::GenericOp::create(
-             builder, loc, resultTy, ValueRange{accumulator}, ValueRange{dest},
-             maps, iterators,
+             builder, loc, resultTy, ValueRange{accumulator},
+             ValueRange{output}, maps, iterators,
              [&](OpBuilder &nestedBuilder, Location nestedLoc,
                  ValueRange blockArgs) {
                Value trunc;
@@ -617,7 +617,8 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     return dequantizeGemm(args, accumulator);
   }
 
-  return downcastToOutput(builder, loc, accumulator, args.output.type);
+  return downcastToOutput(builder, loc, accumulator, args.output.value,
+                          args.output.type);
 }
 
 Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
