@@ -6,16 +6,16 @@
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=MXI8-CONTRACT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-f16 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=MXF16-CONTRACT
 
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-bf16 --batch=128 --layers=2304,768 --quant-type=dequantize 2>&1 | FileCheck %s --check-prefix=MXBF16-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant-type=dequantize 2>&1 | FileCheck %s --check-prefix=MXI8F32-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant-type=dequantize --scale-type=f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MXI8-I8SCALE-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-f32-i8 --batch=128 --layers=2304,768 --quant-type=quantize 2>&1 | FileCheck %s --check-prefix=MXF32I8-QUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=4096 --layers=8192,4096 --quant-type=dequantize --output=generic --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8F32-PACKED-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant-type=dequantize --scale-type=f8E8M0FNU --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-I8SCALE-PACKED-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant-type=quantize 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant-type=quantize --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-PACKED
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant-type=quantize --scale-type=f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-I8SCALE
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant-type=quantize --scale-type=f8E8M0FNU --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-I8SCALE-PACKED
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-bf16 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=MXBF16-DEQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=MXI8F32-DEQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MXI8-I8SCALE-DEQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-f32-i8 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=MXF32I8-QUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=4096 --layers=8192,4096 --quant --output=generic --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8F32-PACKED-DEQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8-f32 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-I8SCALE-PACKED-DEQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-PACKED
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-I8SCALE
+// RUN: mlir-gen --kernel=args --seed=0 --data-type=mx-i8 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=MXI8-REQUANT-I8SCALE-PACKED
 
 
 // FP32: // RUN{{.*}}tpp-run %s -n {{\d*}}

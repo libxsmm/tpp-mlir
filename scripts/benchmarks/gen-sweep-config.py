@@ -28,7 +28,7 @@ DTYPES = {
         "gen_flags": (
             "--kernel=args --data-type=mx-i8-f32 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
-            "--quant-type=dequantize"
+            "--quant"
         ),
         "run_args": (
             "--def-parallel --nano-kernels --gemm-unrolling=16,16,16 "

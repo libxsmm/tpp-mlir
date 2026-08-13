@@ -158,14 +158,14 @@ static Value downcastToOutput(OpBuilder &builder, Location loc,
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              unsigned batch, StringRef layersStr,
                              StringRef tilesStr, StringRef registerUnrollStr, StringRef dataType,
-                             StringRef scaleType, StringRef quantizationTypeStr,
+                             StringRef scaleType, bool quant, bool testQuant,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
                              int vnniBlockingFactor)
     : builder(&context), loc(builder.getUnknownLoc()), batch(batch), seed(seed),
       identity(identity), flops(0), enableBias(enableBias),
-      enableRelu(enableRelu), enableSoftmax(enableSoftmax),
-      vnniFactor(vnniBlockingFactor) {
+      enableRelu(enableRelu), enableSoftmax(enableSoftmax), quant(quant),
+      testQuant(testQuant), vnniFactor(vnniBlockingFactor) {
 
   // Register all necessary dialects
   context
@@ -258,29 +258,17 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   dataTypes.weightScale = *scaleTypeOpt;
   dataTypes.outputScale = *scaleTypeOpt;
 
-  // Parse quantization type
-  auto optQuantType =
-      llvm::StringSwitch<std::optional<QuantizationType>>(quantizationTypeStr)
-          .CaseLower("mixed", QuantizationType::Mixed)
-          .CaseLower("quantize", QuantizationType::Quant)
-          .CaseLower("dequantize", QuantizationType::Dequant)
-          .CaseLower("testquant", QuantizationType::QuantDequant)
-          .Default(QuantizationType::None);
-  quantType = *optQuantType;
-
-  // If the target type contains "mx", it is a mixed precision type. If
-  // quantization type is not explicitly specified, we will default to Mixed
-  // quantization type for mixed precision target types.
-  if (quantType == QuantizationType::None && !dataType.empty() && dataType.contains("mx"))
-    quantType = QuantizationType::Mixed;
+  // A mixed-precision ("mx") data type has differing input and output element
+  // types. Quantization is only meaningful for such types.
+  mixedType = !dataType.empty() && dataType.contains("mx");
 
   // const kernelType is only supported for non quantization kernel.
-  assert(!(kernelType == KernelType::Const &&
-           quantType == QuantizationType::Quant) &&
+  assert(!(kernelType == KernelType::Const && quant) &&
          "Const kernel type is only supported for non quantization kernel");
 
-  // Update output kind to 'contract' if quantization is enabled.
-  if (quantType != QuantizationType::None)
+  // Update output kind to 'contract' if this is a mixed-precision or quantized
+  // kernel.
+  if (mixedType || quant || testQuant)
     outputOpKind = OutputOpKind::Contract;
 
   // Disable VNNI packing if it is not a F16/BF16/I8/FP8 data type
@@ -312,8 +300,16 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   builder.setInsertionPoint(module);
 }
 
+bool MLIRGenerator::isDequantization() const {
+  return quant && dataTypes.output.isFloat();
+}
+
+bool MLIRGenerator::isQuantization() const {
+  return quant && dataTypes.output.isInteger(8) && !dataTypes.input.isInteger(8);
+}
+
 bool MLIRGenerator::isRequantization() const {
-  return quantType == QuantizationType::Quant && dataTypes.input.isInteger(8);
+  return quant && dataTypes.output.isInteger() && dataTypes.input.isInteger(8);
 }
 
 void MLIRGenerator::getKernelTypes(KernelArgs &args) {
@@ -334,10 +330,10 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     // Scale inputs are needed for dequantization and requantization. In both
     // cases the i32 accumulator is dequantized using the per-row input scale
     // and the per-output-channel weight scale.
-    if (quantType == QuantizationType::Dequant || isRequantization())
+    if (isDequantization() || isRequantization())
       arg.inputScale.type = getShape({batch}, INPUT_SCALE);
     arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
-    if (quantType == QuantizationType::Dequant || isRequantization())
+    if (isDequantization() || isRequantization())
       arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
 
     // TODO: Bias should be of accumulator type when it differs from the output
@@ -351,7 +347,7 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
 
     // For QuantDequant, such as F32->i8->F32, we need an intermediate type to
     // hold the quantized value.
-    if (quantType == QuantizationType::QuantDequant) {
+    if (testQuant) {
       arg.intermediate.type = getShape({batch, outputSize}, PACK_INTERMEDIATE);
       arg.output.type = getShape({batch, outputSize}, PACK_INPUT);
     } else if (isRequantization()) {
@@ -406,16 +402,16 @@ Value MLIRGenerator::createLayer(LayerArgs &args) {
   Value chain;
   chain = lowerMatmul(args);
 
-  if (quantType == QuantizationType::QuantDequant)
+  if (testQuant)
     return testQuantDequant(args, chain);
 
   if (isRequantization())
       chain = requantizeGemm(args, chain);
 
-  if (quantType == QuantizationType::Quant && !isRequantization())
+  if (isQuantization())
     chain = quantizeGemm(args, chain);
 
-  if (quantType == QuantizationType::Dequant)
+  if (isDequantization())
     chain = dequantizeGemm(args, chain);
 
   // These are optional and only emitted if enabled
@@ -455,11 +451,11 @@ void MLIRGenerator::createKernel() {
   SmallVector<Type, 1> inputTypes{firstArg.input.type};
   if (kernelType == KernelType::Args) {
     for (auto &layer : args) {
-      if (quantType == QuantizationType::Dequant || isRequantization())
+      if (isDequantization() || isRequantization())
         inputTypes.push_back(layer.inputScale.type);
 
       inputTypes.push_back(layer.weight.type);
-      if (quantType == QuantizationType::Dequant || isRequantization())
+      if (isDequantization() || isRequantization())
         inputTypes.push_back(layer.weightScale.type);
       if (isRequantization())
         inputTypes.push_back(layer.outputScale.type);
@@ -504,14 +500,14 @@ void MLIRGenerator::createKernel() {
   //   * Layer: input/weights/bias/output = args
   firstArg.input.value = func.getArgument(0);
   // Scales are needed for dequantization and requantization.
-  if (quantType == QuantizationType::Dequant || isRequantization()) {
+  if (isDequantization() || isRequantization()) {
     firstArg.inputScale.value = func.getArgument(1);
   }
 
   // Argument position is input + N * { weight/bias } + output
   // First weight is at position 1, every two
   unsigned argPos =
-      (quantType == QuantizationType::Dequant || isRequantization()) ? 2 : 1;
+      (isDequantization() || isRequantization()) ? 2 : 1;
   // Caches the output to chain into the next layer's input
   Value lastOutput;
   for (auto &arg : args) {
@@ -522,7 +518,7 @@ void MLIRGenerator::createKernel() {
     // Initialize weights and biases
     if (kernelType == KernelType::Args) {
       arg.weight.value = func.getArgument(argPos++);
-      if (quantType == QuantizationType::Dequant || isRequantization()) {
+      if (isDequantization() || isRequantization()) {
         arg.weightScale.value = func.getArgument(argPos++);
       }
       if (isRequantization()) {
@@ -645,11 +641,11 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     // i8xi8 GEMM accumulates into i32 before requantization back to i8.
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, builder.getIntegerType(32)));
-  } else if (quantType == QuantizationType::Quant) {
+  } else if (isQuantization()) {
     // Quantization casts the result later; accumulate in the input type.
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, inputType.getElementType()));
-  } else if (quantType == QuantizationType::Dequant) {
+  } else if (isDequantization()) {
     // Integer GEMM accumulates in i32; dequantization casts it later.
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, builder.getIntegerType(32)));
@@ -912,7 +908,7 @@ Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {
   Value scaleFactor = computeScalingFactor(chain)[0];
   Value input = args.input.value;
   Value weight = args.weight.value;
-  Type outputType = quantType == QuantizationType::QuantDequant
+  Type outputType = testQuant
                         ? args.intermediate.type
                         : args.output.type;
 
@@ -1410,7 +1406,7 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
                                                            : dataTypes.input);
 
   if (!tiles.size()) {
-    if (quantType != QuantizationType::None) {
+    if (mixedType || quant || testQuant) {
       if (type == INPUT_SCALE || type == WEIGHT_SCALE) {
         return RankedTensorType::get(dims, type == INPUT_SCALE
                                                ? dataTypes.inputScale

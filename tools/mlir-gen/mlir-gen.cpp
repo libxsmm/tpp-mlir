@@ -77,11 +77,20 @@ llvm::cl::opt<std::string>
     scaleType("scale-type", llvm::cl::desc("Data type of scaling factor"),
               llvm::cl::value_desc("f32|f8E8M0FNU"), llvm::cl::init(""));
 
-// Quantization type to specify the quantization kernel to be generated.
-llvm::cl::opt<std::string> quantizationType(
-    "quant-type", llvm::cl::desc("Specify quantization type"),
-    llvm::cl::value_desc("mixed|quantize|dequantize|testquant"),
-    llvm::cl::init(""));
+// Enable quantization. The concrete behaviour (quantize, dequantize or
+// requantize) is derived from the selected data type, mirroring what PyTorch
+// does with quantized models.
+llvm::cl::opt<bool> quant("quant",
+                          llvm::cl::desc("Generate a quantized kernel with "
+                                         "scaling factors"),
+                          llvm::cl::value_desc("bool"), llvm::cl::init(false));
+
+// Enable quantize-then-dequantize validation kernel.
+llvm::cl::opt<bool> testQuant("test-quant",
+                              llvm::cl::desc("Generate a quantize-then-"
+                                             "dequantize validation kernel"),
+                              llvm::cl::value_desc("bool"),
+                              llvm::cl::init(false));
 
 // Random seed
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
@@ -132,7 +141,7 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, dataType,
-                    scaleType, quantizationType, seed, identity, enableBias,
+                    scaleType, quant, testQuant, seed, identity, enableBias,
                     enableRelu, enableSoftmax, vnni);
   return gen.generate(filename);
 }

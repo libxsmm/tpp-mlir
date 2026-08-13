@@ -102,11 +102,17 @@ class MLIRGenerator {
   /// Type of kernel to be generated
   KernelType kernelType;
 
-  /// List of supported quantization ops types that can be generated
-  enum class QuantizationType { None, Mixed, Quant, Dequant, QuantDequant };
+  /// When true, generate a quantized kernel with scaling factors. The concrete
+  /// behaviour (quantize, dequantize or requantize) is derived from the data
+  /// types, mirroring what PyTorch does for quantized models.
+  bool quant;
 
-  /// Type of quantization ops to be generated
-  QuantizationType quantType;
+  /// When true, generate a quantize-then-dequantize validation kernel.
+  bool testQuant;
+
+  /// True when the selected data type is a mixed-precision ("mx") type, i.e.
+  /// the input and output element types differ.
+  bool mixedType;
 
   /// VNNI packing factor (0, 2, 4)
   int vnniFactor;
@@ -131,8 +137,16 @@ class MLIRGenerator {
     OUTPUT_SCALE
   };
 
+  /// Returns true when generating a dequantize kernel: quant is enabled and the
+  /// output is a floating point type (e.g. mx-bf16, mx-i8-f32).
+  bool isDequantization() const;
+
+  /// Returns true when generating a quantize kernel: quant is enabled, the
+  /// output is an 8-bit integer and the input is floating point (mx-f32-i8).
+  bool isQuantization() const;
+
   /// Returns true when generating an i8xi8->i32 GEMM that is requantized back
-  /// to i8 (quantize kernel with integer inputs).
+  /// to i8 (quant enabled with integer inputs and integer output, e.g. mx-i8).
   bool isRequantization() const;
 
   /// Return shaped type (packed if requested)
@@ -281,7 +295,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, StringRef, int, bool, bool, bool, bool, int);
+                StringRef, bool, bool, int, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }
 
