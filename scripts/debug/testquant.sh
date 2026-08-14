@@ -8,7 +8,7 @@ for test in 3 8 16 32 64; do
   echo "Running $direct and $quantized..."
   ./bin/mlir-gen --seed=123 --kernel=const --data-type=f32 --batch=$test --layers=$test,$test > $direct.mlir
   ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $direct.mlir > $direct.out
-  ./bin/mlir-gen --seed=123 --kernel=const --data-type=mx-f32-i8 --batch=$test --layers=$test,$test --test-quant > $quantized.mlir
+  ./bin/mlir-gen --seed=123 --kernel=const --data-type=f32-i8 --batch=$test --layers=$test,$test --test-quant > $quantized.mlir
   ./bin/tpp-run -e entry -entry-point-result=void -print --splat-to-random --seed=123 $quantized.mlir > $quantized.out
   ./bin/fpcmp -a 0.02 -i $direct.out $quantized.out
   echo "Direct & Quantize have compatible results up to 0.002"

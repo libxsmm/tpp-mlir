@@ -227,24 +227,23 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
           .CaseLower("hf8", DataTypes{builder.getF8E4M3FNType(),
                                       builder.getF8E4M3FNType(),
                                       builder.getF8E4M3FNType()})
-          .CaseLower("mx-bf16", DataTypes{builder.getBF16Type(),
+          // Mixed-precision GEMMs that keep the wide accumulator as the output.
+          .CaseLower("bf16-f32", DataTypes{builder.getBF16Type(),
+                                           builder.getF32Type(),
+                                           builder.getF32Type()})
+          .CaseLower("f16-f32", DataTypes{builder.getF16Type(),
                                           builder.getF32Type(),
                                           builder.getF32Type()})
-          .CaseLower("mx-f16", DataTypes{builder.getF16Type(),
+          // Low-precision integer GEMMs, used on their own or with --quant.
+          .CaseLower("i8", DataTypes{builder.getIntegerType(8),
+                                     builder.getI32Type(),
+                                     builder.getI32Type()})
+          .CaseLower("i8-f32", DataTypes{builder.getIntegerType(8),
                                          builder.getF32Type(),
                                          builder.getF32Type()})
-          .CaseLower("mx-i8", DataTypes{builder.getIntegerType(8),
-                                        builder.getI32Type(),
-                                        builder.getI32Type()})
-          .CaseLower("mx-i8-i32", DataTypes{builder.getIntegerType(8),
-                                            builder.getI32Type(),
-                                            builder.getI32Type()})
-          .CaseLower("mx-i8-f32", DataTypes{builder.getIntegerType(8),
-                                            builder.getF32Type(),
-                                            builder.getF32Type()})
-          .CaseLower("mx-f32-i8", DataTypes{builder.getF32Type(),
-                                            builder.getIntegerType(8),
-                                            builder.getIntegerType(8)})
+          .CaseLower("f32-i8", DataTypes{builder.getF32Type(),
+                                         builder.getIntegerType(8),
+                                         builder.getIntegerType(8)})
           .Default(DataTypes{});
   assert(dataTypes.input && "Unsupported data type");
 
@@ -258,9 +257,8 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   dataTypes.weightScale = *scaleTypeOpt;
   dataTypes.outputScale = *scaleTypeOpt;
 
-  // A mixed-precision ("mx") data type has differing input and output element
-  // types. Quantization is only meaningful for such types.
-  mixedType = !dataType.empty() && dataType.contains("mx");
+  // A mixed-precision data type has differing input and output element types.
+  mixedType = dataTypes.input != dataTypes.output;
 
   // const kernelType is only supported for non quantization kernel.
   assert(!(kernelType == KernelType::Const && quant) &&

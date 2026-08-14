@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for both mx-i8-f32 (dequant) and
-# mx-bf16 GEMMs.
+# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for both i8-f32 (dequant) and
+# bf16-f32 GEMMs.
 #
 # 1. PERFORMANCE: reuse benchmarks/driver.py with a generated sweep JSON.
 # 2. CORRECTNESS: per-shape diff of default tpp-run vs
@@ -10,7 +10,7 @@
 #                 benchmarks/scripts/plot_benchmarks.py --mode=lines-tflops.
 
 set -euo pipefail
-
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-64}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)"
 
@@ -22,6 +22,7 @@ SKIP_PERF=0
 SKIP_PLOT=0
 SHAPES_CSV="512,1024,2048,4096,8192"
 DTYPES_CSV="i8,bf16"
+
 ABS_TOL="0.02"
 REL_TOL="0.02"
 
@@ -75,7 +76,6 @@ TPP_RUN="${BIN_DIR}/tpp-run"
 FPCMP="${BIN_DIR}/fpcmp"
 DRIVER="${ROOT_DIR}/benchmarks/driver.py"
 GEN_CFG="${SCRIPT_DIR}/gen-sweep-config.py"
-# PLOTTER="${ROOT_DIR}/benchmarks/scripts/plot_benchmarks.py"
 PLOTTER="${ROOT_DIR}/scripts/benchmarks/plot_benchmarks.py"
 
 for f in "${MLIR_GEN}" "${TPP_RUN}" "${FPCMP}" "${DRIVER}" "${GEN_CFG}" "${PLOTTER}"; do
@@ -130,10 +130,10 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   # mlir-gen flag templates (must match gen-sweep-config.py).
   # Use --kernel=args (same as the perf config); tpp-run --splat-to-random
   # --seed=123 makes both baseline and test runs see identical inputs.
-  gen_args_i8="--kernel=args --data-type=mx-i8-f32 --tiles=32,32,64 --vnni=4 --quant --seed=123"
-  gen_args_bf16="--kernel=args --data-type=mx-bf16 --tiles=32,32,32 --vnni=2 --seed=123"
-  vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --sfc-order=true"
-  vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --sfc-order=true"
+  gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant --seed=123"
+  gen_args_bf16="--kernel=args --data-type=bf16-f32 --tiles=32,32,32 --vnni=2 --seed=123"
+  vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --bench-replication-gb=5"
+  vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --bench-replication-gb=5"
 
   IFS=',' read -ra DTYPES <<< "${DTYPES_CSV}"
   IFS=',' read -ra SHAPES <<< "${SHAPES_CSV}"

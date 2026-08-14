@@ -68,7 +68,7 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<std::string>
     dataType("data-type", llvm::cl::desc("Data type for arguments"),
               llvm::cl::value_desc(
-                  "f32|f16|bf16|bf8|hf8|mx-bf16|mx-f16|mx-i8|mx-i8-f32|mx-f32-i8"),
+                  "f32|f16|bf16|bf8|hf8|bf16-f32|f16-f32|i8|i8-f32|f32-i8"),
               llvm::cl::init("f32"));
 
 // Scale type flag to chose data type of scaling factor.For now it is kind of a
@@ -139,6 +139,19 @@ int main(int argc, char **argv) {
   mlir::registerMLIRContextCLOptions();
 
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
+
+  // Quantization needs an 8-bit integer operand; reject wider-only types here
+  // instead of silently ignoring --quant during code generation.
+  if (quant) {
+    llvm::StringRef ty(dataType);
+    if (!ty.equals_insensitive("i8") && !ty.equals_insensitive("i8-f32") &&
+        !ty.equals_insensitive("f32-i8")) {
+      llvm::errs() << "error: --quant requires a data type with an 8-bit "
+                      "integer operand (i8, i8-f32 or f32-i8); got '"
+                   << dataType << "'\n";
+      return 1;
+    }
+  }
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, dataType,
                     scaleType, quant, testQuant, seed, identity, enableBias,

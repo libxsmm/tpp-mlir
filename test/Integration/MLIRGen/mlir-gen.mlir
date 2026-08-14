@@ -32,7 +32,7 @@
 
 // Use two Kernels, one matmul and other quantize-dequantize. That is, the result of matmul would be quantized and then dequantized.
 // RUN: mlir-gen --kernel=const --seed=0 --data-type=f32 --batch=3 --layers=3,3 --identity | tpp-run -e entry -entry-point-result=void -print --splat-to-random --init-type normal  -seed 123 > %t.1
-// RUN: mlir-gen --identity --kernel=const --seed=0 --data-type=mx-f32-i8 --batch=3 --layers=3,3 --test-quant | tpp-run -e entry -entry-point-result=void -print --splat-to-random --init-type normal  -seed 123 > %t.2
+// RUN: mlir-gen --identity --kernel=const --seed=0 --data-type=f32-i8 --batch=3 --layers=3,3 --test-quant | tpp-run -e entry -entry-point-result=void -print --splat-to-random --init-type normal  -seed 123 > %t.2
 
 // Comparison is done between the result of matmul and the result of quantize-dequantize kernels.
 // RUN: fpcmp -a 0.01 -r 0.01 %t.1 %t.2

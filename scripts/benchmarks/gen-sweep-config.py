@@ -15,7 +15,7 @@ import os
 import sys
 
 SHAPES = [512, 1024, 2048, 4096, 8192]
-
+THREADS = [64]
 OMP_ENV = {
     "OMP_NUM_THREADS": "64",
     "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0",
@@ -23,44 +23,46 @@ OMP_ENV = {
 
 DTYPES = {
     "i8": {
-        "group": "gemm_i8_f32_dequant_mlir_vector_large_amx",
-        "name_fmt": "i8_f32_dequant_{M}x{N}x{K}_omp_64_mlir",
+        "group": "gemm_i8_i8_quant_mlir_vector_large_amx",
+        "name_fmt": "i8_i8_quant_{M}x{N}x{K}_omp_{T}_mlir",
         "gen_flags": (
-            "--kernel=args --data-type=mx-i8-f32 --batch={M} "
+            "--kernel=args --data-type=i8 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
             "--quant"
         ),
         "run_args": (
-            "--def-parallel --nano-kernels --gemm-unrolling=16,16,16 "
-            "--registerBlocking=32,32,64 --sfc-order=true "
-            "--init-type=quant --seed=123"
+            "--def-parallel --nano-kernels --gemm-unroll=16,16,16 "
+            "--registerBlocking=32,32,64 --bench-replication-gb=5 "
+            "--init-type=quant --splat-to-random --seed=123"
         ),
         "extensions": ["amx_int8"],
     },
     "bf16": {
         "group": "gemm_bf16_f32_dequant_mlir_vector_large_amx",
-        "name_fmt": "bf16_f32_dequant_{M}x{N}x{K}_omp_64_mlir",
+        "name_fmt": "bf16_f32_dequant_{M}x{N}x{K}_omp_{T}_mlir",
         "gen_flags": (
-            "--kernel=args --data-type=mx-bf16 --batch={M} "
+            "--kernel=args --data-type=bf16-f32 --batch={M} "
             "--layers={K},{N} --tiles=32,32,32 --vnni=2"
         ),
         "run_args": (
-            "--def-parallel --nano-kernels --gemm-unrolling=16,16,16 "
-            "--registerBlocking=32,32,32 --sfc-order=true "
-            "--init-type=normal --seed=123"
+            "--def-parallel --nano-kernels --gemm-unroll=16,16,16 "
+            "--registerBlocking=32,32,32 --bench-replication-gb=5 "
+            "--init-type=normal --splat-to-random --seed=123"
         ),
         "extensions": ["amx_bf16"],
     },
 }
 
 
-def build_run(dtype_cfg, M, N, K, iters):
-    name = dtype_cfg["name_fmt"].format(M=M, N=N, K=K)
+def build_run(dtype_cfg, M, N, K, threads, iters):
+    name = dtype_cfg["name_fmt"].format(M=M, N=N, K=K, T=threads)
     gen_flags = dtype_cfg["gen_flags"].format(M=M, N=N, K=K)
+    env = dict(OMP_ENV)
+    env["OMP_NUM_THREADS"] = str(threads)
     return name, {
         "type": "IR-GEN",
         "benchmark": ["mlir-gen", gen_flags],
-        "environment": dict(OMP_ENV),
+        "environment": env,
         "flags": [
             "-n", str(iters),
             "-run-args='" + dtype_cfg["run_args"] + "'",
@@ -87,10 +89,17 @@ def main():
         "--dtypes", default="i8,bf16",
         help="Comma-separated dtype keys (i8, bf16) (default: %(default)s)",
     )
+    p.add_argument(
+        "--threads", default=",".join(str(t) for t in THREADS),
+        help="Comma-separated OMP_NUM_THREADS list (default: %(default)s)",
+    )
     args = p.parse_args()
 
     shapes = [int(s) for s in args.shapes.split(",") if s]
+    threads = [int(t) for t in args.threads.split(",") if t]
     dtypes = [d.strip() for d in args.dtypes.split(",") if d.strip()]
+    if any(t <= 0 for t in threads):
+        sys.exit("All --threads values must be positive integers")
     for d in dtypes:
         if d not in DTYPES:
             sys.exit(f"Unknown dtype '{d}'. Choices: {list(DTYPES)}")
@@ -100,8 +109,10 @@ def main():
         dcfg = DTYPES[d]
         runs = {}
         for M, N, K in itertools.product(shapes, repeat=3):
-            name, run = build_run(dcfg, M, N, K, args.iters)
-            runs[name] = run
+            for t in threads:
+                name, run = build_run(dcfg, M, N, K, t, args.iters)
+                # name, run = build_run(dcfg, 8192, N, K, t, args.iters)
+                runs[name] = run
         cfg.append({dcfg["group"]: runs})
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)

@@ -2,7 +2,7 @@
 #
 # Cold-cache GEMM sweep for tpp-run, modeled after libxsmm's sfc_ca_gemm
 # benchmark_sample.sh. For every (M, N, K) configuration it:
-#   1. generates an mx-bf16 GEMM kernel with mlir-gen,
+#   1. generates an bf16 GEMM kernel with mlir-gen,
 #   2. runs tpp-run with -bench-replication-gb=5.0 so the kernel arguments are
 #      replicated to a 5 GiB footprint and iterated inside the timing loop
 #      (cold-cache measurement),
@@ -87,7 +87,7 @@ echo "M,N,K,runtime_s" > "${RAW_CSV}"
 for M in "${SIZES[@]}"; do
   for N in "${SIZES[@]}"; do
     for K in "${SIZES[@]}"; do
-      mlir_file="${OUT_DIR}/gemm_sfc_${M}_${N}_${K}_mx-bf16.mlir"
+      mlir_file="${OUT_DIR}/gemm_sfc_${M}_${N}_${K}_bf16.mlir"
 
       echo "=== Generating M=${M} N=${N} K=${K} ==="
       "${MLIR_GEN}" --kernel=args --data-type=bf16 \

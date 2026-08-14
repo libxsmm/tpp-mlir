@@ -110,8 +110,8 @@ class MLIRGenerator {
   /// When true, generate a quantize-then-dequantize validation kernel.
   bool testQuant;
 
-  /// True when the selected data type is a mixed-precision ("mx") type, i.e.
-  /// the input and output element types differ.
+  /// True when the selected data type is mixed-precision, i.e. the input and
+  /// output element types differ.
   bool mixedType;
 
   /// VNNI packing factor (0, 2, 4)
