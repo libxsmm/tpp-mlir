@@ -300,18 +300,6 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   builder.setInsertionPoint(module);
 }
 
-bool MLIRGenerator::isDequantization() const {
-  return quant && dataTypes.output.isFloat();
-}
-
-bool MLIRGenerator::isQuantization() const {
-  return quant && dataTypes.output.isInteger(8) && !dataTypes.input.isInteger(8);
-}
-
-bool MLIRGenerator::isRequantization() const {
-  return quant && dataTypes.output.isInteger() && dataTypes.input.isInteger(8);
-}
-
 void MLIRGenerator::getKernelTypes(KernelArgs &args) {
   // Input type, also first layer's input
   TensorType currentType = getShape({batch, layers.front()}, PACK_INPUT);
@@ -327,22 +315,28 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     LayerArgs arg;
     arg.index = i;
     arg.input.type = currentType;
-    // Scale inputs are needed for dequantization and requantization. In both
-    // cases the i32 accumulator is dequantized using the per-row input scale
-    // and the per-output-channel weight scale.
-    if (isDequantization() || isRequantization())
+    // A float input with an integer output is self-scaled (it computes its own
+    // quantization scale), so it carries no scale arguments. Every other
+    // quantized kernel carries a per-row input scale and a per-output-channel
+    // weight scale to dequantize the wide accumulator.
+    bool selfScaledQuantize =
+        quant && dataTypes.input.isFloat() && dataTypes.output.isInteger();
+    bool hasInputWeightScales = quant && !selfScaledQuantize;
+    // Integer input with integer output additionally carries a
+    // per-output-channel output scale to requantize the value back down.
+    bool hasOutputScale =
+        quant && dataTypes.input.isInteger() && dataTypes.output.isInteger();
+    if (hasInputWeightScales)
       arg.inputScale.type = getShape({batch}, INPUT_SCALE);
     arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
-    if (isDequantization() || isRequantization())
+    if (hasInputWeightScales)
       arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
 
     // TODO: Bias should be of accumulator type when it differs from the output
     // type AND we want to propagate the truncation through the element-wise ops.
     arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
 
-    // Requantization additionally needs a per-output-channel output scale to
-    // convert the dequantized value back to i8.
-    if (isRequantization())
+    if (hasOutputScale)
       arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
 
     // For QuantDequant, such as F32->i8->F32, we need an intermediate type to
@@ -350,7 +344,7 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     if (testQuant) {
       arg.intermediate.type = getShape({batch, outputSize}, PACK_INTERMEDIATE);
       arg.output.type = getShape({batch, outputSize}, PACK_INPUT);
-    } else if (isRequantization()) {
+    } else if (hasOutputScale) {
       // Requantized GEMM keeps the N x K output layout but stores i8 values.
       auto packedOutTy = getShape({batch, outputSize}, PACK_OUTPUT);
       arg.output.type =
@@ -405,14 +399,8 @@ Value MLIRGenerator::createLayer(LayerArgs &args) {
   if (testQuant)
     return testQuantDequant(args, chain);
 
-  if (isRequantization())
-      chain = requantizeGemm(args, chain);
-
-  if (isQuantization())
-    chain = quantizeGemm(args, chain);
-
-  if (isDequantization())
-    chain = dequantizeGemm(args, chain);
+  if (quant)
+    chain = quantizeEpilogue(args, chain);
 
   // These are optional and only emitted if enabled
   if (outputOpKind == OutputOpKind::Generic) {
@@ -451,13 +439,13 @@ void MLIRGenerator::createKernel() {
   SmallVector<Type, 1> inputTypes{firstArg.input.type};
   if (kernelType == KernelType::Args) {
     for (auto &layer : args) {
-      if (isDequantization() || isRequantization())
+      if (layer.inputScale.type)
         inputTypes.push_back(layer.inputScale.type);
 
       inputTypes.push_back(layer.weight.type);
-      if (isDequantization() || isRequantization())
+      if (layer.weightScale.type)
         inputTypes.push_back(layer.weightScale.type);
-      if (isRequantization())
+      if (layer.outputScale.type)
         inputTypes.push_back(layer.outputScale.type);
 
       if (enableBias)
@@ -499,15 +487,12 @@ void MLIRGenerator::createKernel() {
   //   * Model: input = arg, weights/bias = const, output = zero
   //   * Layer: input/weights/bias/output = args
   firstArg.input.value = func.getArgument(0);
-  // Scales are needed for dequantization and requantization.
-  if (isDequantization() || isRequantization()) {
+  // Integer inputs carry an input scale right after the model input.
+  if (firstArg.inputScale.type)
     firstArg.inputScale.value = func.getArgument(1);
-  }
 
   // Argument position is input + N * { weight/bias } + output
-  // First weight is at position 1, every two
-  unsigned argPos =
-      (isDequantization() || isRequantization()) ? 2 : 1;
+  unsigned argPos = firstArg.inputScale.type ? 2 : 1;
   // Caches the output to chain into the next layer's input
   Value lastOutput;
   for (auto &arg : args) {
@@ -518,12 +503,10 @@ void MLIRGenerator::createKernel() {
     // Initialize weights and biases
     if (kernelType == KernelType::Args) {
       arg.weight.value = func.getArgument(argPos++);
-      if (isDequantization() || isRequantization()) {
+      if (arg.weightScale.type)
         arg.weightScale.value = func.getArgument(argPos++);
-      }
-      if (isRequantization()) {
+      if (arg.outputScale.type)
         arg.outputScale.value = func.getArgument(argPos++);
-      }
       if (enableBias)
         arg.bias.value = func.getArgument(argPos++);
       arg.output.value = func.getArgument(argPos++);
@@ -636,17 +619,14 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
 
-  // Select the matmul accumulator tensor.
-  if (isRequantization()) {
-    // i8xi8 GEMM accumulates into i32 before requantization back to i8.
-    args.accumulator.value = getZeroInitTensor(
-        RankedTensorType::get(shape, builder.getIntegerType(32)));
-  } else if (isQuantization()) {
-    // Quantization casts the result later; accumulate in the input type.
+  // Select the matmul accumulator tensor. Quantized kernels always accumulate
+  // into a wide type: a float input quantized to an integer output accumulates
+  // in the (float) input type, while every other quantized kernel accumulates
+  // into i32.
+  if (quant && dataTypes.input.isFloat() && dataTypes.output.isInteger()) {
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, inputType.getElementType()));
-  } else if (isDequantization()) {
-    // Integer GEMM accumulates in i32; dequantization casts it later.
+  } else if (quant) {
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, builder.getIntegerType(32)));
   } else if (!args.accumulator.type ||
@@ -696,9 +676,9 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
       break;
   }
 
-  // Requantization consumes the raw i32 accumulator directly, so keep it as-is
-  // rather than truncating it to the i8 output type here.
-  if (isRequantization())
+  // The quantization epilogue consumes the raw wide accumulator and performs
+  // the final cast, so skip the same-domain downcast here.
+  if (quant)
     return accumulator;
 
   return downcastToOutput(builder, loc, accumulator, args.output.type);
@@ -902,6 +882,18 @@ SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
   scalingFactors.push_back(broadcastScaleRes);
 
   return scalingFactors;
+}
+
+Value MLIRGenerator::quantizeEpilogue(LayerArgs &args, Value chain) {
+  // Choose the epilogue from the available types:
+  //  * float input, integer output -> self-scaled quantize;
+  //  * integer input, integer output -> requantize (uses the output scale);
+  //  * integer input, float output -> dequantize.
+  if (dataTypes.input.isFloat() && dataTypes.output.isInteger())
+    return quantizeGemm(args, chain);
+  if (dataTypes.output.isInteger())
+    return requantizeGemm(args, chain);
+  return dequantizeGemm(args, chain);
 }
 
 Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {

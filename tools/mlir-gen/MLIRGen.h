@@ -137,18 +137,6 @@ class MLIRGenerator {
     OUTPUT_SCALE
   };
 
-  /// Returns true when generating a dequantize kernel: quant is enabled and the
-  /// output is a floating point type (e.g. mx-bf16, mx-i8-f32).
-  bool isDequantization() const;
-
-  /// Returns true when generating a quantize kernel: quant is enabled, the
-  /// output is an 8-bit integer and the input is floating point (mx-f32-i8).
-  bool isQuantization() const;
-
-  /// Returns true when generating an i8xi8->i32 GEMM that is requantized back
-  /// to i8 (quant enabled with integer inputs and integer output, e.g. mx-i8).
-  bool isRequantization() const;
-
   /// Return shaped type (packed if requested)
   TensorType getShape(ArrayRef<int64_t>, PackingType);
 
@@ -234,6 +222,10 @@ class MLIRGenerator {
   /// Computes scaling factor for the given input. Returns the scaling factor of
   /// same shape as input.
   SmallVector<Value> computeScalingFactor(Value input);
+
+  /// Applies the quantization epilogue to the wide GEMM accumulator, choosing
+  /// the concrete lowering from the available input/output types.
+  Value quantizeEpilogue(LayerArgs &args, Value chain);
 
   /// Creates a matmul quantization kernel
   Value quantizeGemm(LayerArgs &args, Value chain);
