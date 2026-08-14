@@ -945,11 +945,12 @@ Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {
 }
 
 Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
-  // Chain is the i32 GEMM accumulator to be requantized back to i8.
-  // Requantization first dequantizes the accumulator using the per-row input
-  // scale and the per-output-channel weight scale, then rescales it with the
-  // per-output-channel output scale and saturates to the signed i8 range:
-  //   out_i8 = clamp(round(acc_i32 * S_input * S_weight * S_output), -128, 127)
+  // Chain is the wide integer GEMM accumulator to be requantized down to the
+  // output integer type. Requantization first dequantizes the accumulator
+  // using the per-row input scale and the per-output-channel weight scale,
+  // then rescales it with the per-output-channel output scale and saturates to
+  // the signed range of the output integer type:
+  //   out = clamp(round(acc * S_input * S_weight * S_output), INT_MIN, INT_MAX)
   assert(chain && "Expected valid chain output from contract/gemm operation");
 
   Value inputScale = args.inputScale.value;
@@ -958,8 +959,9 @@ Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
   Value output = args.output.value;
 
   auto outputShapedTy = cast<ShapedType>(output.getType());
-  assert(outputShapedTy.getElementType().isInteger(8) &&
-         "Requantization output must be i8");
+  Type outElemTy = outputShapedTy.getElementType();
+  assert(outElemTy.isInteger() &&
+         "Requantization output must be an integer type");
 
   auto inputScaleTy = cast<ShapedType>(inputScale.getType());
   assert(inputScaleTy.getRank() == 1 && "Input scale must be a vector");
@@ -1035,13 +1037,15 @@ Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
     iteratorTypes.assign(rank, utils::IteratorType::parallel);
   }
 
-  Type i8Type = outputShapedTy.getElementType();
   Type floatTy = builder.getF32Type();
-  // Saturation bounds for signed 8-bit integers.
+  // Saturation bounds derived from the signed output integer width.
+  unsigned outBitWidth = outElemTy.getIntOrFloatBitWidth();
+  double lowBound = llvm::APInt::getSignedMinValue(outBitWidth).getSExtValue();
+  double highBound = llvm::APInt::getSignedMaxValue(outBitWidth).getSExtValue();
   Value lowClamp = arith::ConstantOp::create(
-      builder, loc, builder.getFloatAttr(floatTy, -128.0));
+      builder, loc, builder.getFloatAttr(floatTy, lowBound));
   Value highClamp = arith::ConstantOp::create(
-      builder, loc, builder.getFloatAttr(floatTy, 127.0));
+      builder, loc, builder.getFloatAttr(floatTy, highBound));
 
   auto result =
       linalg::GenericOp::create(
@@ -1050,9 +1054,9 @@ Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
           ValueRange{output}, maps, iteratorTypes,
           [&](OpBuilder &nestedBuilder, Location nestedLoc,
               ValueRange blockArgs) {
-            // Convert the i32 accumulator to float and combine all scales.
-            Value accF = arith::SIToFPOp::create(nestedBuilder, nestedLoc,
-                                                 floatTy, blockArgs[0]);
+            // Cast the wide accumulator to float and combine all scales.
+            Value accF = createCastToFloat(nestedBuilder, nestedLoc,
+                                           blockArgs[0], floatTy);
             Value inS = createCastToFloat(nestedBuilder, nestedLoc,
                                           blockArgs[1], floatTy);
             Value wS = createCastToFloat(nestedBuilder, nestedLoc,
@@ -1068,13 +1072,13 @@ Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
             Value scaled =
                 arith::MulFOp::create(nestedBuilder, nestedLoc, accF, scale)
                     ->getResult(0);
-            // Saturate to the signed i8 range before truncating.
+            // Saturate to the output integer range before truncating.
             scaled = arith::MaximumFOp::create(nestedBuilder, nestedLoc, scaled,
                                                lowClamp);
             scaled = arith::MinimumFOp::create(nestedBuilder, nestedLoc, scaled,
                                                highClamp);
             Value quantized = arith::FPToSIOp::create(nestedBuilder, nestedLoc,
-                                                      i8Type, scaled);
+                                                      outElemTy, scaled);
             linalg::YieldOp::create(nestedBuilder, nestedLoc,
                                     ValueRange{quantized});
           })
