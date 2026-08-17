@@ -180,20 +180,22 @@ class MLIRGenerator {
     unsigned index;
     Arg input;
     Arg inputScale;
+    // Whether this layer reads its input transposed, and whether the activation
+    // arriving from the previous layer must be relaid out (re-tiled and/or
+    // transposed) into the canonical packed input layout this contraction
+    // expects. Decided by comparing the produced shape with the required one.
+    bool inputTranspose = false;
+    bool inputRelayout = false;
     Arg weight;
     Arg weightScale;
+    // Whether this layer reads its weight transposed.
+    bool weightTranspose = false;
     Arg bias;
     Arg intermediate; // For quantdequant validation
     Arg output;
     Arg accumulator;
-    // Whether this layer reads its input / weight or writes its output
-    // transposed.
-    bool transposeInput = false;
-    bool transposeOutput = false;
-    bool transposeWeight = false;
-    // Whether the (packed) input activation is relaid out with an explicit
-    // transpose before the contraction (tiled transposed-A hidden layers).
-    bool materializeInputTranspose = false;
+    // Whether this layer writes its output transposed.
+    bool outputTranspose = false;
   };
 
   /// Return affine map (packed if requested)
@@ -217,6 +219,12 @@ class MLIRGenerator {
   /// Boolean indicates if mixed type (quantization) is used.
   /// Returns the chain value to be used in the next op
   Value lowerMatmul(LayerArgs &args);
+
+  /// Re-tile the reduction (feature) dimension of a standard packed activation
+  /// {BN, Bk, bn, k} to {BN, Bc, bn, reduceTile}, keeping the batch blocking.
+  /// Used to adapt a hidden activation whose producing layer tiled the feature
+  /// dimension differently than the consuming contraction reduces over it.
+  Value retilePackedActivation(Value packed, int64_t reduceTile);
 
   /// Creates linalg generic matmul
   Value lowerGenericMatmul(LayerArgs &args, Value chain);
