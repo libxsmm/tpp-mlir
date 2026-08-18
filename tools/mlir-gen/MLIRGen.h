@@ -107,13 +107,6 @@ class MLIRGenerator {
   /// types, mirroring what PyTorch does for quantized models.
   bool quant;
 
-  /// When true, generate a quantize-then-dequantize validation kernel.
-  bool testQuant;
-
-  /// True when the selected data type is mixed-precision, i.e. the input and
-  /// output element types differ.
-  bool mixedType;
-
   /// VNNI packing factor (0, 2, 4)
   int vnniFactor;
 
@@ -131,7 +124,6 @@ class MLIRGenerator {
     PACK_WEIGHT,
     PACK_OUTPUT,
     PACK_ACCUMULATOR,
-    PACK_INTERMEDIATE,
     INPUT_SCALE,
     WEIGHT_SCALE,
     OUTPUT_SCALE
@@ -184,7 +176,6 @@ class MLIRGenerator {
     Arg weightScale;
     Arg outputScale;
     Arg bias;
-    Arg intermediate; // For quantdequant validation
     Arg output;
     Arg accumulator;
   };
@@ -219,25 +210,16 @@ class MLIRGenerator {
   /// Creates linalg contract
   Value lowerContract(LayerArgs &args, Value chain);
 
-  /// Computes scaling factor for the given input. Returns the scaling factor of
-  /// same shape as input.
-  SmallVector<Value> computeScalingFactor(Value input);
-
   /// Applies the quantization epilogue to the wide GEMM accumulator, choosing
   /// the concrete lowering from the available input/output types.
   Value quantizeEpilogue(LayerArgs &args, Value chain);
 
-  /// Creates a matmul quantization kernel
-  Value quantizeGemm(LayerArgs &args, Value chain);
-
-  /// Requantizes an i32 GEMM accumulator back to i8 using a per-output-channel
-  /// output scale argument.
+  /// Requantizes a wide integer GEMM accumulator down to the output integer
+  /// type using a per-output-channel output scale argument.
   Value requantizeGemm(LayerArgs &args, Value chain);
 
   /// Creates a matmul dequantization kernel
   Value dequantizeGemm(LayerArgs &args, Value chain);
-
-  Value testQuantDequant(LayerArgs &args, Value input);
 
   /// Creates a bias add in the current function
   /// Args: LayerArgs, Chain
@@ -287,7 +269,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, bool, bool, int, bool, bool, bool, bool, int);
+                StringRef, bool, int, bool, bool, bool, bool, int);
 
   ~MLIRGenerator() { module->destroy(); }
 

@@ -2,13 +2,10 @@
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=BF16
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=f16 --batch=128 --layers=2304,768 --tiles=64,48,64 2>&1 | FileCheck %s --check-prefix=FP16
 
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16-f32 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=BF16F32-CONTRACT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=I8-CONTRACT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=f16-f32 --batch=128 --layers=2304,768 --tiles=64,48,64 --output=contract 2>&1 | FileCheck %s --check-prefix=F16F32-CONTRACT
 
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8-f32 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=I8F32-DEQUANT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8-f32 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=I8F32-I8SCALE-DEQUANT
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=f32-i8 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=F32I8-QUANT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8-f32 --batch=4096 --layers=8192,4096 --quant --output=generic --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=I8F32-PACKED-DEQUANT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8-f32 --batch=128 --layers=2304,768 --quant --scale-type=f8E8M0FNU --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=I8F32-I8SCALE-PACKED-DEQUANT
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=i8 --batch=128 --layers=2304,768 --quant 2>&1 | FileCheck %s --check-prefix=I8-REQUANT
@@ -56,24 +53,6 @@
 // FP16:         arith.addf
 // FP16-NOT: dealloc
 
-// BF16F32-GENERIC: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
-// BF16F32-GENERIC: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
-// BF16F32-GENERIC: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
-// BF16F32-GENERIC-LABEL:   func.func @entry(
-// BF16F32-GENERIC-SAME:                     %[[ARG0:.*]]: tensor<2x36x64x64xbf16>,
-// BF16F32-GENERIC-SAME:                     %[[ARG1:.*]]: tensor<16x36x64x48xbf16>,
-// BF16F32-GENERIC-SAME:                     %[[ARG2:.*]]: tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32> {
-// BF16F32-GENERIC:           %[[VAL_0:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]], iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]} ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xbf16>, tensor<16x36x64x48xbf16>) outs(%[[ARG2]] : tensor<2x16x64x48xf32>) {
-// BF16F32-GENERIC:           ^bb0(%[[VAL_1:.*]]: bf16, %[[VAL_2:.*]]: bf16, %[[VAL_3:.*]]: f32):
-// BF16F32-GENERIC:             %[[VAL_4:.*]] = arith.extf %[[VAL_1]] : bf16 to f32
-// BF16F32-GENERIC:             %[[VAL_5:.*]] = arith.extf %[[VAL_2]] : bf16 to f32
-// BF16F32-GENERIC:             %[[VAL_6:.*]] = arith.mulf %[[VAL_4]], %[[VAL_5]] : f32
-// BF16F32-GENERIC:             %[[VAL_7:.*]] = arith.addf %[[VAL_3]], %[[VAL_6]] : f32
-// BF16F32-GENERIC:             linalg.yield %[[VAL_7]] : f32
-// BF16F32-GENERIC:           } -> tensor<2x16x64x48xf32>
-// BF16F32-GENERIC:           return %[[VAL_0]] : tensor<2x16x64x48xf32>
-// BF16F32-GENERIC:         }
-
 // I8-GENERIC: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
 // I8-GENERIC: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
 // I8-GENERIC: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
@@ -92,17 +71,6 @@
 // I8-GENERIC:           return %[[VAL_0]] : tensor<2x16x64x48xi32>
 // I8-GENERIC:         }
 
-// BF16F32-CONTRACT: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
-// BF16F32-CONTRACT: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
-// BF16F32-CONTRACT: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
-// BF16F32-CONTRACT-LABEL:   func.func @entry(
-// BF16F32-CONTRACT-SAME:                     %[[ARG0:.*]]: tensor<2x36x64x64xbf16>,
-// BF16F32-CONTRACT-SAME:                     %[[ARG1:.*]]: tensor<16x36x64x48xbf16>,
-// BF16F32-CONTRACT-SAME:                     %[[ARG2:.*]]: tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32> {
-// BF16F32-CONTRACT:           %[[VAL_3:.*]] = linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]] ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xbf16>, tensor<16x36x64x48xbf16>) outs(%[[ARG2]] : tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32>
-// BF16F32-CONTRACT:           return %[[VAL_3]] : tensor<2x16x64x48xf32>
-// BF16F32-CONTRACT:         }
-
 // I8-CONTRACT: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
 // I8-CONTRACT: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
 // I8-CONTRACT: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
@@ -114,35 +82,6 @@
 // I8-CONTRACT:           %[[VAL_3:.*]] = linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]] ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xi8>, tensor<16x36x64x48xi8>) outs(%[[ARG2]] : tensor<2x16x64x48xi32>) -> tensor<2x16x64x48xi32>
 // I8-CONTRACT:           return %[[VAL_3]] : tensor<2x16x64x48xi32>
 // I8-CONTRACT:         }
-
-// F16F32-GENERIC: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
-// F16F32-GENERIC: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
-// F16F32-GENERIC: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
-// F16F32-GENERIC-LABEL:   func.func @entry(
-// F16F32-GENERIC-SAME:                     %[[ARG0:.*]]: tensor<2x36x64x64xf16>,
-// F16F32-GENERIC-SAME:                     %[[ARG1:.*]]: tensor<16x36x64x48xf16>,
-// F16F32-GENERIC-SAME:                     %[[ARG2:.*]]: tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32> {
-// F16F32-GENERIC:           %[[VAL_0:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]], iterator_types = ["parallel", "parallel", "reduction", "parallel", "parallel", "reduction"]} ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xf16>, tensor<16x36x64x48xf16>) outs(%[[ARG2]] : tensor<2x16x64x48xf32>) {
-// F16F32-GENERIC:           ^bb0(%[[VAL_1:.*]]: f16, %[[VAL_2:.*]]: f16, %[[VAL_3:.*]]: f32):
-// F16F32-GENERIC:             %[[VAL_4:.*]] = arith.extf %[[VAL_1]] : f16 to f32
-// F16F32-GENERIC:             %[[VAL_5:.*]] = arith.extf %[[VAL_2]] : f16 to f32
-// F16F32-GENERIC:             %[[VAL_6:.*]] = arith.mulf %[[VAL_4]], %[[VAL_5]] : f32
-// F16F32-GENERIC:             %[[VAL_7:.*]] = arith.addf %[[VAL_3]], %[[VAL_6]] : f32
-// F16F32-GENERIC:             linalg.yield %[[VAL_7]] : f32
-// F16F32-GENERIC:           } -> tensor<2x16x64x48xf32>
-// F16F32-GENERIC:           return %[[VAL_0]] : tensor<2x16x64x48xf32>
-// F16F32-GENERIC:         }
-
-// F16F32-CONTRACT: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d2, d3, d5)>
-// F16F32-CONTRACT: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d5, d4)>
-// F16F32-CONTRACT: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
-// F16F32-CONTRACT-LABEL:   func.func @entry(
-// F16F32-CONTRACT-SAME:                     %[[ARG0:.*]]: tensor<2x36x64x64xf16>,
-// F16F32-CONTRACT-SAME:                     %[[ARG1:.*]]: tensor<16x36x64x48xf16>,
-// F16F32-CONTRACT-SAME:                     %[[ARG2:.*]]: tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32> {
-// F16F32-CONTRACT:           %[[VAL_3:.*]] = linalg.contract indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]]] ins(%[[ARG0]], %[[ARG1]] : tensor<2x36x64x64xf16>, tensor<16x36x64x48xf16>) outs(%[[ARG2]] : tensor<2x16x64x48xf32>) -> tensor<2x16x64x48xf32>
-// F16F32-CONTRACT:           return %[[VAL_3]] : tensor<2x16x64x48xf32>
-// F16F32-CONTRACT:         }
 
 
 // Perform Gemm dequntization using given scales.
@@ -166,36 +105,6 @@
 // I8F32-DEQUANT:             arith.sitofp
 // I8F32-DEQUANT:             arith.mulf
 // I8F32-DEQUANT:             linalg.yield
-
-
-// Perform Gemm quntization with dynamic scale computation.
-
-// F32I8-QUANT: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
-// F32I8-QUANT: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
-// F32I8-QUANT: #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
-// F32I8-QUANT: #map3 = affine_map<(d0) -> (d0)>
-// F32I8-QUANT: #map4 = affine_map<(d0, d1) -> (d0, d1)>
-// F32I8-QUANT-LABEL:   func.func @entry(
-// F32I8-QUANT-SAME:                     %[[ARG0:.*]]: tensor<128x2304xf32>,
-// F32I8-QUANT-SAME:                     %[[ARG1:.*]]: tensor<2304x768xf32>,
-// F32I8-QUANT-SAME:                     %[[ARG2:.*]]: tensor<128x768xi8>) -> tensor<128x768xi8> {
-// F32I8-QUANT:           linalg.contract
-// F32I8-QUANT:           linalg.reduce {{.*}} dimensions = [0]
-// F32I8-QUANT:               math.absf
-// F32I8-QUANT:               arith.maximumf
-// F32I8-QUANT:           linalg.generic  {indexing_maps = [#map3, #map3, #map3], iterator_types = ["parallel"]}
-// F32I8-QUANT:               llvm.intr.frexp
-// F32I8-QUANT:               llvm.extractvalue
-// F32I8-QUANT:               arith.constant 7
-// F32I8-QUANT:               arith.subi
-// F32I8-QUANT:               arith.subi
-// F32I8-QUANT:               arith.sitofp
-// F32I8-QUANT:               arith.sitofp
-// F32I8-QUANT:               math.exp2
-// F32I8-QUANT:           linalg.broadcast
-// F32I8-QUANT:           linalg.mul
-// F32I8-QUANT:           linalg.generic
-// F32I8-QUANT:               arith.fptosi
 
 
 // Requantize i8xi8->i32 Gemm output back to i8. The i32 accumulator is

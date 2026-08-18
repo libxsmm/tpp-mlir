@@ -37,20 +37,6 @@ DTYPES = {
         ),
         "extensions": ["amx_int8"],
     },
-    "bf16": {
-        "group": "gemm_bf16_f32_dequant_mlir_vector_large_amx",
-        "name_fmt": "bf16_f32_dequant_{M}x{N}x{K}_omp_{T}_mlir",
-        "gen_flags": (
-            "--kernel=args --data-type=bf16-f32 --batch={M} "
-            "--layers={K},{N} --tiles=32,32,32 --vnni=2"
-        ),
-        "run_args": (
-            "--def-parallel --nano-kernels --gemm-unroll=16,16,16 "
-            "--registerBlocking=32,32,32 --bench-replication-gb=5 "
-            "--init-type=normal --splat-to-random --seed=123"
-        ),
-        "extensions": ["amx_bf16"],
-    },
 }
 
 
@@ -86,8 +72,8 @@ def main():
         help="Comma-separated dim list (default: %(default)s)",
     )
     p.add_argument(
-        "--dtypes", default="i8,bf16",
-        help="Comma-separated dtype keys (i8, bf16) (default: %(default)s)",
+        "--dtypes", default="i8",
+        help="Comma-separated dtype keys (i8) (default: %(default)s)",
     )
     p.add_argument(
         "--threads", default=",".join(str(t) for t in THREADS),

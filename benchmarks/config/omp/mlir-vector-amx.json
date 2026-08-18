@@ -1,64 +1,82 @@
 [
   {
-  "gemm_i8_f32_dequant_mlir_vector_large_amx": {
-    "i8_f32_dequant_4096x4096_omp_8_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant" ],
-      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_int8" ]
-    },
-    "i8_f32_dequant_4096x4096_omp_16_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant" ],
-      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_int8" ]
-    },
-    "i8_f32_dequant_4096x4096_omp_32_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant" ],
-      "environment": { "OMP_NUM_THREADS": "32", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_int8" ]
-    },
-    "i8_f32_dequant_4096x4096_omp_64_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant" ],
-      "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_int8" ]
+    "gemm_i8_f32_dequant_mlir_vector_large_amx": {
+      "i8_f32_dequant_4096x4096_omp_8_mlir": {
+        "type": "IR-GEN",
+        "benchmark": [
+          "mlir-gen",
+          "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant"
+        ],
+        "environment": {
+          "OMP_NUM_THREADS": "8",
+          "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0"
+        },
+        "flags": [
+          "-n",
+          "100",
+          "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'"
+        ],
+        "extensions": [
+          "amx_int8"
+        ]
+      },
+      "i8_f32_dequant_4096x4096_omp_16_mlir": {
+        "type": "IR-GEN",
+        "benchmark": [
+          "mlir-gen",
+          "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant"
+        ],
+        "environment": {
+          "OMP_NUM_THREADS": "16",
+          "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0"
+        },
+        "flags": [
+          "-n",
+          "100",
+          "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'"
+        ],
+        "extensions": [
+          "amx_int8"
+        ]
+      },
+      "i8_f32_dequant_4096x4096_omp_32_mlir": {
+        "type": "IR-GEN",
+        "benchmark": [
+          "mlir-gen",
+          "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant"
+        ],
+        "environment": {
+          "OMP_NUM_THREADS": "32",
+          "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0"
+        },
+        "flags": [
+          "-n",
+          "100",
+          "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'"
+        ],
+        "extensions": [
+          "amx_int8"
+        ]
+      },
+      "i8_f32_dequant_4096x4096_omp_64_mlir": {
+        "type": "IR-GEN",
+        "benchmark": [
+          "mlir-gen",
+          "--kernel=args --data-type=i8-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,64 --vnni=4 --quant"
+        ],
+        "environment": {
+          "OMP_NUM_THREADS": "64",
+          "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0"
+        },
+        "flags": [
+          "-n",
+          "100",
+          "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --init-type=quant --splat-to-random --seed=123'"
+        ],
+        "extensions": [
+          "amx_int8"
+        ]
+      }
     }
-  }},
-  {
-  "gemm_bf16_f32_mlir_vector_large_amx": {
-    "bf16_f32_4096x4096_omp_8_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=bf16-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,32 --vnni=2" ],
-      "environment": { "OMP_NUM_THREADS": "8", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_bf16" ]
-    },
-    "bf16_f32_4096x4096_omp_16_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=bf16-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,32 --vnni=2" ],
-      "environment": { "OMP_NUM_THREADS": "16", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_bf16" ]
-    },
-    "bf16_f32_4096x4096_omp_32_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=bf16-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,32 --vnni=2" ],
-      "environment": { "OMP_NUM_THREADS": "32", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_bf16" ]
-    },
-    "bf16_f32_4096x4096_omp_64_mlir": {
-      "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=args --data-type=bf16-f32 --batch=4096 --layers=8192,4096 --tiles=32,32,32 --vnni=2" ],
-      "environment": { "OMP_NUM_THREADS": "64", "KMP_AFFINITY": "granularity=fine,verbose,compact,1,0" },
-      "flags": [ "-n", "100", "-run-args='--def-parallel --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,32 --init-type=normal --splat-to-random --seed=123'" ],
-      "extensions": [ "amx_bf16" ]
-    }
-  }}
+  }
 ]

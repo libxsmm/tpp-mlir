@@ -107,22 +107,30 @@ void IdentityTensorInitFloat::fillData() {
   }
 }
 
-// Update internal buffer with rescale values.
+// A scale tensor is initialized in one of two disjoint modes:
+//
+//   1. Paired mode: The scale corresponds to a quantized data matrix; the
+//      integer initializer picks per-channel quantization scales while
+//      quantizing the data and hands them over via `setScaleBuffer` so that
+//      `data_int * scale == original_float`.
+//
+//   2. Standalone mode: The scale has no paired data matrix (e.g. the output
+//      scale of a requantize kernel that maps i32 to i8). Nothing constrains
+//      it, so we synthesize per-channel factors from the internal random
+//      distribution, taking their absolute value and biasing away from zero
+//      to keep the rescale non-degenerate.
 void QuantScaleTensorInitFloat::fillData() {
-  // When paired with a quantized data matrix (dequantization), the scale buffer
-  // is populated externally. Otherwise (e.g. the requantization output scale)
-  // self-generate random positive per-channel scale factors.
   if (!scaleBuffer.empty()) {
-    for (size_t i = 0; i < scaleBuffer.size(); i++) {
-      push(scaleBuffer[i]);
-    }
+    // Paired mode: replay the constrained per-channel scales.
+    for (const auto &value : scaleBuffer)
+      push(value);
     return;
   }
+  // Standalone mode: synthesize strictly-positive per-channel scales.
   for (size_t i = 0; i < size; i++) {
     float value = distribution(generator);
     if (value < 0.0f)
       value = -value;
-    // Keep scales strictly positive and away from zero.
     push(value + 1e-3f);
   }
 }

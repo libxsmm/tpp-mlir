@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for both i8-f32 (dequant) and
-# bf16-f32 GEMMs.
+# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for i8-f32 (dequant) GEMMs.
 #
 # 1. PERFORMANCE: reuse benchmarks/driver.py with a generated sweep JSON.
 # 2. CORRECTNESS: per-shape diff of default tpp-run vs
@@ -21,7 +20,7 @@ SKIP_CORRECTNESS=0
 SKIP_PERF=0
 SKIP_PLOT=0
 SHAPES_CSV="512,1024,2048,4096,8192"
-DTYPES_CSV="i8,bf16"
+DTYPES_CSV="i8"
 
 ABS_TOL="0.02"
 REL_TOL="0.02"
@@ -34,7 +33,7 @@ Usage: $0 [options]
   -o, --out DIR          output dir (default: build/sweep-results/<ts>)
   -n, --iters N          perf iterations per shape (default: ${ITERS})
       --shapes A,B,C     dim sweep (default: ${SHAPES_CSV})
-      --dtypes i8,bf16   subset of dtypes (default: ${DTYPES_CSV})
+      --dtypes i8        subset of dtypes (default: ${DTYPES_CSV})
       --abs-tol F        fpcmp absolute tolerance (default: ${ABS_TOL})
       --rel-tol F        fpcmp relative tolerance (default: ${REL_TOL})
       --skip-perf        skip performance phase
@@ -123,17 +122,14 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   echo "dtype,M,N,K,status,detail" > "${CORR_CSV}"
 
   # Detect AMX support (mirror driver.py's extension gating).
-  HAS_AMX_INT8=0; HAS_AMX_BF16=0
+  HAS_AMX_INT8=0
   if grep -q amx_int8 /proc/cpuinfo 2>/dev/null; then HAS_AMX_INT8=1; fi
-  if grep -q amx_bf16 /proc/cpuinfo 2>/dev/null; then HAS_AMX_BF16=1; fi
 
   # mlir-gen flag templates (must match gen-sweep-config.py).
   # Use --kernel=args (same as the perf config); tpp-run --splat-to-random
   # --seed=123 makes both baseline and test runs see identical inputs.
   gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant --seed=123"
-  gen_args_bf16="--kernel=args --data-type=bf16-f32 --tiles=32,32,32 --vnni=2 --seed=123"
   vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --bench-replication-gb=5"
-  vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --bench-replication-gb=5"
 
   IFS=',' read -ra DTYPES <<< "${DTYPES_CSV}"
   IFS=',' read -ra SHAPES <<< "${SHAPES_CSV}"
@@ -147,12 +143,6 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
           continue
         fi
         gen_args="${gen_args_i8}"; vk_args="${vk_args_i8}";;
-      bf16)
-        if [[ "${HAS_AMX_BF16}" -eq 0 ]]; then
-          echo "   [skip] dtype=bf16 (amx_bf16 not available)"
-          continue
-        fi
-        gen_args="${gen_args_bf16}"; vk_args="${vk_args_bf16}";;
       *) echo "Unknown dtype: ${dt}" >&2; exit 2;;
     esac
 

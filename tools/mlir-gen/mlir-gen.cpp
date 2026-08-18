@@ -68,7 +68,7 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<std::string>
     dataType("data-type", llvm::cl::desc("Data type for arguments"),
               llvm::cl::value_desc(
-                  "f32|f16|bf16|bf8|hf8|bf16-f32|f16-f32|i8|i8-f32|f32-i8"),
+                  "f32|f16|bf16|bf8|hf8|i8|i8-f32"),
               llvm::cl::init("f32"));
 
 // Scale type flag to chose data type of scaling factor.For now it is kind of a
@@ -84,13 +84,6 @@ llvm::cl::opt<bool> quant("quant",
                           llvm::cl::desc("Generate a quantized kernel with "
                                          "scaling factors"),
                           llvm::cl::value_desc("bool"), llvm::cl::init(false));
-
-// Enable quantize-then-dequantize validation kernel.
-llvm::cl::opt<bool> testQuant("test-quant",
-                              llvm::cl::desc("Generate a quantize-then-"
-                                             "dequantize validation kernel"),
-                              llvm::cl::value_desc("bool"),
-                              llvm::cl::init(false));
 
 // Random seed
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
@@ -144,17 +137,16 @@ int main(int argc, char **argv) {
   // instead of silently ignoring --quant during code generation.
   if (quant) {
     llvm::StringRef ty(dataType);
-    if (!ty.equals_insensitive("i8") && !ty.equals_insensitive("i8-f32") &&
-        !ty.equals_insensitive("f32-i8")) {
+    if (!ty.equals_insensitive("i8") && !ty.equals_insensitive("i8-f32")) {
       llvm::errs() << "error: --quant requires a data type with an 8-bit "
-                      "integer operand (i8, i8-f32 or f32-i8); got '"
+                      "integer operand (i8 or i8-f32); got '"
                    << dataType << "'\n";
       return 1;
     }
   }
 
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, dataType,
-                    scaleType, quant, testQuant, seed, identity, enableBias,
+                    scaleType, quant, seed, identity, enableBias,
                     enableRelu, enableSoftmax, vnni);
   return gen.generate(filename);
 }
