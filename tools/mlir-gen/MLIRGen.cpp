@@ -339,9 +339,6 @@ Value MLIRGenerator::createLayer(LayerArgs &args) {
   Value chain;
   chain = lowerMatmul(args);
 
-  if (quant)
-    chain = quantizeEpilogue(args, chain);
-
   // These are optional and only emitted if enabled
   if (outputOpKind == OutputOpKind::Generic) {
     chain = lowerBiasAdd(args, chain);
@@ -614,7 +611,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   // The quantization epilogue consumes the raw wide accumulator and performs
   // the final cast, so skip the same-domain downcast here.
   if (quant)
-    return accumulator;
+    return quantizeEpilogue(args, accumulator);
 
   return downcastToOutput(builder, loc, accumulator, args.output.type);
 }
