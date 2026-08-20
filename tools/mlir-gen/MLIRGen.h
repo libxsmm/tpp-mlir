@@ -210,10 +210,6 @@ class MLIRGenerator {
   /// Creates linalg contract
   Value lowerContract(LayerArgs &args, Value chain);
 
-  /// Applies the quantization epilogue to the wide GEMM accumulator, choosing
-  /// the concrete lowering from the available input/output types.
-  Value quantizeEpilogue(LayerArgs &args, Value chain);
-
   /// Requantizes a wide integer GEMM accumulator down to the output integer
   /// type using a per-output-channel output scale argument.
   Value requantizeGemm(LayerArgs &args, Value chain);

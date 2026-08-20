@@ -194,15 +194,17 @@ struct QuantScaleTensorInitFloat : TensorInitFloat {
   //   2. Standalone mode: The scale has no paired data matrix.
   void setScaleBuffer(const std::vector<llvm::APFloat> &newBuffer) {
     // Paired mode
-    if (!newBuffer.empty())
+    if (!newBuffer.empty()) {
       scaleBuffer = newBuffer;
+      return;
+    }
 
     // Standalone mode
     for (size_t i = 0; i < size; i++) {
       float value = distribution(generator);
       if (value < 0.0f)
         value = -value;
-      push(value + 1e-3f);
+      scaleBuffer.push_back(llvm::APFloat(value));
     }
   }
 

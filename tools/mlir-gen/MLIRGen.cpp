@@ -299,13 +299,14 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     LayerArgs arg;
     arg.index = i;
     arg.input.type = currentType;
+    arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
+
     // Quantized kernels carry a per-row input scale and a per-output-channel
     // weight scale to dequantize the wide accumulator.
-    if (quant)
+    if (quant) {
       arg.inputScale.type = getShape({batch}, INPUT_SCALE);
-    arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
-    if (quant)
       arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
+    }
 
     // TODO: Bias should be of accumulator type when it differs from the output
     // type AND we want to propagate the truncation through the element-wise ops.
@@ -610,8 +611,11 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
 
   // The quantization epilogue consumes the raw wide accumulator and performs
   // the final cast, so skip the same-domain downcast here.
-  if (quant)
-    return quantizeEpilogue(args, accumulator);
+  if (quant) {
+    if (dataTypes.output.isInteger())
+      return requantizeGemm(args, accumulator);
+    return dequantizeGemm(args, accumulator);
+  }
 
   return downcastToOutput(builder, loc, accumulator, args.output.type);
 }
@@ -705,15 +709,6 @@ Value MLIRGenerator::lowerNamedMatmul(LayerArgs &args, Value chain) {
                                   ValueRange{chain, args.weight.value},
                                   ValueRange{args.accumulator.value})
       .getResult(0);
-}
-
-Value MLIRGenerator::quantizeEpilogue(LayerArgs &args, Value chain) {
-  // Choose the epilogue from the available types:
-  //  * integer input, integer output -> requantize (uses the output scale);
-  //  * integer input, float output -> dequantize.
-  if (dataTypes.output.isInteger())
-    return requantizeGemm(args, chain);
-  return dequantizeGemm(args, chain);
 }
 
 Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
