@@ -1469,14 +1469,12 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type,
         return RankedTensorType::get(dims, dataTypes.output);
       }
     }
-    // Unpacked type, just return 2D tensor
-    // Transposed A (N x C -> C x N) or B (C x K -> K x C) swaps the two dims.
-    if ((type == PACK_INPUT && transposeA) ||
-        (type == PACK_WEIGHT && transposeB)) {
-      assert(dims.size() == 2 && "Transpose requires a 2D operand");
-      return RankedTensorType::get({dims[1], dims[0]}, dataTypes.input);
-    }
-    return RankedTensorType::get(dims, dataTypes.input);
+    // Unpacked type, just return 2D tensor. Transposed A (N x C -> C x N) or
+    // B (C x K -> K x C) swaps the two dims via transposePackedType.
+    auto flat = RankedTensorType::get(dims, dataTypes.input);
+    bool needsTranspose = (type == PACK_INPUT && transposeA) ||
+                          (type == PACK_WEIGHT && transposeB);
+    return needsTranspose ? transposePackedType(flat) : flat;
   }
 
   // Packed types block by tile size
