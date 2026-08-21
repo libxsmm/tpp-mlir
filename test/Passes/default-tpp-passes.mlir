@@ -119,7 +119,7 @@ func.func @mlp(%arg0: tensor<128x256xf32>, %arg1: tensor<256x512xf32>,
   // LOOP:     arith.maximumf
 
   // Identity:
-  // XSMM: %[[alloc:.+]] = memref.alloc() {alignment = 64 : i64} : memref<128x512xf32>
+  // XSMM: %[[alloc:.+]] = memref.alloc() alignment = 64 : memref<128x512xf32>
   // XSMM: call @xsmm_unary_dispatch
   // XSMM: %[[ptr0:.*]] = memref.extract_aligned_pointer_as_index %[[ARG2]]
   // XSMM-NEXT: %[[cast_ptr0:.*]] = arith.index_cast %[[ptr0]] : index to i64
@@ -378,7 +378,7 @@ func.func @identity_mapping(%arg0: memref<64xf32>) -> memref<12x56x56x64xf32> {
   %c12 = arith.constant 12 : index
   %c1 = arith.constant 1 : index
   %c56 = arith.constant 56 : index
-  %alloc = memref.alloc() {alignment = 128 : i64} : memref<12x56x56x64xf32>
+  %alloc = memref.alloc() alignment = 128 : memref<12x56x56x64xf32>
   scf.parallel (%arg1, %arg2) = (%c0, %c0) to (%c12, %c56) step (%c1, %c1) {
     %subview = memref.subview %alloc[%arg1, %arg2, 0, 0] [1, 1, 56, 64] [1, 1, 1, 1]
       : memref<12x56x56x64xf32> to memref<56x64xf32, #map>
@@ -587,7 +587,7 @@ func.func @blocked_matmul(%arg0: memref<4x16x32x32xf32>, %arg1: memref<8x16x32x3
 // -----
 
 // Conv2D weights
-memref.global "private" constant @__constant_2048x512xf32 : memref<2048x512xf32> = dense<0.00332225906> {alignment = 128 : i64}
+memref.global "private" constant @__constant_2048x512xf32 : memref<2048x512xf32> = dense<0.00332225906> alignment = 128
 
 // XSMM-LABEL: @conv2d_1x1(
 // XSMM-SAME: %[[arg:.*]]: memref<1x7x7x2048xf32>) -> memref<1x7x7x512xf32> {
@@ -605,7 +605,7 @@ func.func @conv2d_1x1(%arg0: memref<1x7x7x2048xf32>) -> memref<1x7x7x512xf32> {
   // XSMM:   %[[ptr1:.*]] = llvm.inttoptr %{{.+}} : i64 to !llvm.ptr
   // XSMM:   %[[ptr2:.*]] = llvm.inttoptr %{{.+}} : i64 to !llvm.ptr
   // XSMM:   call @xsmm_gemm_invoke({{.*}}%[[ptr0]], %{{.+}}, %[[ptr1]], %{{.+}}, %[[ptr2]], %{{.+}}
-  %alloc = memref.alloc() {alignment = 128 : i64} : memref<1x7x7x512xf32>
+  %alloc = memref.alloc() alignment = 128 : memref<1x7x7x512xf32>
   linalg.fill ins(%cst : f32) outs(%alloc : memref<1x7x7x512xf32>)
   scf.for %arg1 = %c0 to %c7 step %c1 {
     %subview = memref.subview %arg0[0, %arg1, 0, 0] [1, 1, 7, 2048] [1, 1, 1, 1] : memref<1x7x7x2048xf32> to memref<7x2048xf32, strided<[2048, 1], offset: ?>>

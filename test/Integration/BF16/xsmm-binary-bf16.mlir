@@ -2,7 +2,7 @@
 // RUN:  -e entry -entry-point-result=void | \
 // RUN: FileCheck %s
 
-memref.global "private" constant @__constant_bias : memref<3x3xbf16> = dense<1.0> {alignment = 64 : i64}
+memref.global "private" constant @__constant_bias : memref<3x3xbf16> = dense<1.0> alignment = 64 
 
 func.func @entry(%arg0: memref<3x3xbf16>, %arg1: memref<3x3xbf16>) -> memref<3x3xbf16> {
   %0 = memref.get_global @__constant_bias : memref<3x3xbf16>

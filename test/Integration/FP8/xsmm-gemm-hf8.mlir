@@ -7,7 +7,7 @@
 // Inputs and the accumulator are auto-initialized to 1.0, so each output
 // element is: sum_{k=0..3}(1 * 1) + 1 = 5.
 
-memref.global "private" constant @wt : memref<1x6x4xf8E4M3FN> = dense<1.0> {alignment = 64 : i64}
+memref.global "private" constant @wt : memref<1x6x4xf8E4M3FN> = dense<1.0> alignment = 64 
 
 func.func @entry(%arg0: memref<6x4xf8E4M3FN>, %arg1: memref<6x6xf8E4M3FN>) -> memref<6x6xf8E4M3FN> {
   %0 = memref.get_global @wt : memref<1x6x4xf8E4M3FN>

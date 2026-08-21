@@ -6,11 +6,11 @@
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d4, d3, d1)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d2, d3)>
 module {
-  memref.global "private" constant @__constant_32x16x32x2xbf16 : memref<32x16x32x2xbf16> = dense<1.000000e+00> {alignment = 64 : i64}
+  memref.global "private" constant @__constant_32x16x32x2xbf16 : memref<32x16x32x2xbf16> = dense<1.000000e+00> alignment = 64
   func.func @register_tile_bf16(%arg0: memref<8x32x32x32xbf16>) -> memref<8x32x32x32xbf16> {
     %cst = arith.constant 0.000000e+00 : bf16
     %0 = memref.get_global @__constant_32x16x32x2xbf16 : memref<32x16x32x2xbf16>
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<8x32x32x32xbf16>
+    %alloc = memref.alloc() alignment = 64 : memref<8x32x32x32xbf16>
     %expand_shape = memref.expand_shape %arg0 [[0], [1], [2], [3, 4]] output_shape [8, 32, 32, 16, 2] : memref<8x32x32x32xbf16> into memref<8x32x32x16x2xbf16>
     scf.forall (%arg1, %arg2) in (8, 32) {
       %subview = memref.subview %alloc[%arg1, %arg2, 0, 0] [1, 1, 32, 32] [1, 1, 1, 1] : memref<8x32x32x32xbf16> to memref<32x32xbf16, strided<[32, 1], offset: ?>>

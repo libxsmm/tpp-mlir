@@ -9,7 +9,7 @@ func.func @entry(%arg0: tensor<2x2xi32>) {
 }
 
 // Integer identity of the argument goes into a global variable.
-// CHECK: memref.global "private" @__wrapper_0 : memref<2x2xi32> = dense<{{.}}[1, 0], [0, 1]{{.}}> {alignment = 128 : i64}
+// CHECK: memref.global "private" @__wrapper_0 : memref<2x2xi32> = dense<{{.}}[1, 0], [0, 1]{{.}}> alignment = 128 
 // CHECK-LABEL: @_entry
 // Dense non-zero identity (changes 2.0 to 1.0)
 // CHECK: arith.constant dense<1.000000e+00> : tensor<1x1xbf16>
