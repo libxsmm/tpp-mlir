@@ -184,8 +184,28 @@ struct QuantScaleTensorInitFloat : TensorInitFloat {
       : TensorInitFloat(type), generator(seed), distribution(0.0, 0.2) {}
 
   // Method to set scale buffer.
+  // A scale tensor is initialized in one of two modes:
+  //
+  //   1. Paired mode: The scale corresponds to a quantized data matrix; the
+  //      integer initializer picks per-channel quantization scales while
+  //      quantizing the data and hands them over via `setScaleBuffer` so that
+  //      `data_int * scale == original_float`.
+  //
+  //   2. Standalone mode: The scale has no paired data matrix.
   void setScaleBuffer(const std::vector<llvm::APFloat> &newBuffer) {
-    scaleBuffer = newBuffer;
+    // Paired mode
+    if (!newBuffer.empty()) {
+      scaleBuffer = newBuffer;
+      return;
+    }
+
+    // Standalone mode
+    for (size_t i = 0; i < size; i++) {
+      float value = distribution(generator);
+      if (value < 0.0f)
+        value = -value;
+      scaleBuffer.push_back(llvm::APFloat(value));
+    }
   }
 
   // Should not be called.

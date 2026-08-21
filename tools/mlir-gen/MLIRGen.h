@@ -61,6 +61,7 @@ class MLIRGenerator {
     Type accumulator{};
     Type inputScale{};
     Type weightScale{};
+    Type outputScale{};
   };
   DataTypes dataTypes;
 
@@ -101,11 +102,10 @@ class MLIRGenerator {
   /// Type of kernel to be generated
   KernelType kernelType;
 
-  /// List of supported quantization ops types that can be generated
-  enum class QuantizationType { None, Mixed, Quant, Dequant, QuantDequant };
-
-  /// Type of quantization ops to be generated
-  QuantizationType quantType;
+  /// When true, generate a quantized kernel with scaling factors. The concrete
+  /// behaviour (quantize, dequantize or requantize) is derived from the data
+  /// types, mirroring what PyTorch does for quantized models.
+  bool quant;
 
   /// VNNI packing factor (0, 2, 4)
   int vnniFactor;
@@ -130,9 +130,9 @@ class MLIRGenerator {
     PACK_WEIGHT,
     PACK_OUTPUT,
     PACK_ACCUMULATOR,
-    PACK_INTERMEDIATE,
     INPUT_SCALE,
-    WEIGHT_SCALE
+    WEIGHT_SCALE,
+    OUTPUT_SCALE
   };
 
   /// Return shaped type (packed if requested). \p nTile overrides the output
@@ -190,8 +190,8 @@ class MLIRGenerator {
     Arg weightScale;
     // Whether this layer reads its weight transposed.
     bool weightTranspose = false;
+    Arg outputScale;
     Arg bias;
-    Arg intermediate; // For quantdequant validation
     Arg output;
     Arg accumulator;
     // Whether this layer writes its output transposed.
@@ -235,17 +235,12 @@ class MLIRGenerator {
   /// Creates linalg contract
   Value lowerContract(LayerArgs &args, Value chain);
 
-  /// Computes scaling factor for the given input. Returns the scaling factor of
-  /// same shape as input.
-  SmallVector<Value> computeScalingFactor(Value input);
-
-  /// Creates a matmul quantization kernel
-  Value quantizeGemm(LayerArgs &args, Value chain);
+  /// Requantizes a wide integer GEMM accumulator down to the output integer
+  /// type using a per-output-channel output scale argument.
+  Value requantizeGemm(LayerArgs &args, Value chain);
 
   /// Creates a matmul dequantization kernel
   Value dequantizeGemm(LayerArgs &args, Value chain);
-
-  Value testQuantDequant(LayerArgs &args, Value input);
 
   /// Creates a bias add in the current function
   /// Args: LayerArgs, Chain
@@ -295,7 +290,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, StringRef, int, bool, bool, bool, bool, int, bool, bool);
+                StringRef, bool, int, bool, bool, bool, bool, int, bool, bool);
 
   ~MLIRGenerator() { module->destroy(); }
 

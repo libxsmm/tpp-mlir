@@ -113,6 +113,15 @@ TensorInitPtr getTensorInit(TensorInitType type, mlir::Type elmType,
     case TensorInitType::Identity:
       initPtr = std::make_shared<IdentityTensorInitFloat>(dataType);
       break;
+    case TensorInitType::Quant:
+      // A floating-point Quant argument is only valid as a self-generating
+      // scale initializer (e.g. the requantization output scale); quantized
+      // data matrices are handled by the integer branch above.
+      assert(seed && "Can't call random initializers without seed");
+      assert(isScaleArgument &&
+             "Floating-point Quant init is only supported for scale arguments");
+      initPtr = std::make_shared<QuantScaleTensorInitFloat>(dataType, seed);
+      break;
     default:
       assert(false && "Invalid tensor initializer type");
     }
@@ -144,16 +153,26 @@ TensorInitPtr getTensorInit(TensorInitType type, mlir::Type elmType,
       // the initialization for the quantized argument and corresponding
       // dequant scale factors.
       assert(seed && "Can't call random initializers without seed");
-      auto floatScaleDataType =
-          TensorInitFloat::getTensorInitDataType(nextElmType);
-      TensorInitPtr floatScaleInit =
-          std::make_shared<QuantScaleTensorInitFloat>(floatScaleDataType, seed);
+      // A paired float scale is only produced when the quantized data matrix is
+      // immediately followed by a floating-point scale argument (dequant). For
+      // requantization the i8 inputs are not followed by a float scale here, so
+      // skip pairing to avoid constructing an invalid (integer) scale type.
+      bool hasFloatScale = nextElmType && nextElmType.isFloat();
+      TensorInitPtr floatScaleInit = nullptr;
+      if (hasFloatScale) {
+        auto floatScaleDataType =
+            TensorInitFloat::getTensorInitDataType(nextElmType);
+        floatScaleInit = std::make_shared<QuantScaleTensorInitFloat>(
+            floatScaleDataType, seed);
+      }
       if (!isScaleArgument) {
         initPtr = std::make_shared<QuantTensorInitInt>(dataType, nextElmType,
                                                        seed, floatScaleInit);
         // Store the float/int initializer for dequant scale factors into hash.
-        InitKey keyFloatScale(type, nextElmType, seed, true);
-        tensorInitializers[keyFloatScale] = floatScaleInit;
+        if (hasFloatScale) {
+          InitKey keyFloatScale(type, nextElmType, seed, true);
+          tensorInitializers[keyFloatScale] = floatScaleInit;
+        }
       }
       break;
     }

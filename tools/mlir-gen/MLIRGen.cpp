@@ -178,14 +178,14 @@ static Value downcastToOutput(OpBuilder &builder, Location loc,
 MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
                              unsigned batch, StringRef layersStr,
                              StringRef tilesStr, StringRef registerUnrollStr, StringRef dataType,
-                             StringRef scaleType, StringRef quantizationTypeStr,
+                             StringRef scaleType, bool quant,
                              int seed, bool identity, bool enableBias,
                              bool enableRelu, bool enableSoftmax,
                              int vnniBlockingFactor, bool transposeA,
                              bool transposeB)
     : builder(&context), loc(builder.getUnknownLoc()), batch(batch), seed(seed),
       identity(identity), flops(0), enableBias(enableBias),
-      enableRelu(enableRelu), enableSoftmax(enableSoftmax),
+      enableRelu(enableRelu), enableSoftmax(enableSoftmax), quant(quant),
       vnniFactor(vnniBlockingFactor), transposeA(transposeA),
       transposeB(transposeB) {
 
@@ -249,24 +249,13 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
           .CaseLower("hf8", DataTypes{builder.getF8E4M3FNType(),
                                       builder.getF8E4M3FNType(),
                                       builder.getF8E4M3FNType()})
-          .CaseLower("mx-bf16", DataTypes{builder.getBF16Type(),
-                                          builder.getF32Type(),
-                                          builder.getF32Type()})
-          .CaseLower("mx-f16", DataTypes{builder.getF16Type(),
+          // Low-precision integer GEMMs, used on their own or with --quant.
+          .CaseLower("i8", DataTypes{builder.getIntegerType(8),
+                                     builder.getI32Type(),
+                                     builder.getI32Type()})
+          .CaseLower("i8-f32", DataTypes{builder.getIntegerType(8),
                                          builder.getF32Type(),
                                          builder.getF32Type()})
-          .CaseLower("mx-i8", DataTypes{builder.getIntegerType(8),
-                                        builder.getI32Type(),
-                                        builder.getI32Type()})
-          .CaseLower("mx-i8-i32", DataTypes{builder.getIntegerType(8),
-                                            builder.getI32Type(),
-                                            builder.getI32Type()})
-          .CaseLower("mx-i8-f32", DataTypes{builder.getIntegerType(8),
-                                            builder.getF32Type(),
-                                            builder.getF32Type()})
-          .CaseLower("mx-f32-i8", DataTypes{builder.getF32Type(),
-                                            builder.getIntegerType(8),
-                                            builder.getIntegerType(8)})
           .Default(DataTypes{});
   assert(dataTypes.input && "Unsupported data type");
 
@@ -278,30 +267,14 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   assert(scaleTypeOpt && "Unsupported scale type");
   dataTypes.inputScale = *scaleTypeOpt;
   dataTypes.weightScale = *scaleTypeOpt;
-
-  // Parse quantization type
-  auto optQuantType =
-      llvm::StringSwitch<std::optional<QuantizationType>>(quantizationTypeStr)
-          .CaseLower("mixed", QuantizationType::Mixed)
-          .CaseLower("quantize", QuantizationType::Quant)
-          .CaseLower("dequantize", QuantizationType::Dequant)
-          .CaseLower("testquant", QuantizationType::QuantDequant)
-          .Default(QuantizationType::None);
-  quantType = *optQuantType;
-
-  // If the target type contains "mx", it is a mixed precision type. If
-  // quantization type is not explicitly specified, we will default to Mixed
-  // quantization type for mixed precision target types.
-  if (quantType == QuantizationType::None && !dataType.empty() && dataType.contains("mx"))
-    quantType = QuantizationType::Mixed;
+  dataTypes.outputScale = *scaleTypeOpt;
 
   // const kernelType is only supported for non quantization kernel.
-  assert(!(kernelType == KernelType::Const &&
-           quantType == QuantizationType::Quant) &&
+  assert(!(kernelType == KernelType::Const && quant) &&
          "Const kernel type is only supported for non quantization kernel");
 
-  // Update output kind to 'contract' if quantization is enabled.
-  if (quantType != QuantizationType::None)
+  // Quantized kernels are lowered as linalg.contract.
+  if (quant)
     outputOpKind = OutputOpKind::Contract;
 
   // Disable VNNI packing if it is not a F16/BF16/I8/FP8 data type
@@ -346,8 +319,8 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
   // activation (matching the named-matmul TN chain emitted by pytorch-mlir), so
   // its stored input keeps the natural NN layout and the leading (M) dim flips
   // per layer. See the flatTransposeChain branch below.
-  bool flatTransposeChain = !tiles.size() && vnniFactor == 0 &&
-                            quantType == QuantizationType::None && transposeA;
+  bool flatTransposeChain =
+      !tiles.size() && vnniFactor == 0 && !quant && transposeA;
 
   // Input type, also first layer's input
   TensorType currentType =
@@ -394,12 +367,15 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
       continue;
     }
 
-    // Scale inputs are only needed for dequantization.
-    if (quantType == QuantizationType::Dequant)
-      arg.inputScale.type = getShape({batch}, INPUT_SCALE);
     arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
-    if (quantType == QuantizationType::Dequant)
+
+    // Quantized kernels carry a per-row input scale and a per-output-channel
+    // weight scale to dequantize the wide accumulator.
+    if (quant) {
+      arg.inputScale.type = getShape({batch}, INPUT_SCALE);
       arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
+    }
+
     // TODO: Bias should be of accumulator type when it differs from the output
     // type AND we want to propagate the truncation through the element-wise ops.
     arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
@@ -428,11 +404,17 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
       arg.weightTranspose = transposeB;
     }
 
-    // For QuantDequant, such as F32->i8->F32, we need an intermediate type to
-    // hold the quantized value.
-    if (quantType == QuantizationType::QuantDequant) {
-      arg.intermediate.type = getShape({batch, outputSize}, PACK_INTERMEDIATE);
-      arg.output.type = getShape({batch, outputSize}, PACK_INPUT);
+    // Integer output additionally carries a per-output-channel output scale to
+    // requantize the value back down.
+    bool hasOutputScale = quant && dataTypes.output.isInteger();
+    if (hasOutputScale)
+      arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
+
+    if (hasOutputScale) {
+      // Requantized GEMM keeps the N x K output layout but stores i8 values.
+      auto packedOutTy = getShape({batch, outputSize}, PACK_OUTPUT);
+      arg.output.type =
+          RankedTensorType::get(packedOutTy.getShape(), dataTypes.input);
     } else {
       arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
       arg.accumulator.type =
@@ -445,51 +427,11 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
   }
 }
 
-// Creates a quantize op around the gemm output and subsequently dequantize it.
-// This is mainly to validate the quantization scheme.
-Value MLIRGenerator::testQuantDequant(LayerArgs &args, Value input) {
-  SmallVector<Value> scalingFactors = computeScalingFactor(input);
-  Value chain = quantizeGemm(args, input);
-  Value reScaleFactor = scalingFactors[1];
-  Type rescaleType = reScaleFactor.getType();
-  auto castedOutput =
-      tensor::EmptyOp::create(builder, loc, rescaleType, ValueRange{});
-  Value castedVal =
-      linalg::GenericOp::create(builder, 
-              loc, rescaleType, ValueRange{chain}, ValueRange{castedOutput},
-              ArrayRef<AffineMap>{getMap(chain, MAP_PARALLEL),
-                                  getMap(castedOutput, MAP_PARALLEL)},
-              getIterators(MAP_PARALLEL),
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange blockArgs) {
-                auto arg0 = blockArgs[0];
-                auto casted = arith::SIToFPOp::create(nestedBuilder, 
-                    loc, dataTypes.inputScale, arg0);
-                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{casted});
-              })
-          .getResult(0);
-  castedVal = linalg::MulOp::create(builder, loc, TypeRange{castedOutput.getType()},
-                                         ValueRange{castedVal, reScaleFactor},
-                                         ValueRange{castedOutput})
-                  .getResult(0);
-  return castedVal;
-}
-
 Value MLIRGenerator::createLayer(LayerArgs &args) {
   OpBuilder::InsertionGuard guard(builder);
 
   Value chain;
   chain = lowerMatmul(args);
-
-  if (quantType == QuantizationType::QuantDequant)
-    return testQuantDequant(args, chain);
-
-  if (quantType == QuantizationType::Quant) {
-    chain = quantizeGemm(args, chain);
-  }
-
-  if (quantType == QuantizationType::Dequant)
-    chain = dequantizeGemm(args, chain);
 
   // These are optional and only emitted if enabled
   if (outputOpKind == OutputOpKind::Generic) {
@@ -528,12 +470,14 @@ void MLIRGenerator::createKernel() {
   SmallVector<Type, 1> inputTypes{firstArg.input.type};
   if (kernelType == KernelType::Args) {
     for (auto &layer : args) {
-      if (quantType == QuantizationType::Dequant)
+      if (layer.inputScale.type)
         inputTypes.push_back(layer.inputScale.type);
 
       inputTypes.push_back(layer.weight.type);
-      if (quantType == QuantizationType::Dequant)
+      if (layer.weightScale.type)
         inputTypes.push_back(layer.weightScale.type);
+      if (layer.outputScale.type)
+        inputTypes.push_back(layer.outputScale.type);
 
       if (enableBias)
         inputTypes.push_back(layer.bias.type);
@@ -574,13 +518,12 @@ void MLIRGenerator::createKernel() {
   //   * Model: input = arg, weights/bias = const, output = zero
   //   * Layer: input/weights/bias/output = args
   firstArg.input.value = func.getArgument(0);
-  // Scales are only needed for dequantization
-  if (quantType == QuantizationType::Dequant)
+  // Integer inputs carry an input scale right after the model input.
+  if (firstArg.inputScale.type)
     firstArg.inputScale.value = func.getArgument(1);
 
   // Argument position is input + N * { weight/bias } + output
-  // First weight is at position 1, every two
-  unsigned argPos = !(quantType == QuantizationType::Dequant) ? 1 : 2;
+  unsigned argPos = firstArg.inputScale.type ? 2 : 1;
   // Caches the output to chain into the next layer's input
   Value lastOutput;
   for (auto &arg : args) {
@@ -591,8 +534,10 @@ void MLIRGenerator::createKernel() {
     // Initialize weights and biases
     if (kernelType == KernelType::Args) {
       arg.weight.value = func.getArgument(argPos++);
-      if (quantType == QuantizationType::Dequant)
+      if (arg.weightScale.type)
         arg.weightScale.value = func.getArgument(argPos++);
+      if (arg.outputScale.type)
+        arg.outputScale.value = func.getArgument(argPos++);
       if (enableBias)
         arg.bias.value = func.getArgument(argPos++);
       arg.output.value = func.getArgument(argPos++);
@@ -739,13 +684,9 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto outputType = cast<ShapedType>(args.output.value.getType());
   auto shape = outputType.getShape();
 
-  // Select the matmul accumulator tensor.
-  if (quantType == QuantizationType::Quant) {
-    // Quantization casts the result later; accumulate in the input type.
-    args.accumulator.value = getZeroInitTensor(
-        RankedTensorType::get(shape, inputType.getElementType()));
-  } else if (quantType == QuantizationType::Dequant) {
-    // Integer GEMM accumulates in i32; dequantization casts it later.
+  // Quantized kernels always accumulate into i32; regular kernels either
+  // accumulate directly into the output tensor or into an explicit accumulator.
+  if (quant) {
     args.accumulator.value = getZeroInitTensor(
         RankedTensorType::get(shape, builder.getIntegerType(32)));
   } else if (!args.accumulator.type ||
@@ -880,6 +821,14 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
       break;
   }
 
+  // The quantization epilogue consumes the raw wide accumulator and performs
+  // the final cast, so skip the same-domain downcast here.
+  if (quant) {
+    if (dataTypes.output.isInteger())
+      return requantizeGemm(args, accumulator);
+    return dequantizeGemm(args, accumulator);
+  }
+
   return downcastToOutput(builder, loc, accumulator, args.output.type);
 }
 
@@ -979,166 +928,148 @@ Value MLIRGenerator::lowerNamedMatmul(LayerArgs &args, Value chain) {
       .getResult(0);
 }
 
-SmallVector<Value> MLIRGenerator::computeScalingFactor(Value input) {
-  auto inputType = cast<ShapedType>(input.getType());
-  assert(inputType.getRank() == 2 && "Input must be a 2D tensor");
+Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
+  // Chain is the wide integer GEMM accumulator to be requantized down to the
+  // output integer type. Requantization first dequantizes the accumulator
+  // using the per-row input scale and the per-output-channel weight scale,
+  // then rescales it with the per-output-channel output scale and saturates to
+  // the signed range of the output integer type:
+  //   out = clamp(round(acc * S_input * S_weight * S_output), INT_MIN, INT_MAX)
+  assert(chain && "Expected valid chain output from contract/gemm operation");
 
-  auto loc = input.getLoc();
-  auto elementType = inputType.getElementType();
+  Value inputScale = args.inputScale.value;
+  Value weightScale = args.weightScale.value;
+  Value outputScale = args.outputScale.value;
+  Value output = args.output.value;
 
-  // Initialize the reduction tensor with the minimum possible value
-  Value initValue = arith::ConstantOp::create(builder, 
-      loc, builder.getFloatAttr(elementType,
-                                -std::numeric_limits<float>::infinity()));
-  auto reductionType =
-      RankedTensorType::get({inputType.getShape()[1]}, elementType);
+  auto outputShapedTy = cast<ShapedType>(output.getType());
+  Type outElemTy = outputShapedTy.getElementType();
+  assert(outElemTy.isInteger() &&
+         "Requantization output must be an integer type");
 
-  // Per channel scale factor output tensor
-  Value scaleTensor =
-      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
-  Value scaleTensorInit =
-      linalg::FillOp::create(builder, loc, initValue, scaleTensor).getResult(0);
+  auto inputScaleTy = cast<ShapedType>(inputScale.getType());
+  assert(inputScaleTy.getRank() == 1 && "Input scale must be a vector");
+  assert(inputScaleTy.getElementType() == dataTypes.inputScale &&
+         "Input scale must be of scale type");
+  auto weightScaleTy = cast<ShapedType>(weightScale.getType());
+  assert(weightScaleTy.getRank() == 1 && "Weight scale must be a vector");
+  assert(weightScaleTy.getElementType() == dataTypes.weightScale &&
+         "Weight scale must be of scale type");
+  auto outputScaleTy = cast<ShapedType>(outputScale.getType());
+  assert(outputScaleTy.getRank() == 1 && "Output scale must be a vector");
+  assert(outputScaleTy.getElementType() == dataTypes.outputScale &&
+         "Output scale must be of scale type");
 
-  // Reduce along dimension 0 (rows) to find max of each column for per channel
-  // quantization.
-  Value absMax = linalg::ReduceOp::create(builder, 
-              loc, input, scaleTensorInit, ArrayRef<int64_t>{0},
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange args) {
-                Value absVal =
-                    math::AbsFOp::create(nestedBuilder, nestedLoc, args[0]);
-                Value maxVal = arith::MaximumFOp::create(nestedBuilder, 
-                    nestedLoc, absVal, args[1]);
-                linalg::YieldOp::create(nestedBuilder, nestedLoc, maxVal);
-              })
+  MLIRContext *ctx = &context;
+  // Input scale is per-row (batch); weight and output scales are per-output
+  // channel (K dimension).
+  auto dim0 = getAffineDimExpr(0, ctx);
+  auto dim1 = getAffineDimExpr(1, ctx);
+  AffineMap inputScaleMap = AffineMap::get(2, 0, {dim0}, ctx);
+  AffineMap weightScaleMap = AffineMap::get(2, 0, {dim1}, ctx);
+  AffineMap outputScaleMap = AffineMap::get(2, 0, {dim1}, ctx);
+  SmallVector<utils::IteratorType> iteratorTypes(2,
+                                                 utils::IteratorType::parallel);
+  SmallVector<AffineMap> maps = {getMap(chain, MAP_PARALLEL), inputScaleMap,
+                                 weightScaleMap, outputScaleMap,
+                                 getMap(output, MAP_PARALLEL)};
+
+  // If tiling is applied, expand each scale tensor to match the tiled output
+  // dimensions and broadcast over the remaining unit dimensions.
+  if (tiles.size() > 0) {
+    inputScale =
+        createExpandedScaleTensor(builder, loc, inputScale, tiles, true);
+    weightScale =
+        createExpandedScaleTensor(builder, loc, weightScale, tiles, false);
+    outputScale =
+        createExpandedScaleTensor(builder, loc, outputScale, tiles, false);
+
+    auto outputShape = outputShapedTy.getShape();
+    // Map an expanded scale tensor's dimensions onto the output dimensions,
+    // broadcasting unit-sized dimensions. Input scales start matching from the
+    // outermost (row) dimension, weight/output scales from the channel one.
+    auto createScaleAffineExprs = [&](ArrayRef<int64_t> scaleShape,
+                                      bool isInputScale) {
+      SmallVector<AffineExpr> affineExprs;
+      unsigned outputDim = isInputScale ? 0 : 1;
+      unsigned inputDim = isInputScale ? 0 : 1;
+      for (auto size : scaleShape) {
+        if (size == 1) {
+          affineExprs.push_back(getAffineConstantExpr(0, ctx));
+        } else {
+          while (outputDim < outputShape.size() &&
+                 outputShape[outputDim] != size)
+            outputDim++;
+          affineExprs.push_back(getAffineDimExpr(inputDim, ctx));
+          outputDim++;
+        }
+        inputDim++;
+      }
+      return affineExprs;
+    };
+
+    unsigned rank = outputShapedTy.getRank();
+    auto inScaleShape = cast<ShapedType>(inputScale.getType()).getShape();
+    auto wScaleShape = cast<ShapedType>(weightScale.getType()).getShape();
+    auto oScaleShape = cast<ShapedType>(outputScale.getType()).getShape();
+    maps[1] = AffineMap::get(rank, 0,
+                             createScaleAffineExprs(inScaleShape, true), ctx);
+    maps[2] = AffineMap::get(rank, 0,
+                             createScaleAffineExprs(wScaleShape, false), ctx);
+    maps[3] = AffineMap::get(rank, 0,
+                             createScaleAffineExprs(oScaleShape, false), ctx);
+    iteratorTypes.assign(rank, utils::IteratorType::parallel);
+  }
+
+  Type floatTy = builder.getF32Type();
+  // Saturation bounds derived from the signed output integer width.
+  unsigned outBitWidth = outElemTy.getIntOrFloatBitWidth();
+  double lowBound = llvm::APInt::getSignedMinValue(outBitWidth).getSExtValue();
+  double highBound = llvm::APInt::getSignedMaxValue(outBitWidth).getSExtValue();
+  Value lowClamp = arith::ConstantOp::create(
+      builder, loc, builder.getFloatAttr(floatTy, lowBound));
+  Value highClamp = arith::ConstantOp::create(
+      builder, loc, builder.getFloatAttr(floatTy, highBound));
+
+  auto result =
+      linalg::GenericOp::create(
+          builder, loc, TypeRange{outputShapedTy},
+          ValueRange{chain, inputScale, weightScale, outputScale},
+          ValueRange{output}, maps, iteratorTypes,
+          [&](OpBuilder &nestedBuilder, Location nestedLoc,
+              ValueRange blockArgs) {
+            // Cast the wide accumulator to float and combine all scales.
+            Value accF = createCastToFloat(nestedBuilder, nestedLoc,
+                                           blockArgs[0], floatTy);
+            Value inS = createCastToFloat(nestedBuilder, nestedLoc,
+                                          blockArgs[1], floatTy);
+            Value wS = createCastToFloat(nestedBuilder, nestedLoc,
+                                         blockArgs[2], floatTy);
+            Value oS = createCastToFloat(nestedBuilder, nestedLoc,
+                                         blockArgs[3], floatTy);
+            // Dequantize with input/weight scales, then apply output scale.
+            Value scale =
+                arith::MulFOp::create(nestedBuilder, nestedLoc, inS, wS)
+                    ->getResult(0);
+            scale = arith::MulFOp::create(nestedBuilder, nestedLoc, scale, oS)
+                        ->getResult(0);
+            Value scaled =
+                arith::MulFOp::create(nestedBuilder, nestedLoc, accF, scale)
+                    ->getResult(0);
+            // Saturate to the output integer range before truncating.
+            scaled = arith::MaximumFOp::create(nestedBuilder, nestedLoc, scaled,
+                                               lowClamp);
+            scaled = arith::MinimumFOp::create(nestedBuilder, nestedLoc, scaled,
+                                               highClamp);
+            Value quantized = arith::FPToSIOp::create(nestedBuilder, nestedLoc,
+                                                      outElemTy, scaled);
+            linalg::YieldOp::create(nestedBuilder, nestedLoc,
+                                    ValueRange{quantized});
+          })
           .getResult(0);
 
-  // Compute the scaling factors (2^(-exponent)) from the absolute maximum
-  // values.
-  Value zeroVal = arith::ConstantIntOp::create(builder, loc, 0, 32);
-
-  // Create two output tensors for the two results
-  context.getOrLoadDialect<mlir::LLVM::LLVMDialect>();
-  Value channelScale =
-      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
-  Value channelReScale =
-      tensor::EmptyOp::create(builder, loc, reductionType, ValueRange{});
-
-  auto frExp = linalg::GenericOp::create(builder, 
-      loc,
-      TypeRange{reductionType, reductionType}, // Specify multiple result types
-      ValueRange{absMax}, ValueRange{channelScale, channelReScale},
-      ArrayRef<AffineMap>{getMap(absMax, MAP_PARALLEL),
-                          getMap(channelScale, MAP_PARALLEL),
-                          getMap(channelReScale, MAP_PARALLEL)},
-      ArrayRef<utils::IteratorType>{utils::IteratorType::parallel},
-      [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-        Value frexpResult = LLVM::FractionExpOp::create(
-            nestedBuilder, nestedLoc,
-            LLVM::LLVMStructType::getLiteral(
-                &context, ArrayRef<Type>{elementType, builder.getI32Type()}),
-            ValueRange{args[0]});
-        Value exponent =
-            LLVM::ExtractValueOp::create(nestedBuilder, nestedLoc,
-                                         builder.getI32Type(), frexpResult, 1)
-                .getResult();
-        Value unbiased = arith::SubIOp::create(nestedBuilder, 
-            nestedLoc, exponent,
-            arith::ConstantOp::create(builder, nestedLoc,
-                                              builder.getI32IntegerAttr(7)));
-        Value negExponent =
-            arith::SubIOp::create(nestedBuilder, nestedLoc, zeroVal, unbiased);
-        auto tchannleReScale =
-            math::Exp2Op::create(nestedBuilder, nestedLoc,
-                                      arith::SIToFPOp::create(nestedBuilder, 
-                                          nestedLoc, elementType, unbiased))
-                ->getResult(0);
-        auto tchannleScale =
-            math::Exp2Op::create(nestedBuilder, nestedLoc,
-                                      arith::SIToFPOp::create(nestedBuilder, 
-                                          nestedLoc, elementType, negExponent))
-                ->getResult(0);
-        linalg::YieldOp::create(nestedBuilder, 
-            nestedLoc, ValueRange{tchannleScale, tchannleReScale});
-      });
-
-  SmallVector<Value> frExpVec;
-  frExpVec.push_back(frExp.getResults()[0]);
-  frExpVec.push_back(frExp.getResults()[1]);
-
-  SmallVector<Value> scalingFactors;
-  Value scalingFactor =
-      tensor::EmptyOp::create(builder, loc, inputType, ValueRange{});
-  Value filledTensor =
-      linalg::FillOp::create(builder, loc, initValue, scalingFactor)
-          .getResult(0);
-  // Broadcast to match output shape
-  auto broadcastScaleRes =
-      linalg::BroadcastOp::create(builder, loc, frExpVec[0], filledTensor,
-                                       ArrayRef<int64_t>{0})
-          ->getResult(0);
-  scalingFactors.push_back(broadcastScaleRes);
-
-  broadcastScaleRes =
-      linalg::BroadcastOp::create(builder, loc, frExpVec[1], filledTensor,
-                                       ArrayRef<int64_t>{0})
-          ->getResult(0);
-  scalingFactors.push_back(broadcastScaleRes);
-
-  return scalingFactors;
-}
-
-Value MLIRGenerator::quantizeGemm(LayerArgs &args, Value chain) {
-  Value scaleFactor = computeScalingFactor(chain)[0];
-  Value input = args.input.value;
-  Value weight = args.weight.value;
-  Type outputType = quantType == QuantizationType::QuantDequant
-                        ? args.intermediate.type
-                        : args.output.type;
-
-  auto inputShapedTy = cast<ShapedType>(input.getType());
-  auto outputShapedTy = cast<ShapedType>(outputType);
-  auto shape = outputShapedTy.getShape();
-  // Create a output type for the quantized output using shape and input element
-  // type.
-  auto contractOutputTy =
-      RankedTensorType::get(shape, inputShapedTy.getElementType());
-
-  auto castedOutput =
-      tensor::EmptyOp::create(builder, loc, outputShapedTy, ValueRange{});
-  SmallVector<Attribute> maps;
-  maps.push_back(AffineMapAttr::get(
-      getMap(input, MAP_MATMUL_INPUT, args.inputTranspose)));
-  maps.push_back(AffineMapAttr::get(
-      getMap(weight, MAP_MATMUL_WEIGHT, args.weightTranspose)));
-  maps.push_back(AffineMapAttr::get(
-      getMap(castedOutput, MAP_MATMUL_OUTPUT, args.outputTranspose)));
-  auto dquantVal = getZeroInitTensor(contractOutputTy);
-
-  auto dquantRes = linalg::MulOp::create(builder, loc, chain.getType(),
-                                              ValueRange{chain, scaleFactor},
-                                              ValueRange{dquantVal})
-                       .getResult(0);
-
-  dquantRes =
-      linalg::GenericOp::create(builder, 
-              loc, outputShapedTy, ValueRange{dquantRes},
-              ValueRange{castedOutput},
-              ArrayRef<AffineMap>{getMap(dquantRes, MAP_PARALLEL),
-                                  getMap(castedOutput, MAP_PARALLEL)},
-              getIterators(MAP_PARALLEL),
-              [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                  ValueRange blockArgs) {
-                auto arg0 = blockArgs[0];
-                auto casted = arith::FPToSIOp::create(nestedBuilder, 
-                    loc, outputShapedTy.getElementType(), arg0);
-                linalg::YieldOp::create(nestedBuilder, loc, ValueRange{casted});
-              })
-          .getResult(0);
-
-  // TODO: A place holder for flops computation for quantization.
-  computeMatmulFlops(inputShapedTy, outputShapedTy);
-  return dquantRes;
+  computeElementwiseScalingFlops(outputShapedTy);
+  return result;
 }
 
 Value MLIRGenerator::dequantizeGemm(LayerArgs &args, Value chain) {
@@ -1454,19 +1385,19 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type,
                                                            : dataTypes.input);
 
   if (!tiles.size()) {
-    if (quantType != QuantizationType::None) {
+    if (quant) {
       if (type == INPUT_SCALE || type == WEIGHT_SCALE) {
         return RankedTensorType::get(dims, type == INPUT_SCALE
                                                ? dataTypes.inputScale
                                                : dataTypes.weightScale);
+      } else if (type == OUTPUT_SCALE) {
+        return RankedTensorType::get(dims, dataTypes.outputScale);
       } else if (type == PACK_OUTPUT) {
         return RankedTensorType::get(dims, dataTypes.output);
       } else if (type == PACK_ACCUMULATOR) {
         return RankedTensorType::get(dims, dataTypes.accumulator);
       } else if (type == PACK_INPUT) {
         return RankedTensorType::get(dims, dataTypes.input);
-      } else if (type == PACK_INTERMEDIATE) {
-        return RankedTensorType::get(dims, dataTypes.output);
       }
     }
     // Unpacked type, just return 2D tensor. Transposed A (N x C -> C x N) or
@@ -1546,8 +1477,8 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type,
     return RankedTensorType::get({dims[0]}, dataTypes.inputScale);
   case WEIGHT_SCALE:
     return RankedTensorType::get({dims[0]}, dataTypes.weightScale);
-  case PACK_INTERMEDIATE:
-    llvm_unreachable("Unknown intermediate packing type");
+  case OUTPUT_SCALE:
+    return RankedTensorType::get({dims[0]}, dataTypes.outputScale);
   }
 
   llvm_unreachable("Unknown packing type");

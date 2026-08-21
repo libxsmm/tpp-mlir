@@ -68,7 +68,7 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<std::string>
     dataType("data-type", llvm::cl::desc("Data type for arguments"),
               llvm::cl::value_desc(
-                  "f32|f16|bf16|bf8|hf8|mx-bf16|mx-f16|mx-i8|mx-i8-f32|mx-f32-i8"),
+                  "f32|f16|bf16|bf8|hf8|i8|i8-f32"),
               llvm::cl::init("f32"));
 
 // Scale type flag to chose data type of scaling factor.For now it is kind of a
@@ -77,11 +77,13 @@ llvm::cl::opt<std::string>
     scaleType("scale-type", llvm::cl::desc("Data type of scaling factor"),
               llvm::cl::value_desc("f32|f8E8M0FNU"), llvm::cl::init(""));
 
-// Quantization type to specify the quantization kernel to be generated.
-llvm::cl::opt<std::string> quantizationType(
-    "quant-type", llvm::cl::desc("Specify quantization type"),
-    llvm::cl::value_desc("mixed|quantize|dequantize|testquant"),
-    llvm::cl::init(""));
+// Enable quantization. The concrete behaviour (quantize, dequantize or
+// requantize) is derived from the selected data type, mirroring what PyTorch
+// does with quantized models.
+llvm::cl::opt<bool> quant("quant",
+                          llvm::cl::desc("Generate a quantized kernel with "
+                                         "scaling factors"),
+                          llvm::cl::value_desc("bool"), llvm::cl::init(false));
 
 // Random seed
 llvm::cl::opt<int> seed("seed", llvm::cl::desc("Random seed"),
@@ -143,8 +145,20 @@ int main(int argc, char **argv) {
 
   llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR Generator");
 
+  // Quantization needs an 8-bit integer operand; reject wider-only types here
+  // instead of silently ignoring --quant during code generation.
+  if (quant) {
+    llvm::StringRef ty(dataType);
+    if (!ty.equals_insensitive("i8") && !ty.equals_insensitive("i8-f32")) {
+      llvm::errs() << "error: --quant requires a data type with an 8-bit "
+                      "integer operand (i8 or i8-f32); got '"
+                   << dataType << "'\n";
+      return 1;
+    }
+  }
+
   MLIRGenerator gen(outputOpKind, kernel, batch, layers, tiles, registerUnroll, dataType,
-                    scaleType, quantizationType, seed, identity, enableBias,
+                    scaleType, quant, seed, identity, enableBias,
                     enableRelu, enableSoftmax, vnni, transposeA, transposeB);
   return gen.generate(filename);
 }
