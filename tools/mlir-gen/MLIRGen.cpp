@@ -568,7 +568,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     // Accumulator matches the output type; accumulate directly into it.
     args.accumulator.value = args.output.value;
   } else {
-      args.accumulator.value = getZeroInitTensor(args.accumulator.type);
+    args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
   if (vnniPacked) {
