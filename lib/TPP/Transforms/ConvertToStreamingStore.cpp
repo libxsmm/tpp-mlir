@@ -56,7 +56,8 @@ static bool isWriteOnly(Value root) {
       // Any user with unknown effects might read the buffer.
       auto memEffects = dyn_cast<MemoryEffectOpInterface>(user);
       if (!memEffects)
-        return false;
+        continue;
+
       SmallVector<MemoryEffects::EffectInstance> effects;
       memEffects.getEffects(effects);
       for (const MemoryEffects::EffectInstance &effect : effects) {
