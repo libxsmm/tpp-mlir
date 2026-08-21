@@ -1,5 +1,10 @@
+// Nano-kernel path.
 // RUN: tpp-run %s -e entry -entry-point-result=void -n 2 -bench-replication-gb=0.00001 --nano-kernels --registerBlocking=4,4,8 -print-mlir=late 2>&1 | FileCheck %s
 // RUN: tpp-run %s -e entry -entry-point-result=void -n 2 -bench-replication-gb=0.00001 --nano-kernels --registerBlocking=4,4,8 -splat-to-random -seed 123 -print-mlir=late 2>&1 | FileCheck %s --check-prefix=RANDOM
+
+// Default XSMM path
+// RUN: tpp-run %s -e entry -entry-point-result=void -n 2 -bench-replication-gb=0.00001 -print-mlir=late 2>&1 | FileCheck %s
+// RUN: tpp-run %s -e entry -entry-point-result=void -n 2 -bench-replication-gb=0.00001 -splat-to-random -seed 123 -print-mlir=late 2>&1 | FileCheck %s --check-prefix=RANDOM
 
 func.func @entry(%A: tensor<4x8xf32>, %B: tensor<8x4xf32>, %C: tensor<4x4xf32>) -> tensor<4x4xf32> {
   %0 = linalg.matmul ins(%A, %B : tensor<4x8xf32>, tensor<8x4xf32>) outs(%C : tensor<4x4xf32>) -> tensor<4x4xf32>

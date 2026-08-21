@@ -142,8 +142,13 @@ private:
       pm.addPass(createSCFForAllLoopFlattenSFC());
 
     // Bufferize: tensor->memref.
-    if (!nanoKernel)
+    // Replicate benchmark kernel arguments for cold-cache timing. Runs on
+    // bufferized memrefs so replicas are plain subviews (no allocs/copies).
+    // No-op unless the benchmark producer requested replication.
+    if (!nanoKernel) {
       pm.addPass(createBufferize());
+      pm.addPass(createReplicateBenchArgs());
+    }
 
     if (nanoKernel)
       // Lower Linalg to Vector.
