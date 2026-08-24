@@ -292,7 +292,23 @@ struct ReplicateBenchArgs
               /*sizes=*/ValueRange{});
         }
 
-        func::CallOp::create(bodyBuilder, loc, kernel, viewArgs);
+        auto newCall = func::CallOp::create(bodyBuilder, loc, kernel, viewArgs);
+
+        // When the kernel returns results (e.g. an internally-allocated output
+        // buffer), the original call is consumed by trailing cleanup ops
+        // (extract_strided_metadata/dealloc) in the bench body. Rewire those
+        // uses to the replicated call.
+        call.replaceAllUsesWith(newCall);
+        if (call->getNumResults() != 0) {
+          Operation *benchTerminator = call->getBlock()->getTerminator();
+          Operation *loopTerminator = loop.getBody()->getTerminator();
+          SmallVector<Operation *> cleanup;
+          for (Operation *op = call->getNextNode(); op && op != benchTerminator;
+               op = op->getNextNode())
+            cleanup.push_back(op);
+          for (Operation *op : cleanup)
+            op->moveBefore(loopTerminator);
+        }
         call.erase();
       }
     }
