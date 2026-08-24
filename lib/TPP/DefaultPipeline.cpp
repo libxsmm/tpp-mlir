@@ -69,11 +69,6 @@ llvm::cl::list<unsigned>
                      llvm::cl::CommaSeparated);
 
 llvm::cl::opt<bool>
-    vectorToKernel("vector-to-kernels",
-                   llvm::cl::desc("Lower vector to micro-kernels"),
-                   llvm::cl::init(false));
-
-llvm::cl::opt<bool>
     nanoKernel("nano-kernels",
                    llvm::cl::desc("Lower vector.contract to nano-kernels"),
                    llvm::cl::init(false));
@@ -205,7 +200,6 @@ private:
         registerBlocking.begin(), registerBlocking.end()};
     tppDefaultOptions.gemmUnroll =
         SmallVector<int64_t>{gemmUnroll.begin(), gemmUnroll.end()};
-    tppDefaultOptions.vectorToKernel = vectorToKernel;
     tppDefaultOptions.nanoKernel = nanoKernel;
     tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
     pm.addPass(createDefaultTppPasses(tppDefaultOptions));
