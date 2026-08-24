@@ -1365,8 +1365,7 @@ Value MLIRGenerator::lowerSoftmax(LayerArgs &args, Value chain) {
   return softmax;
 }
 
-TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type,
-                                   int64_t nTile) {
+TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   // Already packed type, just return ND tensor
   if (dims.size() > 2)
     return RankedTensorType::get(dims, type == PACK_OUTPUT ? dataTypes.output
@@ -1399,9 +1398,7 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type,
   // Packed types block by tile size
   assert(tiles.size() == 3 && "Invalid tile size format");
   auto n = tiles[0];
-  // The output (N) tile defaults to tiles[1], but hidden-layer activations
-  // override it with the contraction tile so they match the next layer's input.
-  auto k = nTile ? nTile : tiles[1];
+  auto k = tiles[1];
   auto c = tiles[2];
   auto x = dims[0];
   // Broadcast is 1D

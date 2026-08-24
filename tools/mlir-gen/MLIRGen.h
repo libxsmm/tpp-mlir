@@ -135,10 +135,8 @@ class MLIRGenerator {
     OUTPUT_SCALE
   };
 
-  /// Return shaped type (packed if requested). \p nTile overrides the output
-  /// (N) tile size when non-zero; used to tile hidden-layer activations by the
-  /// contraction dim so multi-layer chains stay consistent.
-  TensorType getShape(ArrayRef<int64_t>, PackingType, int64_t nTile = 0);
+  /// Return shaped type (packed if requested).
+  TensorType getShape(ArrayRef<int64_t>, PackingType);
 
   /// Return a zero-init tensor for matmul outputs
   Value getZeroInitTensor(TensorType);
@@ -220,10 +218,9 @@ class MLIRGenerator {
   /// Returns the chain value to be used in the next op
   Value lowerMatmul(LayerArgs &args);
 
-  /// Re-tile the reduction (feature) dimension of a standard packed activation
-  /// {BN, Bk, bn, k} to {BN, Bc, bn, reduceTile}, keeping the batch blocking.
-  /// Used to adapt a hidden activation whose producing layer tiled the feature
-  /// dimension differently than the consuming contraction reduces over it.
+  /// Function to unpack and pack again the output of a gemm for different M, N, K
+  /// tile sizes (eg., --tiles=32,32,64) before being fed as an input to the 
+  /// following or next gemm.
   Value retilePackedActivation(Value packed, int64_t reduceTile);
 
   /// Creates linalg generic matmul
