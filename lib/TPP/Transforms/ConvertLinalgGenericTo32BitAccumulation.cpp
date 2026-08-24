@@ -74,20 +74,26 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
     if (!outType)
       return rewriter.notifyMatchFailure(genericOp, "No output type detected.");
 
-    if (!outType.getElementType().isBF16() &&
-        !outType.getElementType().isSignlessInteger(8))
-      return rewriter.notifyMatchFailure(
-          genericOp, "The outs type should be BF16 or Int8.");
+    Type outElemType = outType.getElementType();
+    // Low-precision float types accumulated in f32: bf16, f8E5M2, f8E4M3FN.
+    bool isFloatType = outElemType.isBF16() || outElemType.isF8E5M2() ||
+                       outElemType.isF8E4M3FN();
 
-    Type ipType = rewriter.getBF16Type();
+    if (!isFloatType && !outElemType.isSignlessInteger(8))
+      return rewriter.notifyMatchFailure(
+          genericOp, "The outs type should be BF16, F8E5M2, F8E4M3FN or Int8.");
+
+    // For float types, accumulate in f32 and truncate back to the original
+    // element type. For int8, accumulate in i32.
+    Type ipType = outElemType;
     Type opType = rewriter.getF32Type();
 
-    if (outType.getElementType().isSignlessInteger(8)) {
+    if (outElemType.isSignlessInteger(8)) {
       ipType = rewriter.getIntegerType(8);
       opType = rewriter.getIntegerType(32);
     }
 
-    if (outType.getElementType().isBF16()) {
+    if (isFloatType) {
       for (Operation &innerOp : genericOp.getRegion().front()) {
         if (isa<arith::MulFOp, arith::AddFOp, linalg::YieldOp>(innerOp))
           continue;
@@ -98,7 +104,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
       }
     }
 
-    if (outType.getElementType().isSignlessInteger(8)) {
+    if (outElemType.isSignlessInteger(8)) {
       for (Operation &innerOp : genericOp.getRegion().front()) {
         if (isa<arith::MulIOp, arith::AddIOp, linalg::YieldOp>(innerOp))
           continue;
@@ -118,7 +124,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
 
     auto zeroAttr = rewriter.getFloatAttr(rewriter.getF32Type(), 0.0);
     auto zero = arith::ConstantOp::create(rewriter, loc, zeroAttr);
-    if (outType.getElementType().isSignlessInteger(8)) {
+    if (outElemType.isSignlessInteger(8)) {
       auto zeroAttrI32 =
           rewriter.getIntegerAttr(rewriter.getIntegerType(32), 0);
       zero = arith::ConstantOp::create(rewriter, loc, zeroAttrI32);
@@ -143,7 +149,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
           auto acc = args[2];
 
           Value sum;
-          if (outType.getElementType().isBF16()) {
+          if (isFloatType) {
             // cast inputs
             auto a32 = arith::ExtFOp::create(b, loc, opType, a);
             auto b32 = arith::ExtFOp::create(b, loc, opType, bval);
@@ -153,7 +159,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
             sum = arith::AddFOp::create(b, loc, acc, mul);
           }
 
-          if (outType.getElementType().isSignlessInteger(8)) {
+          if (outElemType.isSignlessInteger(8)) {
             // cast inputs
             auto a32 = arith::ExtSIOp::create(b, loc, opType, a);
             auto b32 = arith::ExtSIOp::create(b, loc, opType, bval);
@@ -189,7 +195,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
           auto accActual = args[1];
 
           Value cast;
-          if (outType.getElementType().isBF16()) {
+          if (isFloatType) {
             auto accActualF32 =
                 arith::ExtFOp::create(b, loc, opType, accActual);
 
@@ -198,7 +204,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
             cast = arith::TruncFOp::create(b, loc, ipType, sum);
           }
 
-          if (outType.getElementType().isSignlessInteger(8)) {
+          if (outElemType.isSignlessInteger(8)) {
             auto accActualI32 =
                 arith::ExtSIOp::create(b, loc, opType, accActual);
 

@@ -69,6 +69,11 @@ llvm::cl::list<unsigned>
                      llvm::cl::CommaSeparated);
 
 llvm::cl::opt<bool>
+    vectorToKernel("vector-to-kernels",
+                   llvm::cl::desc("Lower vector to micro-kernels"),
+                   llvm::cl::init(false));
+
+llvm::cl::opt<bool>
     nanoKernel("nano-kernels",
                    llvm::cl::desc("Lower vector.contract to nano-kernels"),
                    llvm::cl::init(false));
@@ -200,6 +205,7 @@ private:
         registerBlocking.begin(), registerBlocking.end()};
     tppDefaultOptions.gemmUnroll =
         SmallVector<int64_t>{gemmUnroll.begin(), gemmUnroll.end()};
+    tppDefaultOptions.vectorToKernel = vectorToKernel;
     tppDefaultOptions.nanoKernel = nanoKernel;
     tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
     pm.addPass(createDefaultTppPasses(tppDefaultOptions));
@@ -221,6 +227,8 @@ private:
         mlir::arith::createArithEmulateUnsupportedFloats(emulateFloatsOptions));
     mlir::arith::ArithExpandOpsPassOptions arithExpandOpsOptions;
     arithExpandOpsOptions.includeF8E8M0 = true;
+    arithExpandOpsOptions.includeF8E5M2 = true;
+    arithExpandOpsOptions.includeF8E4M3FN = true;
     pm.addPass(arith::createArithExpandOpsPass(arithExpandOpsOptions));
     pm.addPass(createLowerAffinePass());
   }
