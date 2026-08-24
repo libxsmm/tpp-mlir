@@ -288,11 +288,7 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   // Use VNNI packed format if both tiles and VNNI factor are specified.
   vnniPacked = tiles.size() > 0 && vnniFactor != 0;
 
-  // Transposing the input (A) is supported for both the plain and the VNNI
-  // GEMM. Only the first layer consumes the external (transposed) A argument;
-  // intermediate activations are produced in normal layout, so multi-layer
-  // GEMMs are supported.
-  // Transposing the weight (B) is only supported for the plain GEMM.
+  // Transposing the weight (B) is only supported for the flat GEMM.
   assert(!(transposeB && vnniFactor != 0) &&
          "Transposing B is not supported with VNNI packing");
 
@@ -315,16 +311,26 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
 }
 
 void MLIRGenerator::getKernelTypes(KernelArgs &args) {
-  // A flat (untiled) pytorch-style transposed-A MLP transposes every layer's A
-  // activation (matching the named-matmul TN chain emitted by pytorch-mlir), so
-  // its stored input keeps the natural NN layout and the leading (M) dim flips
-  // per layer. See the flatTransposeChain branch below.
-  bool flatTransposeChain =
-      !tiles.size() && vnniFactor == 0 && !quant && transposeA;
+  // The kernel is generated based on the user input:
+  //   * pytorch way - a flat (unpacked) GEMM, when there is no tiling, VNNI packing or
+  //     quantization. Its operands are 2D tensors, so the contraction dims are
+  //     read straight from the tensor shapes: a transposed A reduces over its
+  //     leading dim and flips M (the pytorch `X.T @ W` form), while a
+  //     transposed B stores the weight as [N, K]. A multi-layer transposed-A
+  //     model therefore forms a TN chain on its own, each hidden activation
+  //     being transposed again by the next layer.
+  //   * libxsmm_dnn way - a packed GEMM (VNNI/not and/or quantized), which uses the getShape
+  //     packing machinery, keeps M == batch, and models a transpose as an
+  //     operand relayout inserted before the contraction (see lowerMatmul).
 
-  // Input type, also first layer's input
+  // True: pytorch like gemm kernels
+  bool unpacked = !tiles.size() && vnniFactor == 0 && !quant;
+
+  // Input type, also first layer's input. The unpacked GEMM (pytorch) stores A in its
+  // natural NN layout (any transpose is later materialized as an explicit
+  // linalg.transpose); the packed GEMM (libxsmm_dnn)stores A in the canonical packed layout.
   TensorType currentType =
-      flatTransposeChain
+      unpacked
           ? RankedTensorType::get({batch, layers.front()}, dataTypes.input)
           : getShape({batch, layers.front()}, PACK_INPUT);
 
@@ -339,87 +345,68 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     LayerArgs arg;
     arg.index = i;
     arg.input.type = currentType;
+    arg.outputTranspose = false;
 
-    if (flatTransposeChain) {
-      // Every layer transposes its A activation [P, Q] -> [Q, P] and reduces
-      // over P, so the weight's K dim is P (the previous leading dim) and the
-      // output becomes [Q, outputSize]. The M dim thus flips from P to Q each
-      // layer, mirroring the pytorch-mlir TN chain.
+    if (unpacked) { // generate pytorch like kernels
       auto actShape = cast<ShapedType>(currentType).getShape();
-      int64_t leadDim = actShape[0];
-      int64_t trailDim = actShape[1];
-      arg.inputTranspose = true;
-      arg.outputTranspose = false;
+      int64_t mDim = transposeA ? actShape[1] : actShape[0];
+      int64_t kDim = transposeA ? actShape[0] : actShape[1];
+      arg.inputTranspose = transposeA;
       arg.weightTranspose = transposeB;
       arg.weight.type =
-          transposeB ? RankedTensorType::get({(int64_t)outputSize, leadDim},
+          transposeB ? RankedTensorType::get({(int64_t)outputSize, kDim},
                                              dataTypes.input)
-                     : RankedTensorType::get({leadDim, (int64_t)outputSize},
+                     : RankedTensorType::get({kDim, (int64_t)outputSize},
                                              dataTypes.input);
       arg.bias.type =
           RankedTensorType::get({(int64_t)outputSize}, dataTypes.input);
-      arg.output.type = RankedTensorType::get({trailDim, (int64_t)outputSize},
-                                              dataTypes.input);
-      arg.accumulator.type = RankedTensorType::get(
-          {trailDim, (int64_t)outputSize}, dataTypes.input);
-      args.push_back(arg);
-      currentType = arg.output.type;
-      continue;
-    }
-
-    arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
-
-    // Quantized kernels carry a per-row input scale and a per-output-channel
-    // weight scale to dequantize the wide accumulator.
-    if (quant) {
-      arg.inputScale.type = getShape({batch}, INPUT_SCALE);
-      arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
-    }
-
-    // TODO: Bias should be of accumulator type when it differs from the output
-    // type AND we want to propagate the truncation through the element-wise ops.
-    arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
-
-    // Every GEMM follows the same rule, regardless of its position in the
-    // model: it reduces A in the canonical packed input layout and writes C in
-    // the canonical packed output layout. There is no first/last-layer special
-    // case for the output tiling. When the activation arriving from the
-    // previous layer does not already match the input layout this contraction
-    // expects -- because A is transposed, and/or because the previous output
-    // was tiled by a different feature tile -- an explicit relayout is inserted
-    // before the contraction (see lowerMatmul). Comparing the produced shape
-    // with the required one is all that is needed to decide.
-    arg.outputTranspose = false;
-    if (tiles.size()) {
-      TensorType requiredInput = getShape({batch, inputSize}, PACK_INPUT);
-      arg.input.type = requiredInput;
-      arg.inputRelayout = (currentType != requiredInput);
-      arg.inputTranspose = transposeA;
-      arg.weightTranspose = vnniPacked ? false : transposeB;
-    } else {
-      // Flat (pytorch-style) non-chain path: the transpose is materialized as
-      // an explicit linalg.transpose that relayouts the stored operand into the
-      // canonical NN layout (a transposed-A chain is handled above).
-      arg.inputTranspose = transposeA && (i == 1);
-      arg.weightTranspose = transposeB;
-    }
-
-    // Integer output additionally carries a per-output-channel output scale to
-    // requantize the value back down.
-    bool hasOutputScale = quant && dataTypes.output.isInteger();
-    if (hasOutputScale)
-      arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
-
-    if (hasOutputScale) {
-      // Requantized GEMM keeps the N x K output layout but stores i8 values.
-      auto packedOutTy = getShape({batch, outputSize}, PACK_OUTPUT);
       arg.output.type =
-          RankedTensorType::get(packedOutTy.getShape(), dataTypes.input);
-    } else {
-      arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
-      arg.accumulator.type =
-          getShape({batch, outputSize}, PACK_ACCUMULATOR);
+          RankedTensorType::get({mDim, (int64_t)outputSize}, dataTypes.input);
+      arg.accumulator.type = arg.output.type;
+    } else { // generate libxsmm_dnn like kernels
+      arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
+
+      // Quantized kernels carry a per-row input scale and a per-output-channel
+      // weight scale to dequantize the wide accumulator.
+      if (quant) {
+        arg.inputScale.type = getShape({batch}, INPUT_SCALE);
+        arg.weightScale.type = getShape({outputSize}, WEIGHT_SCALE);
+      }
+
+      // TODO: Bias should be of accumulator type when it differs from the
+      // output type AND we want to propagate the truncation through the
+      // element-wise ops.
+      arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
+
+      if (tiles.size()) {
+        TensorType requiredInput = getShape({batch, inputSize}, PACK_INPUT);
+        arg.input.type = requiredInput;
+        arg.inputRelayout = (currentType != requiredInput);
+        arg.inputTranspose = transposeA;
+        arg.weightTranspose = vnniPacked ? false : transposeB;
+      } else {
+        arg.inputTranspose = transposeA && (i == 1);
+        arg.weightTranspose = transposeB;
+      }
+
+      // Integer output additionally carries a per-output-channel output scale
+      // to requantize the value back down.
+      bool hasOutputScale = quant && dataTypes.output.isInteger();
+      if (hasOutputScale)
+        arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
+
+      if (hasOutputScale) {
+        // Requantized GEMM keeps the N x K output layout but stores i8 values.
+        auto packedOutTy = getShape({batch, outputSize}, PACK_OUTPUT);
+        arg.output.type =
+            RankedTensorType::get(packedOutTy.getShape(), dataTypes.input);
+      } else {
+        arg.output.type = getShape({batch, outputSize}, PACK_OUTPUT);
+        arg.accumulator.type =
+            getShape({batch, outputSize}, PACK_ACCUMULATOR);
+      }
     }
+
     args.push_back(arg);
 
     // Update next input type with the output type of this layer
@@ -654,7 +641,7 @@ Value MLIRGenerator::retilePackedActivation(Value packed, int64_t reduceTile) {
   int64_t newKBlocks = sizeDim / reduceTile;
 
   // {BN, Bk, bn, k} -> {BN, bn, Bk, k} so the batch and feature sub-blocks are
-  // each contiguous and can be collapsed into a plain {batch, size} tensor.
+  // each contiguous and can be collapsed into a flat {batch, size} tensor.
   Value init0 = tensor::EmptyOp::create(
       builder, loc, ArrayRef<int64_t>{bnBlocks, bn, kBlocks, k}, elemTy);
   Value t0 = linalg::TransposeOp::create(builder, loc, packed, init0,
@@ -699,7 +686,7 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   }
 
   if (!tiles.size()) {
-    // Flat (pytorch-style): the stored operands keep their transposed shape,
+    // Unpacked  (pytorch-style): the stored operands keep their transposed shape,
     // so materialize an explicit linalg.transpose that relayouts them into the
     // canonical NN layout and let the contraction use the normal maps.
     if (args.inputTranspose) {
@@ -726,7 +713,8 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
       args.weightTranspose = false;
     }
   } else {
-    // Tiled / VNNI. Bring the activation arriving from the previous layer into
+    // Packed / VNNI (libxsmm_dnn style). Bring the activation arriving from the 
+    // previous layer into
     // the canonical packed input layout the shared contraction map expects,
     // then split the reduction tile for VNNI when needed. The first layer's
     // external argument is already in that layout (inputRelayout is false); a
