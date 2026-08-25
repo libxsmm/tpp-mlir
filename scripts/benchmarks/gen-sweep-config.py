@@ -24,7 +24,7 @@ OMP_ENV = {
 DTYPES = {
     "i8": {
         "group": "gemm_i8_i8_quant_mlir_vector_large_amx",
-        "name_fmt": "i8_i8_quant_{M}x{N}x{K}_omp_{T}_mlir",
+        "name_fmt": "i8_i8_quant_{M}x{N}x{K}_omp_64_mlir",
         "gen_flags": (
             "--kernel=args --data-type=i8 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
@@ -36,6 +36,19 @@ DTYPES = {
             "--init-type=quant --splat-to-random --seed=123"
         ),
         "extensions": ["amx_int8"],
+    },
+    "bf16": {
+        "group": "gemm_bf16_bf16_amx",
+        "name_fmt": "bf16_bf16_{M}x{N}x{K}_omp_64_mlir",
+        "gen_flags": (
+            "--kernel=args --data-type=bf16 --batch={M} "
+            "--layers={K},{N} --tiles=32,32,32 --vnni=2"
+        ),
+        "run_args": (
+            "--def-parallel --bench-replication-gb=5 "
+            "--init-type=normal --splat-to-random --seed=123"
+        ),
+        "extensions": ["amx_bf16"],
     },
 }
 
@@ -72,8 +85,8 @@ def main():
         help="Comma-separated dim list (default: %(default)s)",
     )
     p.add_argument(
-        "--dtypes", default="i8",
-        help="Comma-separated dtype keys (i8) (default: %(default)s)",
+        "--dtypes", default="i8,bf16",
+        help="Comma-separated dtype keys (i8,bf16) (default: %(default)s)",
     )
     p.add_argument(
         "--threads", default=",".join(str(t) for t in THREADS),
