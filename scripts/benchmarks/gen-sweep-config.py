@@ -24,7 +24,7 @@ OMP_ENV = {
 DTYPES = {
     "i8": {
         "group": "gemm_i8_i8_quant_mlir_vector_large_amx",
-        "name_fmt": "i8_i8_quant_{M}x{N}x{K}_omp_64_mlir",
+        "name_fmt": "i8_i8_quant_{M}x{N}x{K}_omp_{T}_mlir",
         "gen_flags": (
             "--kernel=args --data-type=i8 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
@@ -39,7 +39,7 @@ DTYPES = {
     },
     "bf16": {
         "group": "gemm_bf16_bf16_amx",
-        "name_fmt": "bf16_bf16_{M}x{N}x{K}_omp_64_mlir",
+        "name_fmt": "bf16_bf16_{M}x{N}x{K}_omp_{T}_mlir",
         "gen_flags": (
             "--kernel=args --data-type=bf16 --batch={M} "
             "--layers={K},{N} --tiles=32,32,32 --vnni=2"
@@ -110,7 +110,6 @@ def main():
         for M, N, K in itertools.product(shapes, repeat=3):
             for t in threads:
                 name, run = build_run(dcfg, M, N, K, t, args.iters)
-                # name, run = build_run(dcfg, 8192, N, K, t, args.iters)
                 runs[name] = run
         cfg.append({dcfg["group"]: runs})
 

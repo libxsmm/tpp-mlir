@@ -189,7 +189,7 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   # Data-init flags must be applied identically to baseline and test so both
   # runs see the same inputs; i8 requires --init-type=quant.
   init_args_i8="--init-type=quant"
-  init_args_bf16=""
+  init_args_bf16="--init-type=normal"
   vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --bench-replication-gb=5"
   vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --bench-replication-gb=5"
 
