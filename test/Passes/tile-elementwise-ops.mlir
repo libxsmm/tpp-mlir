@@ -41,12 +41,13 @@ func.func @tile_basic_elementwise(%arg0: tensor<32x64xf32>,
 
 // -----
 
-// Test 2: Single-op body (e.g., just yield of an arg) should NOT be tiled.
+// Test 2: Copy body (just a yield of an input) is tiled so it can fuse with
+// surrounding tiled ops.
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 
-func.func @no_tile_single_op_body(%arg0: tensor<32x64xf32>,
-                                   %arg1: tensor<32x64xf32>) -> tensor<32x64xf32> {
+func.func @tile_copy_body(%arg0: tensor<32x64xf32>,
+                          %arg1: tensor<32x64xf32>) -> tensor<32x64xf32> {
   %0 = linalg.generic {
     indexing_maps = [#map, #map],
     iterator_types = ["parallel", "parallel"]
@@ -58,10 +59,16 @@ func.func @no_tile_single_op_body(%arg0: tensor<32x64xf32>,
   return %0 : tensor<32x64xf32>
 }
 
-// CHECK-LABEL: func.func @no_tile_single_op_body
-// CHECK-NOT:     scf.for
-// CHECK:         linalg.generic
-// CHECK-SAME:      ins({{.*}} : tensor<32x64xf32>) outs({{.*}} : tensor<32x64xf32>)
+// CHECK-LABEL: func.func @tile_copy_body
+// CHECK:         scf.for
+// CHECK:           linalg.generic
+// CHECK-SAME:        ins({{.*}} : tensor<1x64xf32>) outs({{.*}} : tensor<1x64xf32>)
+
+// CUSTOM-LABEL: func.func @tile_copy_body
+// CUSTOM:         scf.for %{{.*}} step %c4
+// CUSTOM:           scf.for %{{.*}} step %c8
+// CUSTOM:             linalg.generic
+// CUSTOM-SAME:          ins({{.*}} : tensor<4x8xf32>) outs({{.*}} : tensor<4x8xf32>)
 
 // -----
 
@@ -88,6 +95,13 @@ func.func @tile_single_op(%arg0: tensor<32x64xf32>,
 // CHECK:         linalg.generic
 // CHECK-SAME:      ins({{.*}} : tensor<1x64xf32>)
 // CHECK:           arith.truncf
+
+// CUSTOM-LABEL: func.func @tile_single_op
+// CUSTOM:         scf.for %{{.*}} step %c4
+// CUSTOM:           scf.for %{{.*}} step %c8
+// CUSTOM:             linalg.generic
+// CUSTOM-SAME:          ins({{.*}} : tensor<4x8xf32>)
+// CUSTOM:               arith.truncf
 
 // -----
 
@@ -117,6 +131,10 @@ func.func @no_tile_reduction(%arg0: tensor<32x64xf32>,
 // CHECK-NOT:     scf.for
 // CHECK:         linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction"]
 
+// CUSTOM-LABEL: func.func @no_tile_reduction
+// CUSTOM-NOT:     scf.for
+// CUSTOM:         linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction"]
+
 // -----
 
 // Test 4: Op without inputs should NOT be tiled.
@@ -138,6 +156,10 @@ func.func @no_tile_no_inputs(%arg0: tensor<32x64xf32>) -> tensor<32x64xf32> {
 // CHECK-LABEL: func.func @no_tile_no_inputs
 // CHECK-NOT:     scf.for
 // CHECK:         linalg.generic
+
+// CUSTOM-LABEL: func.func @no_tile_no_inputs
+// CUSTOM-NOT:     scf.for
+// CUSTOM:         linalg.generic
 
 // -----
 
@@ -162,6 +184,10 @@ func.func @no_tile_3d(%arg0: tensor<4x32x64xf32>,
 // CHECK-LABEL: func.func @no_tile_3d
 // CHECK-NOT:     scf.for
 // CHECK:         linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "parallel"]
+
+// CUSTOM-LABEL: func.func @no_tile_3d
+// CUSTOM-NOT:     scf.for
+// CUSTOM:         linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "parallel"]
 
 // -----
 
