@@ -59,6 +59,9 @@ message (STATUS "LIBXSMM Include dir: ${XSMM_INCLUDE_DIRS}")
 include(xsmm-dnn)
 message (STATUS "LIBXSMM-DNN Include dir: ${XSMM_DNN_INCLUDE_DIRS}")
 
+# LLVM Lighthouse Python integration (opt-in via -DTPP_ENABLE_LIGHTHOUSE=ON)
+include(lighthouse)
+
 # Sanitizers (include as late as possible aka append)
 include(sanitizers)
 
