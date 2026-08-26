@@ -831,11 +831,6 @@ struct TileElementWiseOps
           return rewriter.notifyMatchFailure(
               op, "No non-terminating operations in the body");
 
-        auto bodyOps = body.without_terminator();
-        if (llvm::hasSingleElement(bodyOps))
-          return rewriter.notifyMatchFailure(
-              op, "Dont tile linalg.generic with single op in the body.");
-
         // Exit for Op without inputs.
         if (op.getDpsInputs().empty())
           return rewriter.notifyMatchFailure(op,
