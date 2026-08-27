@@ -135,7 +135,7 @@ class MLIRGenerator {
     OUTPUT_SCALE
   };
 
-  /// Return shaped type (packed if requested).
+  /// Return shaped type (packed if requested)
   TensorType getShape(ArrayRef<int64_t>, PackingType);
 
   /// Return a zero-init tensor for matmul outputs
@@ -178,12 +178,8 @@ class MLIRGenerator {
     unsigned index;
     Arg input;
     Arg inputScale;
-    // Whether this layer reads its input transposed, and whether the activation
-    // arriving from the previous layer must be relaid out (re-tiled and/or
-    // transposed) into the canonical packed input layout this contraction
-    // expects. Decided by comparing the produced shape with the required one.
+    // Whether this layer reads its input transposed.
     bool inputTranspose = false;
-    bool inputRelayout = false;
     Arg weight;
     Arg weightScale;
     // Whether this layer reads its weight transposed.
@@ -192,15 +188,13 @@ class MLIRGenerator {
     Arg bias;
     Arg output;
     Arg accumulator;
-    // Whether this layer writes its output transposed.
-    bool outputTranspose = false;
   };
 
   /// Return affine map (packed if requested)
   /// If order is not empty, re-order the dims in that order
   /// If dims is passed, force number of dims, otherwise, take from tensor
   /// If reduction is true, emit zeroExpr for the tail reduction
-  /// If transpose is true, emit the transposed matmul input/output/broadcast map
+  /// If transpose is true, emit the transposed matmul input/weight map
   AffineMap getMap(Value, MapType, bool transpose = false);
 
   /// Return the iterator types for a particular map type
@@ -217,11 +211,6 @@ class MLIRGenerator {
   /// Boolean indicates if mixed type (quantization) is used.
   /// Returns the chain value to be used in the next op
   Value lowerMatmul(LayerArgs &args);
-
-  /// Function to unpack and pack again the output of a gemm for different M, N, K
-  /// tile sizes (eg., --tiles=32,32,64) before being fed as an input to the 
-  /// following or next gemm.
-  Value retilePackedActivation(Value packed, int64_t reduceTile);
 
   /// Creates linalg generic matmul
   Value lowerGenericMatmul(LayerArgs &args, Value chain);

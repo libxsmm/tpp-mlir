@@ -46,20 +46,13 @@ void parseStringList(StringRef str, SmallVector<int64_t> &list) {
 }
 
 /// Swap the outer/inner tile pairs of a packed type, keeping any trailing VNNI
-/// factor innermost: 2D [a,b] -> [b,a]; 4D [a,b,c,d] -> [b,a,d,c];
-/// 5D [a,b,c,d,v] -> [b,a,d,c,v].
+/// factor innermost: 4D [a,b,c,d] -> [b,a,d,c]; 5D [a,b,c,d,v] -> [b,a,d,c,v].
 static TensorType transposePackedType(TensorType type) {
   auto rt = cast<RankedTensorType>(type);
   auto shape = rt.getShape();
-  assert((shape.size() == 2 || shape.size() == 4 || shape.size() == 5) &&
-         "Expected a flat 2D, packed 4D or VNNI 5D type");
-  if (shape.size() == 2)
-    return RankedTensorType::get({shape[1], shape[0]}, rt.getElementType());
-  SmallVector<int64_t> transposed{shape[1], shape[0]};
-  if (shape.size() >= 4) {
-   transposed.push_back(shape[3]);
-   transposed.push_back(shape[2]);
-  }
+  assert((shape.size() == 4 || shape.size() == 5) &&
+         "Expected a packed 4D or VNNI 5D type");
+  SmallVector<int64_t> transposed{shape[1], shape[0], shape[3], shape[2]};
   if (shape.size() == 5)
     transposed.push_back(shape[4]);
   return RankedTensorType::get(transposed, rt.getElementType());
@@ -312,27 +305,22 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
 
 void MLIRGenerator::getKernelTypes(KernelArgs &args) {
   // The kernel is generated based on the user input:
-  //   * pytorch way - a flat (unpacked) GEMM, when there is no tiling, VNNI packing or
-  //     quantization. Its operands are 2D tensors, so the contraction dims are
-  //     read straight from the tensor shapes: a transposed A reduces over its
-  //     leading dim and flips M (the pytorch `X.T @ W` form), while a
-  //     transposed B stores the weight as [N, K]. A multi-layer transposed-A
-  //     model therefore forms a TN chain on its own, each hidden activation
-  //     being transposed again by the next layer.
+  //   * pytorch way - a flat (unpacked) GEMM, when there is no tiling, VNNI
+  //     packing or quantization. Its operands are 2D tensors in the natural NN
+  //     layout; transposed operands are not supported on this path.
   //   * libxsmm_dnn way - a packed GEMM (VNNI/not and/or quantized), which uses the getShape
-  //     packing machinery, keeps M == batch, and models a transpose as an
-  //     operand relayout inserted before the contraction (see lowerMatmul).
+  //     packing machinery, keeps M == batch, and models a transpose by
+  //     materializing the transposed packed operand layout (see getShape) and
+  //     swapping the contraction's affine maps (see getMap).
 
-  // True: pytorch like gemm kernels
+  // Pytorch-like flat GEMM. Quantized kernels take the packed libxsmm_dnn path
+  // below even without tiles (they emit scale operands + dequant/requant), and
+  // VNNI only applies on the packed path, so both are excluded here.
   bool unpacked = !tiles.size() && vnniFactor == 0 && !quant;
 
-  // Input type, also first layer's input. The unpacked GEMM (pytorch) stores A in its
-  // natural NN layout (any transpose is later materialized as an explicit
-  // linalg.transpose); the packed GEMM (libxsmm_dnn)stores A in the canonical packed layout.
-  TensorType currentType =
-      unpacked
-          ? RankedTensorType::get({batch, layers.front()}, dataTypes.input)
-          : getShape({batch, layers.front()}, PACK_INPUT);
+  // Input type, also first layer's input. getShape returns the natural 2D NN
+  // layout when unpacked and the canonical packed layout otherwise.
+  TensorType currentType = getShape({batch, layers.front()}, PACK_INPUT);
 
   // Weights and biases types (which is also relu and input to the next)
   for (unsigned i = 1, max = layers.size(); i < max; i++) {
@@ -345,19 +333,15 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     LayerArgs arg;
     arg.index = i;
     arg.input.type = currentType;
-    arg.outputTranspose = false;
 
     if (unpacked) { // generate pytorch like kernels
       auto actShape = cast<ShapedType>(currentType).getShape();
-      int64_t mDim = transposeA ? actShape[1] : actShape[0];
-      int64_t kDim = transposeA ? actShape[0] : actShape[1];
-      arg.inputTranspose = transposeA;
-      arg.weightTranspose = transposeB;
+      int64_t mDim = actShape[0];
+      int64_t kDim = actShape[1];
+      arg.inputTranspose = false;
+      arg.weightTranspose = false;
       arg.weight.type =
-          transposeB ? RankedTensorType::get({(int64_t)outputSize, kDim},
-                                             dataTypes.input)
-                     : RankedTensorType::get({kDim, (int64_t)outputSize},
-                                             dataTypes.input);
+          RankedTensorType::get({kDim, (int64_t)outputSize}, dataTypes.input);
       arg.bias.type =
           RankedTensorType::get({(int64_t)outputSize}, dataTypes.input);
       arg.output.type =
@@ -381,12 +365,11 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
       if (tiles.size()) {
         TensorType requiredInput = getShape({batch, inputSize}, PACK_INPUT);
         arg.input.type = requiredInput;
-        arg.inputRelayout = (currentType != requiredInput);
         arg.inputTranspose = transposeA;
         arg.weightTranspose = vnniPacked ? false : transposeB;
       } else {
-        arg.inputTranspose = transposeA && (i == 1);
-        arg.weightTranspose = transposeB;
+        arg.inputTranspose = false;
+        arg.weightTranspose = false;
       }
 
       // Integer output additionally carries a per-output-channel output scale
@@ -632,40 +615,6 @@ void MLIRGenerator::computeElementwiseScalingFlops(ShapedType outputShape) {
   flops += 2 * scalingFlops;
 }
 
-Value MLIRGenerator::retilePackedActivation(Value packed, int64_t reduceTile) {
-  auto packedType = cast<ShapedType>(packed.getType());
-  auto shape = packedType.getShape(); // {BN, Bk, bn, k}
-  auto elemTy = packedType.getElementType();
-  int64_t bnBlocks = shape[0], kBlocks = shape[1], bn = shape[2], k = shape[3];
-  int64_t sizeDim = kBlocks * k;
-  int64_t newKBlocks = sizeDim / reduceTile;
-
-  // {BN, Bk, bn, k} -> {BN, bn, Bk, k} so the batch and feature sub-blocks are
-  // each contiguous and can be collapsed into a flat {batch, size} tensor.
-  Value init0 = tensor::EmptyOp::create(
-      builder, loc, ArrayRef<int64_t>{bnBlocks, bn, kBlocks, k}, elemTy);
-  Value t0 = linalg::TransposeOp::create(builder, loc, packed, init0,
-                                         ArrayRef<int64_t>{0, 2, 1, 3})
-                 ->getResult(0);
-  SmallVector<ReassociationIndices> collapse{{0, 1}, {2, 3}};
-  Value flat = tensor::CollapseShapeOp::create(
-      builder, loc,
-      RankedTensorType::get({bnBlocks * bn, sizeDim}, elemTy), t0, collapse);
-  // Re-block the feature dimension by the reduction tile: {batch, size} ->
-  // {BN, bn, Bc, reduceTile} -> {BN, Bc, bn, reduceTile}.
-  SmallVector<ReassociationIndices> expand{{0, 1}, {2, 3}};
-  Value reblocked = tensor::ExpandShapeOp::create(
-      builder, loc,
-      RankedTensorType::get({bnBlocks, bn, newKBlocks, reduceTile}, elemTy),
-      flat, expand);
-  Value init1 = tensor::EmptyOp::create(
-      builder, loc, ArrayRef<int64_t>{bnBlocks, newKBlocks, bn, reduceTile},
-      elemTy);
-  return linalg::TransposeOp::create(builder, loc, reblocked, init1,
-                                     ArrayRef<int64_t>{0, 2, 1, 3})
-      ->getResult(0);
-}
-
 Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
   auto inputType = cast<ShapedType>(args.input.value.getType());
   auto outputType = cast<ShapedType>(args.output.value.getType());
@@ -685,90 +634,10 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (!tiles.size()) {
-    // Unpacked  (pytorch-style): the stored operands keep their transposed shape,
-    // so materialize an explicit linalg.transpose that relayouts them into the
-    // canonical NN layout and let the contraction use the normal maps.
-    if (args.inputTranspose) {
-      auto tShape = inputType.getShape();
-      SmallVector<int64_t> stdShape{tShape[1], tShape[0]};
-      Value init = tensor::EmptyOp::create(builder, loc, stdShape,
-                                           inputType.getElementType());
-      args.input.value =
-          linalg::TransposeOp::create(builder, loc, args.input.value, init,
-                                      ArrayRef<int64_t>{1, 0})
-              ->getResult(0);
-      args.inputTranspose = false;
-    }
-    if (args.weightTranspose) {
-      auto weightType = cast<ShapedType>(args.weight.value.getType());
-      auto wShape = weightType.getShape();
-      SmallVector<int64_t> stdShape{wShape[1], wShape[0]};
-      Value init = tensor::EmptyOp::create(builder, loc, stdShape,
-                                           weightType.getElementType());
-      args.weight.value =
-          linalg::TransposeOp::create(builder, loc, args.weight.value, init,
-                                      ArrayRef<int64_t>{1, 0})
-              ->getResult(0);
-      args.weightTranspose = false;
-    }
-  } else {
-    // Packed / VNNI (libxsmm_dnn style). Bring the activation arriving from the 
-    // previous layer into
-    // the canonical packed input layout the shared contraction map expects,
-    // then split the reduction tile for VNNI when needed. The first layer's
-    // external argument is already in that layout (inputRelayout is false); a
-    // hidden activation always arrives as a standard packed {BN, Bk, bn, k}.
-    if (args.inputRelayout) {
-      // Re-tile the reduction dimension when the previous layer produced a
-      // different feature tile than this contraction reduces over.
-      int64_t reduceTile = tiles[2];
-      if (inputType.getShape().back() != reduceTile) {
-        args.input.value = retilePackedActivation(args.input.value, reduceTile);
-        inputType = cast<ShapedType>(args.input.value.getType());
-      }
-      // For a transposed A, relayout the standard activation into the
-      // transposed(-VNNI) A layout the shared map reads.
-      if (args.inputTranspose) {
-        if (vnniPacked) {
-          // {BN, BK, bn, bk} -> VNNI split -> transpose ->
-          // {BC, BN, bc/vnni, bn, vnni}.
-          SmallVector<int64_t> vnniShape{inputType.getShape()};
-          vnniShape.back() = vnniShape.back() / vnniFactor;
-          vnniShape.push_back(vnniFactor);
-          auto vnniType =
-              RankedTensorType::get(vnniShape, inputType.getElementType());
-          auto inputRank = inputType.getRank();
-          SmallVector<ReassociationIndices> reassociationIndices;
-          for (int64_t index = 0; index < inputRank - 1; index++)
-            reassociationIndices.push_back({index});
-          reassociationIndices.push_back({inputRank - 1, inputRank});
-          Value expanded = tensor::ExpandShapeOp::create(
-              builder, loc, vnniType, args.input.value, reassociationIndices);
-          SmallVector<int64_t> trShape{vnniShape[1], vnniShape[0], vnniShape[3],
-                                       vnniShape[2], vnniShape[4]};
-          Value init = tensor::EmptyOp::create(builder, loc, trShape,
-                                               inputType.getElementType());
-          args.input.value =
-              linalg::TransposeOp::create(builder, loc, expanded, init,
-                                          ArrayRef<int64_t>{1, 0, 3, 2, 4})
-                  ->getResult(0);
-        } else {
-          // {BN, BK, bn, bk} -> {BK, BN, bk, bn}.
-          auto tShape = inputType.getShape();
-          SmallVector<int64_t> trShape{tShape[1], tShape[0], tShape[3],
-                                       tShape[2]};
-          Value init = tensor::EmptyOp::create(builder, loc, trShape,
-                                               inputType.getElementType());
-          args.input.value =
-              linalg::TransposeOp::create(builder, loc, args.input.value, init,
-                                          ArrayRef<int64_t>{1, 0, 3, 2})
-                  ->getResult(0);
-        }
-      }
-    }
-    // A non-transposed VNNI contraction reads A through the standard VNNI-A
-    // map, so split the 4D activation into its 5D VNNI form for every layer.
+  if (tiles.size()) {
+    // Packed / VNNI (libxsmm_dnn style). A non-transposed VNNI contraction reads
+    // A through the standard VNNI-A map, so split the 4D activation into its 5D
+    // VNNI form for every layer.
     if (vnniPacked && !args.inputTranspose) {
       SmallVector<int64_t> vnniShape{inputType.getShape()};
       vnniShape.back() = vnniShape.back() / vnniFactor;
@@ -825,8 +694,7 @@ Value MLIRGenerator::lowerGenericMatmul(LayerArgs &args, Value chain) {
   auto map1 = getMap(chain, MAP_MATMUL_INPUT, args.inputTranspose);   // { 0, 2 }
   auto map2 = getMap(args.weight.value, MAP_MATMUL_WEIGHT,
                      args.weightTranspose); // { 2, 1 }
-  auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT,
-                     args.outputTranspose); // { 0, 1 }
+  auto map3 = getMap(args.accumulator.value, MAP_MATMUL_OUTPUT); // { 0, 1 }
   return linalg::GenericOp::create(
              builder, loc, args.accumulator.value.getType(),
              ValueRange{chain, args.weight.value},
@@ -890,8 +758,8 @@ Value MLIRGenerator::lowerContract(LayerArgs &args, Value chain) {
       getMap(chain, MAP_MATMUL_INPUT, args.inputTranspose)));   // { 0, 2 }
   maps.push_back(AffineMapAttr::get(
       getMap(args.weight.value, MAP_MATMUL_WEIGHT, args.weightTranspose))); // { 2, 1 }
-  maps.push_back(AffineMapAttr::get(getMap(
-      args.accumulator.value, MAP_MATMUL_OUTPUT, args.outputTranspose))); // { 0, 1 }
+  maps.push_back(AffineMapAttr::get(
+      getMap(args.accumulator.value, MAP_MATMUL_OUTPUT))); // { 0, 1 }
   return linalg::ContractOp::create(
              builder, loc, args.accumulator.value.getType(),
              ValueRange{chain, args.weight.value},
@@ -1204,7 +1072,7 @@ Value MLIRGenerator::lowerBiasAdd(LayerArgs &args, Value chain) {
     return chain;
 
   auto outTy = cast<ShapedType>(chain.getType());
-  auto mapA = getMap(chain, MAP_BROADCAST, args.outputTranspose);
+  auto mapA = getMap(chain, MAP_BROADCAST);
   auto mapB = getMap(chain, MAP_PARALLEL);
   auto sum =
       linalg::GenericOp::create(builder, 
@@ -1387,12 +1255,8 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
         return RankedTensorType::get(dims, dataTypes.input);
       }
     }
-    // Unpacked type, just return 2D tensor. Transposed A (N x C -> C x N) or
-    // B (C x K -> K x C) swaps the two dims via transposePackedType.
-    auto flat = RankedTensorType::get(dims, dataTypes.input);
-    bool needsTranspose = (type == PACK_INPUT && transposeA) ||
-                          (type == PACK_WEIGHT && transposeB);
-    return needsTranspose ? transposePackedType(flat) : flat;
+    // Unpacked type, just return 2D tensor.
+    return RankedTensorType::get(dims, dataTypes.input);
   }
 
   // Packed types block by tile size
@@ -1510,9 +1374,8 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type, bool transpose) {
     break;
   case MAP_BROADCAST:
     // Broadcast from ND to (N+1)D is (0, 1) -> (1)
-    // Packed broadcast (BN, bn) is (0, 1, 2, 3) -> (1, 3). A transposed output
-    // swaps the N and K tile pairs, so the bias (per-K) indexes even dims.
-    for (unsigned i = transpose ? 0 : 1; i < n; i += 2)
+    // Packed broadcast (BN, bn) is (0, 1, 2, 3) -> (1, 3).
+    for (unsigned i = 1; i < n; i += 2)
       pushDim(i, iter);
     break;
   case MAP_MATMUL_INPUT:
@@ -1529,8 +1392,7 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type, bool transpose) {
       getDims(transpose ? ArrayRef<int64_t>{2, 0, 5, 3}
                         : ArrayRef<int64_t>{0, 2, 3, 5});
     else
-      getDims(transpose ? ArrayRef<int64_t>{2, 0}
-                        : ArrayRef<int64_t>{0, 2});
+      getDims({0, 2});
     break;
   case MAP_MATMUL_WEIGHT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)
@@ -1544,7 +1406,7 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type, bool transpose) {
       getDims(transpose ? ArrayRef<int64_t>{1, 2, 4, 5}
                         : ArrayRef<int64_t>{1, 2, 5, 4});
     else
-      getDims(transpose ? ArrayRef<int64_t>{1, 2} : ArrayRef<int64_t>{2, 1});
+      getDims({2, 1});
     break;
   case MAP_MATMUL_OUTPUT:
     // Packed tensors have 4/5 dims and 6 loops (ppr-ppr)
@@ -1552,16 +1414,11 @@ AffineMap MLIRGenerator::getMap(Value tensor, MapType type, bool transpose) {
     if (vnniPacked) {
       // Extra VNNI packing reduction dim
       n += 1;
-      // Transposed output swaps the N and K tile pairs.
-      getDims(transpose ? ArrayRef<int64_t>{1, 0, 5, 4}
-                        : ArrayRef<int64_t>{0, 1, 4, 5});
+      getDims({0, 1, 4, 5});
     } else if (packed)
-      // Transposed output swaps the N and K tile pairs.
-      getDims(transpose ? ArrayRef<int64_t>{1, 0, 4, 3}
-                        : ArrayRef<int64_t>{0, 1, 3, 4});
+      getDims({0, 1, 3, 4});
     else
-      // Transposed flat output swaps the N and K dims.
-      getDims(transpose ? ArrayRef<int64_t>{1, 0} : ArrayRef<int64_t>{0, 1});
+      getDims({0, 1});
     break;
   }
 

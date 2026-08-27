@@ -235,30 +235,9 @@
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf8 --batch=256 --layers=512,512 --tiles=32,32,64 --vnni=4 --transpose-a=1 2>&1 | FileCheck %s --check-prefix=TA-VNNI-BF8
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=hf8 --batch=256 --layers=512,512 --tiles=32,32,64 --vnni=4 2>&1 | FileCheck %s --check-prefix=VNNI-HF8
 
-// Un-tiled (pytorch-style) transpose: the transposed operand keeps its stored
-// transposed shape and is relaid out to the canonical NN layout via an explicit
-// linalg.transpose, so the contraction always uses the standard NN maps.
+// Un-tiled (pytorch-style) flat GEMM stays in the natural NN layout; the
+// pytorch path does not support transposed operands.
 // RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --transpose-a=0 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=FLAT-NN-BF16
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=FLAT-TN-BF16
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --transpose-a=0 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=FLAT-NT-BF16
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512 --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=FLAT-TT-BF16
-
-// Multi-layer flat (pytorch-style) transposed-A chain. Every layer transposes
-// its A activation, so the stored input keeps the natural NN layout, the
-// leading (M) dim flips per layer, and each hidden activation is transposed
-// before the next matmul (mirroring the pytorch-mlir TN chain).
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512,1024 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=FLAT-TN-CHAIN
-
-// Multi-layer tiled (libxsmm-style) transposed A/B: every accumulator stays in
-// the standard MxN layout, so all contractions share the same maps and the
-// hidden activation is relaid out with an explicit transpose between layers.
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512,512 --tiles=32,32,32 --transpose-a=1 --transpose-b=1 2>&1 | FileCheck %s --check-prefix=TILED-TT-CHAIN
-
-// Multi-layer VNNI transposed-A chain (libxsmm_dnn). The accumulator is kept in
-// the standard MxN layout so all contractions share the transposed VNNI-A maps;
-// the hidden activation is expanded to VNNI and relaid out into the transposed
-// VNNI-A layout with an explicit transpose between layers.
-// RUN: mlir-gen --kernel=args --seed=0 --data-type=bf16 --batch=256 --layers=512,512,512 --tiles=32,32,32 --vnni=2 --transpose-a=1 --transpose-b=0 2>&1 | FileCheck %s --check-prefix=VNNI-TA-CHAIN
 
 
 // ===== bf16 flat combinations =====
@@ -402,9 +381,8 @@
 // VNNI-HF8: tensor.expand_shape %arg0 {{\[\[}}0], [1], [2], [3, 4]] output_shape [8, 8, 32, 16, 4] : tensor<8x8x32x64xf8E4M3FN> into tensor<8x8x32x16x4xf8E4M3FN>
 // VNNI-HF8: linalg.generic {{.*}}iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]
 
-// ===== bf16 un-tiled (pytorch-style) transpose combinations =====
-// All four forms lower to the same canonical NN contraction; the transposed
-// operands are relaid out with an explicit linalg.transpose.
+// ===== bf16 un-tiled (pytorch-style) flat GEMM =====
+// The pytorch path only emits the plain NN contraction.
 
 // FLAT-NN-BF16-DAG: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
 // FLAT-NN-BF16-DAG: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
@@ -412,73 +390,6 @@
 // FLAT-NN-BF16: func.func @entry(%arg0: tensor<256x512xbf16>, %arg1: tensor<512x512xbf16>, %arg2: tensor<256x512xbf16>) -> tensor<256x512xbf16>
 // FLAT-NN-BF16-NOT: linalg.transpose
 // FLAT-NN-BF16: linalg.generic {{.*}}ins(%arg0, %arg1 : tensor<256x512xbf16>, tensor<512x512xbf16>)
-
-// TN transposes the A activation, so the stored input keeps the natural NN
-// layout and the leading (M) dim flips (256x512 -> 512x512).
-// FLAT-TN-BF16-DAG: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
-// FLAT-TN-BF16-DAG: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
-// FLAT-TN-BF16-DAG: #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
-// FLAT-TN-BF16: func.func @entry(%arg0: tensor<256x512xbf16>, %arg1: tensor<256x512xbf16>, %arg2: tensor<512x512xbf16>) -> tensor<512x512xbf16>
-// FLAT-TN-BF16: %[[T:.*]] = linalg.transpose ins(%arg0 : tensor<256x512xbf16>){{.*}}permutation = [1, 0]
-// FLAT-TN-BF16: linalg.generic {{.*}}ins(%[[T]], %arg1 : tensor<512x256xbf16>, tensor<256x512xbf16>)
-
-// FLAT-NT-BF16-DAG: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
-// FLAT-NT-BF16-DAG: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
-// FLAT-NT-BF16-DAG: #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
-// FLAT-NT-BF16: func.func @entry(%arg0: tensor<256x512xbf16>, %arg1: tensor<512x512xbf16>, %arg2: tensor<256x512xbf16>) -> tensor<256x512xbf16>
-// FLAT-NT-BF16: %[[T:.*]] = linalg.transpose ins(%arg1 : tensor<512x512xbf16>){{.*}}permutation = [1, 0]
-// FLAT-NT-BF16: linalg.generic {{.*}}ins(%arg0, %[[T]] : tensor<256x512xbf16>, tensor<512x512xbf16>)
-
-// TT transposes both the A activation and the B weight; A keeps the natural NN
-// layout and the leading (M) dim flips (256x512 -> 512x512).
-// FLAT-TT-BF16-DAG: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
-// FLAT-TT-BF16-DAG: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
-// FLAT-TT-BF16-DAG: #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
-// FLAT-TT-BF16: func.func @entry(%arg0: tensor<256x512xbf16>, %arg1: tensor<512x256xbf16>, %arg2: tensor<512x512xbf16>) -> tensor<512x512xbf16>
-// FLAT-TT-BF16: %[[TA:.*]] = linalg.transpose ins(%arg0 : tensor<256x512xbf16>){{.*}}permutation = [1, 0]
-// FLAT-TT-BF16: %[[TB:.*]] = linalg.transpose ins(%arg1 : tensor<512x256xbf16>){{.*}}permutation = [1, 0]
-// FLAT-TT-BF16: linalg.generic {{.*}}ins(%[[TA]], %[[TB]] : tensor<512x256xbf16>, tensor<256x512xbf16>)
-
-// ===== multi-layer flat (pytorch-style) transposed-A chain =====
-// Every layer transposes its A activation, so the input stays in NN layout, the
-// leading (M) dim flips per layer, and each hidden activation is transposed
-// before the next matmul. All contractions share the standard NN maps.
-
-// FLAT-TN-CHAIN-DAG: #[[$MAPA:.*]] = affine_map<(d0, d1, d2) -> (d0, d2)>
-// FLAT-TN-CHAIN-DAG: #[[$MAPB:.*]] = affine_map<(d0, d1, d2) -> (d2, d1)>
-// FLAT-TN-CHAIN-DAG: #[[$MAPC:.*]] = affine_map<(d0, d1, d2) -> (d0, d1)>
-// FLAT-TN-CHAIN: func.func @entry(%arg0: tensor<256x512xbf16>, %arg1: tensor<256x512xbf16>, %arg2: tensor<512x512xbf16>, %arg3: tensor<512x1024xbf16>, %arg4: tensor<512x1024xbf16>) -> tensor<512x1024xbf16>
-// FLAT-TN-CHAIN: %[[T0:.*]] = linalg.transpose ins(%arg0 : tensor<256x512xbf16>){{.*}}permutation = [1, 0]
-// FLAT-TN-CHAIN: %[[M0:.*]] = linalg.generic {indexing_maps = [#[[$MAPA]], #[[$MAPB]], #[[$MAPC]]]{{.*}}ins(%[[T0]], %arg1 : tensor<512x256xbf16>, tensor<256x512xbf16>){{.*}}outs(%arg2 : tensor<512x512xbf16>)
-// FLAT-TN-CHAIN: %[[T1:.*]] = linalg.transpose ins(%[[M0]] : tensor<512x512xbf16>){{.*}}permutation = [1, 0]
-// FLAT-TN-CHAIN: linalg.generic {indexing_maps = [#[[$MAPA]], #[[$MAPB]], #[[$MAPC]]]{{.*}}ins(%[[T1]], %arg3 : tensor<512x512xbf16>, tensor<512x1024xbf16>){{.*}}outs(%arg4 : tensor<512x1024xbf16>)
-
-// ===== multi-layer tiled (libxsmm-style) transposed chain =====
-// All contractions share [#map, #map1, #map2] with a standard MxN output map
-// (#map2). The hidden activation is transposed between layers.
-
-// TILED-TT-CHAIN-DAG: #[[$MAPA:.*]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d2, d0, d5, d3)>
-// TILED-TT-CHAIN-DAG: #[[$MAPB:.*]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d1, d2, d4, d5)>
-// TILED-TT-CHAIN-DAG: #[[$MAPC:.*]] = affine_map<(d0, d1, d2, d3, d4, d5) -> (d0, d1, d3, d4)>
-// TILED-TT-CHAIN: func.func @entry
-// TILED-TT-CHAIN: linalg.generic {indexing_maps = [#[[$MAPA]], #[[$MAPB]], #[[$MAPC]]]{{.*}}outs(%{{.*}} : tensor<8x16x32x32xf32>)
-// TILED-TT-CHAIN: linalg.transpose ins(%{{.*}} : tensor<8x16x32x32xbf16>){{.*}}permutation = [1, 0, 3, 2]
-// TILED-TT-CHAIN: linalg.generic {indexing_maps = [#[[$MAPA]], #[[$MAPB]], #[[$MAPC]]]{{.*}}outs(%{{.*}} : tensor<8x16x32x32xf32>)
-
-// ===== multi-layer VNNI (libxsmm_dnn) transposed-A chain =====
-// All contractions share [#map, #map1, #map2] with a standard MxN output map
-// (#map2) and the transposed VNNI-A input map (#map). Layer 1 consumes the 5D
-// transposed VNNI-A arg directly; the hidden activation is expanded to VNNI and
-// transposed into the transposed VNNI-A layout between layers.
-
-// VNNI-TA-CHAIN-DAG: #[[$VMAPA:.*]] = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d2, d0, d6, d4, d3)>
-// VNNI-TA-CHAIN-DAG: #[[$VMAPB:.*]] = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
-// VNNI-TA-CHAIN-DAG: #[[$VMAPC:.*]] = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
-// VNNI-TA-CHAIN: func.func @entry(%arg0: tensor<16x8x16x32x2xbf16>,
-// VNNI-TA-CHAIN: linalg.generic {indexing_maps = [#[[$VMAPA]], #[[$VMAPB]], #[[$VMAPC]]]{{.*}}ins(%arg0, %arg1 {{.*}}outs(%{{.*}} : tensor<8x16x32x32xf32>)
-// VNNI-TA-CHAIN: tensor.expand_shape %{{.*}} output_shape [8, 16, 32, 16, 2] : tensor<8x16x32x32xbf16> into tensor<8x16x32x16x2xbf16>
-// VNNI-TA-CHAIN: linalg.transpose ins(%{{.*}} : tensor<8x16x32x16x2xbf16>){{.*}}permutation = [1, 0, 3, 2, 4]
-// VNNI-TA-CHAIN: linalg.generic {indexing_maps = [#[[$VMAPA]], #[[$VMAPB]], #[[$VMAPC]]]{{.*}}outs(%{{.*}} : tensor<8x16x32x32xf32>)
 
 // Packed (tiled + VNNI) requantize with narrow (f8E8M0FNU) scales.
 

@@ -10,10 +10,6 @@
 // RUN: mlir-gen --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
 // RUN: mlir-gen --output=contract --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
 // RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
-// RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 -vnni=2 --transpose-a=1 --transpose-b=0 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-MATMUL-BF16
-// RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 -vnni=0 --transpose-a=1 --transpose-b=1 | tpp-run -e entry -entry-point-result=void -print --disable-vnni-packing | FileCheck %s --check-prefix=GEN-MATMUL-BF16
-// RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 -vnni=0 --transpose-a=1 --transpose-b=0 | tpp-run -e entry -entry-point-result=void -print --disable-vnni-packing | FileCheck %s --check-prefix=GEN-MATMUL-BF16
-// RUN: mlir-gen --output=named --kernel=args --seed=123 --data-type=bf16 --batch=16 --layers=16,16 -vnni=0 --transpose-a=0 --transpose-b=1 | tpp-run -e entry -entry-point-result=void -print --disable-vnni-packing | FileCheck %s --check-prefix=GEN-MATMUL-BF16
 
 // Kernel - fc
 // RUN: mlir-gen --kernel=args --bias --relu --seed=123 --data-type=bf16 --batch=16 --layers=16,16 | tpp-run -e entry -entry-point-result=void -print | FileCheck %s --check-prefix=GEN-FC-BF16

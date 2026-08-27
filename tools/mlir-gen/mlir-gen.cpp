@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -153,6 +155,42 @@ int main(int argc, char **argv) {
       llvm::errs() << "error: --quant requires a data type with an 8-bit "
                       "integer operand (i8 or i8-f32); got '"
                    << dataType << "'\n";
+      return 1;
+    }
+  }
+
+  // Number of GEMMs equals the number of hidden-layer transitions; more than
+  // one GEMM is a multi-GEMM chain.
+  llvm::SmallVector<llvm::StringRef> layerToks;
+  llvm::StringRef(layers).split(layerToks, ',');
+  bool multiGemm = layerToks.size() > 2;
+  bool anyTranspose = transposeA || transposeB;
+
+  // Transposed A/B matrices are allowed only for packed gemms (with one layer)  
+  if (anyTranspose && llvm::StringRef(tiles).empty()) {
+    llvm::errs() << "error: --transpose-a/--transpose-b require the gemm "
+                    "to be packed; pass --tiles=M,N,K\n";
+    return 1;
+  }
+
+  // Transposed A/B matrice is supported for single-layer GEMM.
+  if (anyTranspose && multiGemm) {
+    llvm::errs() << "error: transposed operands are only supported for a "
+                    "single GEMM; use exactly two --layers\n";
+    return 1;
+  }
+
+  // A multi-layer-GEMM requires packing tiles are same(M == N == K).
+  if (multiGemm && !llvm::StringRef(tiles).empty()) {
+    llvm::SmallVector<llvm::StringRef> tileToks;
+    llvm::StringRef(tiles).split(tileToks, ',');
+    long long m = 0, n = 0, k = 0;
+    if (tileToks.size() == 3 && !tileToks[0].getAsInteger(10, m) &&
+        !tileToks[1].getAsInteger(10, n) && !tileToks[2].getAsInteger(10, k) &&
+        (m != n || n != k)) {
+      llvm::errs() << "error: multi-layer-GEMM require equal tile sizes for packing"
+                      "(M == N == K); got --tiles="
+                   << llvm::StringRef(tiles) << "\n";
       return 1;
     }
   }
