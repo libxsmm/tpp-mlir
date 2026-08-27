@@ -45,20 +45,7 @@ void parseStringList(StringRef str, SmallVector<int64_t> &list) {
   }
 }
 
-/// Swap the outer/inner tile pairs of a packed type, keeping any trailing VNNI
-/// factor innermost: 4D [a,b,c,d] -> [b,a,d,c]; 5D [a,b,c,d,v] -> [b,a,d,c,v].
-static TensorType transposePackedType(TensorType type) {
-  auto rt = cast<RankedTensorType>(type);
-  auto shape = rt.getShape();
-  assert((shape.size() == 4 || shape.size() == 5) &&
-         "Expected a packed 4D or VNNI 5D type");
-  SmallVector<int64_t> transposed{shape[1], shape[0], shape[3], shape[2]};
-  if (shape.size() == 5)
-    transposed.push_back(shape[4]);
-  return RankedTensorType::get(transposed, rt.getElementType());
-}
-
-/// Returns the vector of boolean for the required broadcast dimensions.
+/// Returns the vector of boolean for the required broadcast dimensions
 static SmallVector<bool> getBroadcastDims(ArrayRef<int64_t> sourceShape,
                                           ArrayRef<int64_t> targetShape) {
   SmallVector<bool> broadcastDims;
@@ -281,7 +268,8 @@ MLIRGenerator::MLIRGenerator(StringRef outputOpKindStr, StringRef kernelStr,
   // Use VNNI packed format if both tiles and VNNI factor are specified.
   vnniPacked = tiles.size() > 0 && vnniFactor != 0;
 
-  // Transposing the weight (B) is only supported for the flat GEMM.
+  // Transposing the weight (B) is not modeled for the VNNI-packed layout
+  // (there is no transposed VNNI weight map); only the non-VNNI path supports it.
   assert(!(transposeB && vnniFactor != 0) &&
          "Transposing B is not supported with VNNI packing");
 
@@ -350,6 +338,12 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
     } else { // generate libxsmm_dnn like kernels
       arg.weight.type = getShape({inputSize, outputSize}, PACK_WEIGHT);
 
+      if (tiles.size()) {
+        arg.input.type = getShape({batch, inputSize}, PACK_INPUT);
+        arg.inputTranspose = transposeA;
+        arg.weightTranspose = vnniPacked ? false : transposeB;
+      }
+
       // Quantized kernels carry a per-row input scale and a per-output-channel
       // weight scale to dequantize the wide accumulator.
       if (quant) {
@@ -362,23 +356,11 @@ void MLIRGenerator::getKernelTypes(KernelArgs &args) {
       // element-wise ops.
       arg.bias.type = getShape({outputSize}, PACK_OUTPUT);
 
-      if (tiles.size()) {
-        TensorType requiredInput = getShape({batch, inputSize}, PACK_INPUT);
-        arg.input.type = requiredInput;
-        arg.inputTranspose = transposeA;
-        arg.weightTranspose = vnniPacked ? false : transposeB;
-      } else {
-        arg.inputTranspose = false;
-        arg.weightTranspose = false;
-      }
-
       // Integer output additionally carries a per-output-channel output scale
       // to requantize the value back down.
       bool hasOutputScale = quant && dataTypes.output.isInteger();
-      if (hasOutputScale)
-        arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
-
       if (hasOutputScale) {
+        arg.outputScale.type = getShape({outputSize}, OUTPUT_SCALE);
         // Requantized GEMM keeps the N x K output layout but stores i8 values.
         auto packedOutTy = getShape({batch, outputSize}, PACK_OUTPUT);
         arg.output.type =
@@ -634,34 +616,29 @@ Value MLIRGenerator::lowerMatmul(LayerArgs &args) {
     args.accumulator.value = getZeroInitTensor(args.accumulator.type);
   }
 
-  if (tiles.size()) {
-    // Packed / VNNI (libxsmm_dnn style). A non-transposed VNNI contraction reads
-    // A through the standard VNNI-A map, so split the 4D activation into its 5D
-    // VNNI form for every layer.
-    if (vnniPacked && !args.inputTranspose) {
-      SmallVector<int64_t> vnniShape{inputType.getShape()};
-      vnniShape.back() = vnniShape.back() / vnniFactor;
-      vnniShape.push_back(vnniFactor);
+  if (vnniPacked && !args.inputTranspose) {
+    SmallVector<int64_t> vnniShape{inputType.getShape()};
+    vnniShape.back() = vnniShape.back() / vnniFactor;
+    vnniShape.push_back(vnniFactor);
 
-      auto weightShape =
-          cast<ShapedType>(args.weight.value.getType()).getShape();
-      assert(weightShape.size() >= 3 && "Expected VNNI weights");
-      assert(vnniShape.back() == weightShape.back() &&
-             vnniShape.end()[-2] == weightShape.end()[-3] &&
-             "Input and weights VNNI layout mismatch");
+    auto weightShape =
+        cast<ShapedType>(args.weight.value.getType()).getShape();
+    assert(weightShape.size() >= 3 && "Expected VNNI weights");
+    assert(vnniShape.back() == weightShape.back() &&
+           vnniShape.end()[-2] == weightShape.end()[-3] &&
+           "Input and weights VNNI layout mismatch");
 
-      auto vnniType =
-          RankedTensorType::get(vnniShape, inputType.getElementType());
+    auto vnniType =
+        RankedTensorType::get(vnniShape, inputType.getElementType());
 
-      auto inputRank = inputType.getRank();
-      SmallVector<ReassociationIndices> reassociationIndices;
-      for (int64_t index = 0; index < inputRank - 1; index++)
-        reassociationIndices.push_back({index});
-      reassociationIndices.push_back({inputRank - 1, inputRank});
+    auto inputRank = inputType.getRank();
+    SmallVector<ReassociationIndices> reassociationIndices;
+    for (int64_t index = 0; index < inputRank - 1; index++)
+      reassociationIndices.push_back({index});
+    reassociationIndices.push_back({inputRank - 1, inputRank});
 
-      args.input.value = tensor::ExpandShapeOp::create(
-          builder, loc, vnniType, args.input.value, reassociationIndices);
-    }
+    args.input.value = tensor::ExpandShapeOp::create(
+        builder, loc, vnniType, args.input.value, reassociationIndices);
   }
 
   computeMatmulFlops(inputType, outputType);
@@ -1272,16 +1249,15 @@ TensorType MLIRGenerator::getShape(ArrayRef<int64_t> dims, PackingType type) {
   case PACK_INPUT: {
     assert(x % n == 0 && "Invalid tile size for N dim");
     assert(y % c == 0 && "Invalid tile size for C dim");
+    // Transposed A swaps the N and C tile pairs of the normal packed layout
+    // (VNNI splits bc into bc/vnni x vnni and keeps vnni innermost).
     if (transposeA) {
-      // Transposed A swaps the N and C tile pairs of the normal packed layout
-      // (VNNI splits bc into bc/vnni x vnni and keeps vnni innermost).
-      TensorType normal =
-          vnniFactor != 0
-              ? RankedTensorType::get(
-                    {x / n, y / c, n, c / vnniFactor, vnniFactor},
-                    dataTypes.input)
-              : RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
-      return transposePackedType(normal);
+      // VNNI: N x C -> BC x BN x bc/vnni x bn x vnni
+      if (vnniFactor != 0)
+        return RankedTensorType::get(
+            {y / c, x / n, c / vnniFactor, n, vnniFactor}, dataTypes.input);
+      // N x C -> BC x BN x bc x bn
+      return RankedTensorType::get({y / c, x / n, c, n}, dataTypes.input);
     }
     // N x C -> BN x BC x bn x bc
     return RankedTensorType::get({x / n, y / c, n, c}, dataTypes.input);
