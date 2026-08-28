@@ -1,4 +1,5 @@
 // RUN: torch-import %S/Inputs/linear.py --splat | FileCheck %s --check-prefix=SINGLE_GEMM
+// RUN: torch-import %S/Inputs/linear.py --splat --M=16 --N=32 --K=128 | FileCheck %s --check-prefix=SINGLE_GEMM_OVERRIDE
 // RUN: torch-import %S/Inputs/linear.py --splat --layers=2 | FileCheck %s --check-prefix=DOUBLE_GEMM
 // RUN: torch-import %S/Inputs/linear.py --splat --bias --relu | FileCheck %s --check-prefix=MLP
 // RUN: torch-import %S/Inputs/linear.py --splat --trans_a | FileCheck %s --check-prefix=TRANS_A
@@ -12,7 +13,10 @@
 // REQUIRES: lighthouse
 
 // SINGLE_GEMM-LABEL: func.func @main(
-// SINGLE_GEMM: linalg.matmul
+// SINGLE_GEMM: linalg.matmul {{.*}} tensor<64x64xf32>, tensor<64x64xf32>
+
+// SINGLE_GEMM_OVERRIDE-LABEL: func.func @main(
+// SINGLE_GEMM_OVERRIDE: linalg.matmul {{.*}} tensor<16x128xf32>, tensor<128x32xf32>
 
 // DOUBLE_GEMM-LABEL: func.func @main(
 // DOUBLE_GEMM-COUNT-2: linalg.matmul

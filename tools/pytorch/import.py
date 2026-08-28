@@ -58,14 +58,16 @@ def parse_named_args(extras):
     return named
 
 
-def apply_init_overrides(model_file, model_class, base_args, overrides):
+def apply_init_overrides(module, model_class, base_args, overrides):
     """Merge named overrides into the model constructor's positional init args.
 
     'base_args' is the default positional init list (e.g. from get_init_inputs);
     'overrides' maps constructor parameter names to values. Returns a positional
-    list with the overridden values placed at their parameter positions.
+    list with the overridden values placed at their parameter positions. When an
+    override name also exists as a module-level global, that global is updated
+    too so helpers reading it (e.g. get_inputs) stay consistent.
     """
-    cls = getattr(import_python_module(Path(model_file)), model_class, None)
+    cls = getattr(module, model_class, None)
     if cls is None:
         raise SystemExit(f"import.py: model class '{model_class}' not found")
 
@@ -73,6 +75,7 @@ def apply_init_overrides(model_file, model_class, base_args, overrides):
     names = [p.name for p in params]
     index = {name: i for i, name in enumerate(names)}
 
+    module_globals = vars(module)
     merged = list(base_args)
     for name, value in overrides.items():
         if name not in index:
@@ -84,6 +87,8 @@ def apply_init_overrides(model_file, model_class, base_args, overrides):
             default = params[len(merged)].default
             merged.append(None if default is inspect.Parameter.empty else default)
         merged[pos] = value
+        if name in module_globals:
+            setattr(module, name, value)
     return merged
 
 
@@ -190,20 +195,26 @@ def main(argv=None):
     if args.init_args is not None:
         model_init_args = eval(args.init_args, {"torch": torch})
 
-    overrides = parse_named_args(extras)
-    if overrides:
-        base = model_init_args
-        if base is None and init_args_fn is not None:
-            module = import_python_module(Path(args.model_file))
-            init_fn = getattr(module, init_args_fn, None)
-            base = list(init_fn()) if init_fn is not None else []
-        model_init_args = apply_init_overrides(
-            args.model_file, args.model_class, base or [], overrides
-        )
-
     sample_args = None
     if args.sample_args is not None:
         sample_args = eval(args.sample_args, {"torch": torch})
+
+    overrides = parse_named_args(extras)
+    if overrides:
+        module = import_python_module(Path(args.model_file))
+        base = model_init_args
+        if base is None and init_args_fn is not None:
+            init_fn = getattr(module, init_args_fn, None)
+            base = list(init_fn()) if init_fn is not None else []
+        model_init_args = apply_init_overrides(
+            module, args.model_class, base or [], overrides
+        )
+        # apply_init_overrides may update module globals; recompute the sample
+        # inputs from the same module so their shapes track the overrides.
+        if sample_args is None:
+            sample_fn = getattr(module, args.sample_args_fn, None)
+            if sample_fn is not None:
+                sample_args = sample_fn()
 
     extra = {"hooks": make_splat_hooks()} if args.splat else {}
 
