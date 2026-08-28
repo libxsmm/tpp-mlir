@@ -9,6 +9,9 @@
 # are prebuilt wheels fetched at install time and need not match the LLVM used to
 # build tpp-mlir.
 #
+# Lighthouse is installed with the `uv` package manager (the way Lighthouse
+# recommends); `uv` must be available on PATH.
+#
 # This integration is opt-in. Enable it with:
 #   cmake -DTPP_ENABLE_LIGHTHOUSE=ON ...
 # and then build the `lighthouse` target:
@@ -40,59 +43,38 @@ set(LIGHTHOUSE_TORCH_INGRESS "" CACHE STRING
 set(LIGHTHOUSE_VENV "${LIGHTHOUSE_SOURCE_DIR}/.venv" CACHE PATH
     "Virtual environment to install Lighthouse into")
 
-# Prefer the `uv` package manager (the way Lighthouse recommends). Fall back to
-# `pip` if `uv` is not available.
-find_program(UV_EXECUTABLE uv)
+# Lighthouse is installed with `uv`; it is required for this integration.
+find_program(UV_EXECUTABLE uv REQUIRED)
+message(STATUS "Lighthouse: using uv (${UV_EXECUTABLE})")
 
-if(UV_EXECUTABLE)
-  message(STATUS "Lighthouse: using uv (${UV_EXECUTABLE})")
-
-  set(_lighthouse_sync_cmd
-      ${UV_EXECUTABLE} venv "${LIGHTHOUSE_VENV}"
-      COMMAND ${UV_EXECUTABLE} sync)
-  if(LIGHTHOUSE_TORCH_INGRESS)
-    list(APPEND _lighthouse_sync_cmd
-         COMMAND ${UV_EXECUTABLE} sync --extra ingress_torch_${LIGHTHOUSE_TORCH_INGRESS})
-  endif()
-
-  add_custom_target(lighthouse
-    ${_lighthouse_sync_cmd}
-    WORKING_DIRECTORY "${LIGHTHOUSE_SOURCE_DIR}"
-    USES_TERMINAL
-    COMMENT "Installing Lighthouse Python package via uv into ${LIGHTHOUSE_VENV}")
-else()
-  find_package(Python3 COMPONENTS Interpreter REQUIRED)
-  message(STATUS "Lighthouse: uv not found, using pip (${Python3_EXECUTABLE})")
-
-  if(LIGHTHOUSE_TORCH_INGRESS)
-    set(_lighthouse_spec ".[ingress_torch_${LIGHTHOUSE_TORCH_INGRESS}]")
-  else()
-    set(_lighthouse_spec ".")
-  endif()
-
-  add_custom_target(lighthouse
-    ${Python3_EXECUTABLE} -m venv "${LIGHTHOUSE_VENV}"
-    COMMAND "${LIGHTHOUSE_VENV}/bin/python" -m pip install ${_lighthouse_spec}
-            --find-links https://llvm.github.io/eudsl/
-            --find-links https://github.com/llvm/torch-mlir-release/releases/expanded_assets/dev-wheels
-            --extra-index-url https://download.pytorch.org/whl
-            --only-binary :all:
-    WORKING_DIRECTORY "${LIGHTHOUSE_SOURCE_DIR}"
-    USES_TERMINAL
-    COMMENT "Installing Lighthouse Python package via pip into ${LIGHTHOUSE_VENV}")
+set(_lighthouse_sync_cmd
+    COMMAND ${UV_EXECUTABLE} venv "${LIGHTHOUSE_VENV}"
+    COMMAND ${UV_EXECUTABLE} sync)
+if(LIGHTHOUSE_TORCH_INGRESS)
+  list(APPEND _lighthouse_sync_cmd
+       COMMAND ${UV_EXECUTABLE} sync --extra ingress_torch_${LIGHTHOUSE_TORCH_INGRESS})
 endif()
+
+# pyvenv.cfg is written by `uv venv` when the environment is created, at a stable
+# path. Driving the install through add_custom_command(OUTPUT ...) lets Ninja/Make
+# skip it once the venv exists, so `ninja lighthouse` is a no-op on a second run;
+# a failed edge is still re-run. Force a reinstall with: rm -rf ${LIGHTHOUSE_VENV}
+add_custom_command(
+  OUTPUT "${LIGHTHOUSE_VENV}/pyvenv.cfg"
+  ${_lighthouse_sync_cmd}
+  WORKING_DIRECTORY "${LIGHTHOUSE_SOURCE_DIR}"
+  USES_TERMINAL
+  COMMENT "Installing Lighthouse Python package via uv into ${LIGHTHOUSE_VENV}")
+
+add_custom_target(lighthouse DEPENDS "${LIGHTHOUSE_VENV}/pyvenv.cfg")
 
 # Run the Lighthouse pre-commit checks and LIT tests. precommit.sh drives
-# everything through `uv run`, so it requires uv to be available.
-if(UV_EXECUTABLE)
-  add_custom_target(check-lighthouse
-    ${UV_EXECUTABLE} run bash precommit.sh
-    DEPENDS lighthouse
-    WORKING_DIRECTORY "${LIGHTHOUSE_SOURCE_DIR}"
-    USES_TERMINAL
-    COMMENT "Running Lighthouse pre-commit checks and tests")
-else()
-  message(STATUS "Lighthouse: uv not found, 'check-lighthouse' target unavailable")
-endif()
+# everything through `uv run`.
+add_custom_target(check-lighthouse
+  ${UV_EXECUTABLE} run bash precommit.sh
+  DEPENDS lighthouse
+  WORKING_DIRECTORY "${LIGHTHOUSE_SOURCE_DIR}"
+  USES_TERMINAL
+  COMMENT "Running Lighthouse pre-commit checks and tests")
 
 message(STATUS "Lighthouse integration enabled (venv: ${LIGHTHOUSE_VENV})")
