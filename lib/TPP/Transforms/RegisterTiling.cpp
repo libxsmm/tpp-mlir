@@ -1,4 +1,4 @@
-//===- RegisterTiling.cpp--------------------------------------*-C++-*-===//
+//===- RegisterTiling.cpp------------------------------------------*-C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -56,10 +56,7 @@ struct LinalgOpTiling : OpRewritePattern<GemmOp> {
 
     // Classify the operation using the iterator types. Supported GEMM-like
     // ops, each in plain or vnni layout, with any number of leading batch
-    // (parallel) or batch-reduce (reduction) dimensions, all tiled by 1:
-    //   - matmul:       2 parallel (M, N),           reduction over K (+ vnni)
-    //   - batch matmul: 2 + b parallel (batch, M, N), reduction over K (+ vnni)
-    //   - batch reduce: 2 parallel (M, N),           reduction over batch, K (+ vnni)
+    // (parallel) or batch-reduce (reduction) dimensions, all tiled by 1.
     SmallVector<utils::IteratorType> gemmIteratorTypes =
         gemmOp.getIteratorTypesArray();
     int reductionCount =
