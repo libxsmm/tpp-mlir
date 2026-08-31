@@ -130,22 +130,19 @@ module {
 // CHECK-SAME: -> tensor<?x256xf32>
 //  func.func @revert_packing_with_one_dim_dynamic(%arg0: tensor<?x512xf32>, %arg1: tensor<?x256xf32>) -> tensor<?x256xf32> {
   // CHECK-DAG: %[[C0:.*]] = arith.constant 0 : index
-  // CHECK-DAG: %[[C32:.*]] = arith.constant 32 : index
   // CHECK-DAG: %[[CST:.*]] = arith.constant dense<1.000000e-03> : tensor<8x16x32x32xf32>
   // CHECK: %[[M:.*]] = tensor.dim %[[ARG0]], %[[C0]]
+  // CHECK: %[[NUM_CHUNKS_M:.*]] = affine.apply {{.*}}()[%[[M]]]
   // CHECK: %[[M_DUP:.*]] = tensor.dim %[[ARG0]], %[[C0]]
   // CHECK: %[[M_ROUNDED_UP:.*]] = affine.apply {{.*}}()[%[[M_DUP]], %[[M]]]
   // CHECK: %[[ARG0_PADDED:.*]] = tensor.pad %[[ARG0]] low[0, 0] high[%[[M_ROUNDED_UP]], 0]
-  // CHECK: %[[M_PADDED:.*]] = tensor.dim %[[ARG0_PADDED]], %[[C0]]
-  // CHECK: %[[NUM_CHUNKS_PADDED_M:.*]] = arith.divsi %[[M_PADDED]], %[[C32]]
-  // CHECK: %[[EXP0:.+]] = tensor.expand_shape %[[ARG0_PADDED]] {{\[}}[0, 1], [2, 3]{{\]}} output_shape [%[[NUM_CHUNKS_PADDED_M]], 32, 16, 32] : tensor<?x512xf32> into tensor<?x32x16x32xf32>
+  // CHECK: %[[EXP0:.+]] = tensor.expand_shape %[[ARG0_PADDED]] {{\[}}[0, 1], [2, 3]{{\]}} output_shape [%[[NUM_CHUNKS_M]], 32, 16, 32] : tensor<?x512xf32> into tensor<?x32x16x32xf32>
   // CHECK: %[[M_ARG1:.*]] = tensor.dim %[[ARG1]], %[[C0]]
+  // CHECK: %[[NUM_CHUNKS_M_ARG1:.*]] = affine.apply {{.*}}()[%[[M_ARG1]]]
   // CHECK: %[[M_ARG1_DUP:.*]] = tensor.dim %[[ARG1]], %[[C0]]
   // CHECK: %[[M_ARG1_ROUNDED_UP:.*]] = affine.apply {{.*}}()[%[[M_ARG1_DUP]], %[[M_ARG1]]]
   // CHECK: %[[ARG1_PADDED:.*]] = tensor.pad %[[ARG1]] low[0, 0] high[%[[M_ARG1_ROUNDED_UP]], 0]
-  // CHECK: %[[M_ARG1_PADDED:.*]] = tensor.dim %[[ARG1_PADDED]], %[[C0]]
-  // CHECK: %[[NUM_CHUNKS_PADDED_M_ARG1:.*]] = arith.divsi %[[M_ARG1_PADDED]], %[[C32]]
-  // CHECK: %[[EXP1:.+]] = tensor.expand_shape %[[ARG1_PADDED]] {{\[}}[0, 1], [2, 3]{{\]}} output_shape [%[[NUM_CHUNKS_PADDED_M_ARG1]], 32, 8, 32] : tensor<?x256xf32> into tensor<?x32x8x32xf32>
+  // CHECK: %[[EXP1:.+]] = tensor.expand_shape %[[ARG1_PADDED]] {{\[}}[0, 1], [2, 3]{{\]}} output_shape [%[[NUM_CHUNKS_M_ARG1]], 32, 8, 32] : tensor<?x256xf32> into tensor<?x32x8x32xf32>
   // CHECK: %[[RES:.+]] = linalg.generic {{.*}} ins(%[[EXP0]], %[[CST]] : tensor<?x32x16x32xf32>, tensor<8x16x32x32xf32>) outs(%[[EXP1]] : tensor<?x32x8x32xf32>)
   // CHECK: %[[COL:.+]] = tensor.collapse_shape %[[RES]] {{\[}}[0, 1], [2, 3]{{\]}} : tensor<?x32x8x32xf32> into tensor<?x256xf32>
   // CHECK: %[[M_DUP2:.*]] = tensor.dim %[[ARG1]], %[[C0]]
