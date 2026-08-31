@@ -1,5 +1,5 @@
 // RUN: tpp-run -e register_tile_bf16 --entry-point-result=void -print %s > %t.1
-// RUN: tpp-opt %s --tile-brgemm-linalg="registerBlocking=32,32,32" -convert-linalg-to-xsmm | tpp-run -e  register_tile_bf16 --entry-point-result=void -print > %t.2
+// RUN: tpp-opt %s --tile-gemm="registerBlocking=32,32,32" -convert-linalg-to-xsmm | tpp-run -e  register_tile_bf16 --entry-point-result=void -print > %t.2
 // RUN: fpcmp -r 0.001 %t.1 %t.2
 
 #map = affine_map<(d0, d1, d2, d3, d4) -> (d0, d2, d4, d1)>

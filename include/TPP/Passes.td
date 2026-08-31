@@ -117,10 +117,10 @@ def VectorContractToOuterproduct : Pass<
                            "vector::VectorDialect"];
 }
 
-def BrgemmLinalgTiling : Pass<"tile-brgemm-linalg"> {
+def RegisterTiling : Pass<"tile-gemm"> {
   let summary = "Tile bregmm  matmul and reduction dimension.";
   let description = [{
-    Tiles the innermost dimensions of the batch reduce matmul operation to support perfect register allocation. Additionally, it swaps the reduction and k dimension loop. The final loop structure is as follows: M-loop->N-loop->reduction-loop->K-loop. For example: --tile-brgemm-linalg="registerBlocking=<mTileSize>, <nTileSize>".
+    Tiles the innermost dimensions of the gemm operation to support perfect register allocation. Additionally, it swaps the reduction and k dimension loop. The final loop structure (brgemm as example) is as follows: M-loop->N-loop->reduction-loop->K-loop. For example: --tile-gemm="registerBlocking=<mTileSize>, <nTileSize>".
   }];
   let dependentDialects = ["linalg::LinalgDialect",
                            "memref::MemRefDialect",
