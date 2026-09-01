@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for i8-f32 (dequant) GEMMs.
+# Sweep (M,N,K) ∈ {512,1024,2048,4096,8192}³ for both i8 and bf16 GEMMs.
 #
 # 1. PERFORMANCE: reuse benchmarks/driver.py with a generated sweep JSON.
 # 2. CORRECTNESS: per-shape diff of default tpp-run vs
 #                 tpp-run --nano-kernels --registerBlocking=... (same
 #                 flags as the perf config).
 # 3. PLOT:        TFLOPS vs shape (one line per dtype) via
-#                 benchmarks/scripts/plot_benchmarks.py --mode=lines-tflops.
+#                 benchmarks/scripts/plot_benchmarks.py ...
 
 set -euo pipefail
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-64}"
@@ -20,8 +20,7 @@ SKIP_CORRECTNESS=0
 SKIP_PERF=0
 SKIP_PLOT=0
 SHAPES_CSV="512,1024,2048,4096,8192"
-DTYPES_CSV="i8"
-
+DTYPES_CSV="i8,bf16"
 ABS_TOL="0.02"
 REL_TOL="0.02"
 
@@ -33,7 +32,7 @@ Usage: $0 [options]
   -o, --out DIR          output dir (default: build/sweep-results/<ts>)
   -n, --iters N          perf iterations per shape (default: ${ITERS})
       --shapes A,B,C     dim sweep (default: ${SHAPES_CSV})
-      --dtypes i8        subset of dtypes (default: ${DTYPES_CSV})
+      --dtypes i8,bf16   subset of dtypes (default: ${DTYPES_CSV})
       --abs-tol F        fpcmp absolute tolerance (default: ${ABS_TOL})
       --rel-tol F        fpcmp relative tolerance (default: ${REL_TOL})
       --skip-perf        skip performance phase
@@ -76,8 +75,9 @@ FPCMP="${BIN_DIR}/fpcmp"
 DRIVER="${ROOT_DIR}/benchmarks/driver.py"
 GEN_CFG="${SCRIPT_DIR}/gen-sweep-config.py"
 PLOTTER="${ROOT_DIR}/scripts/benchmarks/plot_benchmarks.py"
+POSTPROCESS="${ROOT_DIR}/benchmarks/mlir/sfc_ca_gemm/postprocess.py"
 
-for f in "${MLIR_GEN}" "${TPP_RUN}" "${FPCMP}" "${DRIVER}" "${GEN_CFG}" "${PLOTTER}"; do
+for f in "${MLIR_GEN}" "${TPP_RUN}" "${FPCMP}" "${DRIVER}" "${GEN_CFG}" "${PLOTTER}" "${POSTPROCESS}"; do
   if [[ ! -e "${f}" ]]; then
     echo "ERROR: missing required file: ${f}" >&2
     exit 1
@@ -114,6 +114,61 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Phase 1b: Throughput CSV (sorted by arithmetic complexity. Parse perf.txt
+#           into a raw (M,N,K,runtime_s) CSV per dtype, then reuse the shared
+#           postprocess.py to emit a sorted CSV with FLOPs and TFLOP/s.
+# ---------------------------------------------------------------------------
+if [[ -s "${PERF_TXT}" ]]; then
+  echo ">> Building throughput CSV(s) from ${PERF_TXT}"
+  # Split perf.txt into one raw CSV per dtype prefix (e.g. i8_i8_quant,
+  # bf16_bf16). Raw CSVs land under logs/ so only the sorted throughput_*.csv
+  # files live in OUT_DIR. Emits the list of raw CSV paths on stdout.
+  RAW_CSVS="$(python3 - "${PERF_TXT}" "${OUT_DIR}/logs" <<'PY'
+import os
+import re
+import sys
+
+perf_path, out_dir = sys.argv[1], sys.argv[2]
+line_re = re.compile(r"^(?P<name>\S+):\s+(?P<g>[0-9.]+)\s+gflops\s*$")
+dims_re = re.compile(r"_(\d+)x(\d+)x(\d+)_")
+
+rows = {}  # prefix -> list of (M, N, K, runtime_s)
+for line in open(perf_path):
+    m = line_re.match(line.strip())
+    if not m:
+        continue
+    name = m.group("name")
+    d = dims_re.search(name)
+    if not d:
+        continue
+    M, N, K = (int(x) for x in d.groups())
+    gflops = float(m.group("g"))
+    runtime_s = (2.0 * M * N * K) / (gflops * 1.0e9) if gflops > 0.0 else float("nan")
+    prefix = name[: d.start()]
+    rows.setdefault(prefix, []).append((M, N, K, runtime_s))
+
+paths = []
+for prefix, recs in rows.items():
+    raw = os.path.join(out_dir, f"throughput_raw_{prefix}.csv")
+    with open(raw, "w") as f:
+        f.write("M,N,K,runtime_s\n")
+        for M, N, K, runtime_s in recs:
+            f.write(f"{M},{N},{K},{runtime_s:.10g}\n")
+    paths.append(raw)
+
+print("\n".join(paths))
+PY
+)"
+
+  while IFS= read -r raw_csv; do
+    [[ -z "${raw_csv}" ]] && continue
+    prefix="$(basename "${raw_csv}")"; prefix="${prefix#throughput_raw_}"; prefix="${prefix%.csv}"
+    sorted_csv="${OUT_DIR}/throughput_${prefix}.csv"
+    python3 "${POSTPROCESS}" "${raw_csv}" "${sorted_csv}"
+  done <<< "${RAW_CSVS}"
+fi
+
+# ---------------------------------------------------------------------------
 # Phase 2: Correctness per (dtype, M, N, K)
 # ---------------------------------------------------------------------------
 CORR_CSV="${OUT_DIR}/correctness.csv"
@@ -122,14 +177,21 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   echo "dtype,M,N,K,status,detail" > "${CORR_CSV}"
 
   # Detect AMX support (mirror driver.py's extension gating).
-  HAS_AMX_INT8=0
+  HAS_AMX_INT8=0; HAS_AMX_BF16=0
   if grep -q amx_int8 /proc/cpuinfo 2>/dev/null; then HAS_AMX_INT8=1; fi
+  if grep -q amx_bf16 /proc/cpuinfo 2>/dev/null; then HAS_AMX_BF16=1; fi
 
   # mlir-gen flag templates (must match gen-sweep-config.py).
   # Use --kernel=args (same as the perf config); tpp-run --splat-to-random
   # --seed=123 makes both baseline and test runs see identical inputs.
-  gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant --seed=123"
+  gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant"
+  gen_args_bf16="--kernel=args --data-type=bf16 --tiles=32,32,32 --vnni=2"
+  # Data-init flags must be applied identically to baseline and test so both
+  # runs see the same inputs; i8 requires --init-type=quant.
+  init_args_i8="--init-type=quant"
+  init_args_bf16="--init-type=normal"
   vk_args_i8="--def-parallel --nano-kernels --registerBlocking=32,32,64 --gemm-unroll=16,16,16 --bench-replication-gb=5"
+  vk_args_bf16="--def-parallel --nano-kernels --registerBlocking=32,32,32 --gemm-unroll=16,16,16 --bench-replication-gb=5"
 
   IFS=',' read -ra DTYPES <<< "${DTYPES_CSV}"
   IFS=',' read -ra SHAPES <<< "${SHAPES_CSV}"
@@ -142,7 +204,13 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
           echo "   [skip] dtype=i8 (amx_int8 not available)"
           continue
         fi
-        gen_args="${gen_args_i8}"; vk_args="${vk_args_i8}";;
+        gen_args="${gen_args_i8}"; vk_args="${vk_args_i8}"; init_args="${init_args_i8}";;
+      bf16)
+        if [[ "${HAS_AMX_BF16}" -eq 0 ]]; then
+          echo "   [skip] dtype=bf16 (amx_bf16 not available)"
+          continue
+        fi
+        gen_args="${gen_args_bf16}"; vk_args="${vk_args_bf16}"; init_args="${init_args_bf16}";;
       *) echo "Unknown dtype: ${dt}" >&2; exit 2;;
     esac
 
@@ -166,10 +234,10 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
               "${MLIR_GEN}" ${gen_args} --batch=${M} --layers=${K},${N} > "${ir}" || exit 10
               echo "+ tpp-run (baseline)"
               "${TPP_RUN}" -e entry -entry-point-result=void -print \
-                --splat-to-random --seed=123 "${ir}" > "${ref_out}" || exit 20
+                --splat-to-random --seed=123 ${init_args} "${ir}" > "${ref_out}" || exit 20
               echo "+ tpp-run (nano-kernels)"
               "${TPP_RUN}" -e entry -entry-point-result=void -print \
-                --splat-to-random --seed=123 ${vk_args} "${ir}" > "${test_out}" || exit 30
+                --splat-to-random --seed=123 ${init_args} ${vk_args} "${ir}" > "${test_out}" || exit 30
               echo "+ fpcmp"
               "${FPCMP}" -a "${ABS_TOL}" -r "${REL_TOL}" -i "${ref_out}" "${test_out}" || exit 40
             } >"${log}" 2>&1
@@ -195,18 +263,26 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Phase 3: Plot TFLOPS vs shapes
+# Phase 3: Plot TFLOPS vs shapes from the sorted throughput CSV(s).
 # ---------------------------------------------------------------------------
-if [[ "${SKIP_PLOT}" -eq 0 && -s "${PERF_TXT}" ]]; then
+if [[ "${SKIP_PLOT}" -eq 0 ]]; then
   PNG="${OUT_DIR}/tflops.png"
-  echo ">> Plotting -> ${PNG}"
-  python3 "${PLOTTER}" --mode=lines-tflops -o "${PNG}" "${PERF_TXT}" \
-    || echo "WARN: plotting failed (see stderr above)"
+  shopt -s nullglob
+  THROUGHPUT_CSVS=("${OUT_DIR}"/throughput_*.csv)
+  shopt -u nullglob
+  if [[ "${#THROUGHPUT_CSVS[@]}" -gt 0 ]]; then
+    echo ">> Plotting -> ${PNG}"
+    python3 "${PLOTTER}" -o "${PNG}" "${THROUGHPUT_CSVS[@]}" \
+      || echo "WARN: plotting failed (see stderr above)"
+  else
+    echo ">> Skipping plot (no throughput CSVs found)"
+  fi
 fi
 
 echo
 echo "Done."
 echo "  Output dir : ${OUT_DIR}"
 echo "  Perf       : ${PERF_TXT}"
+echo "  Throughput : ${OUT_DIR}/throughput_*.csv"
 echo "  Correctness: ${CORR_CSV}"
 echo "  Plot       : ${OUT_DIR}/tflops.png"

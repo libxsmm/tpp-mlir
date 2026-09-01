@@ -8,12 +8,14 @@
 
 #include "TPP/Passes.h"
 #include "TPP/Transforms/Utils/TransformUtils.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/TileUsingInterface.h"
 #include "mlir/Dialect/SCF/Utils/Utils.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace mlir;
@@ -48,15 +50,12 @@ struct RankReducedExtractSliceOp
         reassociation->size() == static_cast<size_t>(resultType.getRank())) {
       return failure();
     }
-    auto rankReducedType = cast<RankedTensorType>(
-        tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-            reassociation->size(), sliceOp.getSourceType(), sizes));
-            
-
-    /*auto rankReducedType = cast<RankedTensorType>(
-        tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-            reassociation->size(), sliceOp.getSourceType(), offsets, sizes,
-            strides));*/
+    SmallVector<int64_t> staticSizes;
+    std::tie(staticSizes, std::ignore) = decomposeMixedValues(sizes);
+    llvm::SmallBitVector droppedDims = getPositionsOfShapeOne(
+        sizes.size() - reassociation->size(), staticSizes);
+    RankedTensorType rankReducedType =
+        tensor::inferSliceType(sliceOp.getSourceType(), sizes, droppedDims);
 
     Location loc = sliceOp.getLoc();
     Value newSlice = tensor::ExtractSliceOp::create(rewriter, 

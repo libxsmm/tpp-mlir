@@ -77,3 +77,36 @@ module {
     return %stat : f64
   }
 }
+
+// -----
+
+// A value-returning kernel (internally-allocated output) is consumed by
+// extract_strided_metadata/dealloc cleanup ops inside the bench body. The pass
+// must rewire those uses to the replicated call.
+
+// CHECK: memref.global "private" @__bench_replica_0
+// CHECK: memref.global "private" @__bench_replica_1
+// CHECK-LABEL: func.func @entry
+// CHECK: perf.bench
+// CHECK:   scf.for
+// CHECK:     %[[RES:.+]] = func.call @kernel(%{{.+}}, %{{.+}}) : {{.*}} -> memref<4x4xf32>
+// CHECK:     %[[BASE:.+]], %{{.+}}, %{{.+}}:2, %{{.+}}:2 = memref.extract_strided_metadata %[[RES]]
+// CHECK:     memref.dealloc %[[BASE]]
+// CHECK-NOT: func.call @kernel
+module attributes {tpp.bench_replication_factor = 4 : i64} {
+  func.func @kernel(%A: memref<4x8xf32>, %B: memref<8x4xf32>) -> memref<4x4xf32> {
+    %C = memref.alloc() : memref<4x4xf32>
+    linalg.matmul ins(%A, %B : memref<4x8xf32>, memref<8x4xf32>) outs(%C : memref<4x4xf32>)
+    return %C : memref<4x4xf32>
+  }
+  func.func @entry(%A: memref<4x8xf32>, %B: memref<8x4xf32>, %n: i64) -> f64 {
+    %stat = perf.bench (%n : i64) -> f64 {
+      %C = func.call @kernel(%A, %B) : (memref<4x8xf32>, memref<8x4xf32>) -> memref<4x4xf32>
+      %base, %off, %sizes:2, %strides:2 = memref.extract_strided_metadata %C
+        : memref<4x4xf32> -> memref<f32>, index, index, index, index, index
+      memref.dealloc %base : memref<f32>
+      perf.yield
+    }
+    return %stat : f64
+  }
+}

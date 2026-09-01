@@ -43,6 +43,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
@@ -292,7 +293,56 @@ struct ReplicateBenchArgs
               /*sizes=*/ValueRange{});
         }
 
-        func::CallOp::create(bodyBuilder, loc, kernel, viewArgs);
+        auto newCall = func::CallOp::create(bodyBuilder, loc, kernel, viewArgs);
+
+        // When the kernel returns results (e.g. an internally-allocated output
+        // buffer), the original call is consumed by trailing cleanup ops
+        // (extract_strided_metadata/dealloc) in the bench body. Those must be
+        // rewired to the replicated call and sunk into the loop so each
+        // replica's buffer is freed once per iteration.
+        if (call->getNumResults() != 0) {
+          Operation *benchTerminator = call->getBlock()->getTerminator();
+          Operation *loopTerminator = loop.getBody()->getTerminator();
+
+          // Collect the ops trailing the call up to the bench terminator.
+          SmallVector<Operation *> cleanup;
+          for (Operation *op = call->getNextNode(); op && op != benchTerminator;
+               op = op->getNextNode())
+            cleanup.push_back(op);
+
+          // Each trailing op must be a known cleanup op that transitively
+          // consumes the call result, i.e. the trailing range is exactly the
+          // result's forward slice.
+          llvm::SmallPtrSet<Operation *, 4> derived;
+          for (Operation *op : cleanup) {
+            bool consumesResult = llvm::any_of(op->getOperands(), [&](Value v) {
+              Operation *def = v.getDefiningOp();
+              return def == call.getOperation() ||
+                     (def && derived.contains(def));
+            });
+            if (!consumesResult ||
+                !isa<memref::ExtractStridedMetadataOp, memref::DeallocOp>(op)) {
+              call.emitError("Only extract_strided_metadata/dealloc cleanup of "
+                             "the result can be replicated");
+              return signalPassFailure();
+            }
+            derived.insert(op);
+          }
+
+          // No use of the call result may escape that cleanup set, otherwise
+          // sinking it into the loop would leave a dangling reference.
+          for (Operation *user : call->getUsers()) {
+            if (!derived.contains(user)) {
+              call.emitError("Kernel result escapes the bench cleanup; cannot "
+                             "replicate safely");
+              return signalPassFailure();
+            }
+          }
+
+          call.replaceAllUsesWith(newCall);
+          for (Operation *op : cleanup)
+            op->moveBefore(loopTerminator);
+        }
         call.erase();
       }
     }

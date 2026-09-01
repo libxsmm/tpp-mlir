@@ -113,6 +113,12 @@ class MLIRGenerator {
   /// Apply VNNI packing
   bool vnniPacked;
 
+  /// Store the A (input) operand transposed
+  bool transposeA;
+
+  /// Store the B (weight) operand transposed
+  bool transposeB;
+
   // ============================ Helpers
 
   /// Return current random seed, update next
@@ -172,8 +178,12 @@ class MLIRGenerator {
     unsigned index;
     Arg input;
     Arg inputScale;
+    // Whether this layer reads its input transposed.
+    bool inputTranspose = false;
     Arg weight;
     Arg weightScale;
+    // Whether this layer reads its weight transposed.
+    bool weightTranspose = false;
     Arg outputScale;
     Arg bias;
     Arg output;
@@ -184,7 +194,8 @@ class MLIRGenerator {
   /// If order is not empty, re-order the dims in that order
   /// If dims is passed, force number of dims, otherwise, take from tensor
   /// If reduction is true, emit zeroExpr for the tail reduction
-  AffineMap getMap(Value, MapType);
+  /// If transpose is true, emit the transposed matmul input/weight map
+  AffineMap getMap(Value, MapType, bool transpose = false);
 
   /// Return the iterator types for a particular map type
   /// Add iterators if the types are packed
@@ -265,7 +276,7 @@ public:
   /// so should create new objects to not have to share / cleanup existing MLIR
   /// modules.
   MLIRGenerator(StringRef, StringRef, unsigned, StringRef, StringRef, StringRef, StringRef,
-                StringRef, bool, int, bool, bool, bool, bool, int);
+                StringRef, bool, int, bool, bool, bool, bool, int, bool, bool);
 
   ~MLIRGenerator() { module->destroy(); }
 

@@ -824,18 +824,6 @@ struct TileElementWiseOps
           return rewriter.notifyMatchFailure(
               op, "Only tiles linalg.generic with elementwise semantics");
 
-        // Exit if no non-terminating operations in the body (e.g., just a
-        // yield)
-        Block &body = op.getRegion().front();
-        if (body.without_terminator().empty())
-          return rewriter.notifyMatchFailure(
-              op, "No non-terminating operations in the body");
-
-        auto bodyOps = body.without_terminator();
-        if (llvm::hasSingleElement(bodyOps))
-          return rewriter.notifyMatchFailure(
-              op, "Dont tile linalg.generic with single op in the body.");
-
         // Exit for Op without inputs.
         if (op.getDpsInputs().empty())
           return rewriter.notifyMatchFailure(op,

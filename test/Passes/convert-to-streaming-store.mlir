@@ -8,7 +8,7 @@ func.func @streaming_store(%v: vector<64xi8>, %c: memref<64x64xi8>) {
   %c0 = arith.constant 0 : index
   %sv = memref.subview %c[0, 0] [1, 64] [1, 1]
     : memref<64x64xi8> to memref<64xi8, strided<[1], offset: 0>>
-  // CHECK: vector.store %{{.*}} {nontemporal = true} : memref<64xi8, strided<[1]>>, vector<64xi8>
+  // CHECK: vector.store %{{.*}} nontemporal = true : memref<64xi8, strided<[1]>>, vector<64xi8>
   // CHECK-NOT: vector.transfer_write
   vector.transfer_write %v, %sv[%c0] {in_bounds = [true]}
     : vector<64xi8>, memref<64xi8, strided<[1], offset: 0>>

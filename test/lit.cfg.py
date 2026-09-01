@@ -66,3 +66,20 @@ for arch in config.targets_to_build.split():
     config.available_features.add(arch.lower() + "-registered-target")
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+# Lighthouse ingress: run the PyTorch import script inside the Lighthouse `uv`
+# environment. Only available when the submodule and `uv` are present, gated via
+# the 'lighthouse' feature (use with 'REQUIRES: lighthouse').
+import shutil
+
+lighthouse_dir = os.path.join(config.tpp_src_root, "third_party", "lighthouse")
+uv_path = shutil.which("uv")
+if uv_path and os.path.exists(os.path.join(lighthouse_dir, "pyproject.toml")):
+    config.available_features.add("lighthouse")
+    import_script = os.path.join(config.tpp_src_root, "tools", "pytorch", "import.py")
+    config.substitutions.append(
+        (
+            "torch-import",
+            f"{uv_path} run --project {lighthouse_dir} --extra ingress_torch_cpu {import_script}",
+        )
+    )
