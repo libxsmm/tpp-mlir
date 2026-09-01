@@ -28,7 +28,7 @@ DTYPES = {
         "gen_flags": (
             "--kernel=args --data-type=i8 --batch={M} "
             "--layers={K},{N} --tiles=32,32,64 --vnni=4 "
-            "--quant"
+            "--quant --scale-type=f8E8M0FNU"
         ),
         "run_args": (
             "--def-parallel --nano-kernels --gemm-unroll=16,16,16 "
@@ -45,7 +45,8 @@ DTYPES = {
             "--layers={K},{N} --tiles=32,32,32 --vnni=2"
         ),
         "run_args": (
-            "--def-parallel --bench-replication-gb=5 "
+            "--def-parallel --nano-kernels --gemm-unroll=16,16,16 "
+            "--registerBlocking=32,32,32 --bench-replication-gb=5 "
             "--init-type=normal --splat-to-random --seed=123"
         ),
         "extensions": ["amx_bf16"],
