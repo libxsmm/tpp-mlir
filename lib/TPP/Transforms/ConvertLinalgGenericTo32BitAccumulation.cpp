@@ -81,7 +81,7 @@ struct ConvertLinalgGenericTo32BitOp : OpRewritePattern<linalg::GenericOp> {
 
     if (!isFloatType && !outElemType.isSignlessInteger(8))
       return rewriter.notifyMatchFailure(
-          genericOp, "The outs type should be BF16, F8E5M2, F8E4M3FN or Int8.");
+          genericOp, "The outs type should be BF16, F8E5M2, F8E4M3FN, or Int8.");
 
     // For float types, accumulate in f32 and truncate back to the original
     // element type. For int8, accumulate in i32.
