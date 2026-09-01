@@ -184,7 +184,7 @@ if [[ "${SKIP_CORRECTNESS}" -eq 0 ]]; then
   # mlir-gen flag templates (must match gen-sweep-config.py).
   # Use --kernel=args (same as the perf config); tpp-run --splat-to-random
   # --seed=123 makes both baseline and test runs see identical inputs.
-  gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant"
+  gen_args_i8="--kernel=args --data-type=i8 --tiles=32,32,64 --vnni=4 --quant --scale-type=f8E8M0FNU"
   gen_args_bf16="--kernel=args --data-type=bf16 --tiles=32,32,32 --vnni=2"
   # Data-init flags must be applied identically to baseline and test so both
   # runs see the same inputs; i8 requires --init-type=quant.
