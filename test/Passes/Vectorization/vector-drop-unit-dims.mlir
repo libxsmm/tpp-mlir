@@ -43,7 +43,7 @@ func.func @fold_unit_dim_shape_cast_insert_slice(
     ) -> vector<4x64xf32> {
   %0 = vector.shape_cast %arg0 : vector<64xf32> to vector<1x64xf32>
   %1 = vector.insert_strided_slice %0, %arg1
-    {offsets = [0, 0], strides = [1, 1]}
+    offsets = [0, 0], strides = [1, 1]
     : vector<1x64xf32> into vector<4x64xf32>
   return %1 : vector<4x64xf32>
 }
