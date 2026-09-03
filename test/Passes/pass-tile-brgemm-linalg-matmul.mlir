@@ -2,7 +2,7 @@
 // RUN: tpp-opt %s --tile-gemm="registerBlocking=32,32,32" --split-input-file  | FileCheck -check-prefix=CONF2 %s
 
 module {
-  func.func @gemm_do_register_tiling(%arg0: memref<16x32x16x32xf32>, %arg1: memref<32x32x32x32xf32>, %arg2: memref<16x32x16x32xf32>) {
+  func.func @brgemm_do_register_tiling(%arg0: memref<16x32x16x32xf32>, %arg1: memref<32x32x32x32xf32>, %arg2: memref<16x32x16x32xf32>) {
     scf.forall (%arg3, %arg4) in (16, 32) {
       %subview = memref.subview %arg0[%arg3, 0, 0, 0] [1, 32, 16, 32] [1, 1, 1, 1] : memref<16x32x16x32xf32> to memref<32x16x32xf32, strided<[512, 32, 1], offset: ?>>
       %subview_0 = memref.subview %arg1[%arg4, 0, 0, 0] [1, 32, 32, 32] [1, 1, 1, 1] : memref<32x32x32x32xf32> to memref<32x32x32xf32, strided<[1024, 32, 1], offset: ?>>
@@ -14,7 +14,7 @@ module {
 }
 
 
-// CONF1-LABEL: func.func @gemm_do_register_tiling
+// CONF1-LABEL: func.func @brgemm_do_register_tiling
 // CONF1-DAG: %[[C1:.+]] = arith.constant 1 : index
 // CONF1-DAG: %[[C32:.+]] = arith.constant 32 : index
 // CONF1-DAG: %[[C8:.+]] = arith.constant 8 : index
@@ -68,7 +68,7 @@ module {
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d2, d3)>
 module {
   memref.global "private" constant @__constant_32x16x32x2xbf16 : memref<32x16x32x2xbf16> = dense<1.000000e+00> alignment = 64
-  func.func @gemm_32tiles_do_tiling_bf16(%arg0: memref<8x32x32x32xbf16>) -> memref<8x32x32x32xbf16> {
+  func.func @brgemm_32tiles_do_tiling_bf16(%arg0: memref<8x32x32x32xbf16>) -> memref<8x32x32x32xbf16> {
     %cst = arith.constant 0.000000e+00 : bf16
     %0 = memref.get_global @__constant_32x16x32x2xbf16 : memref<32x16x32x2xbf16>
     %alloc = memref.alloc() alignment = 64 : memref<8x32x32x32xbf16>
@@ -88,7 +88,7 @@ module {
   }
 }
 
-// CONF2-LABEL: func.func @gemm_32tiles_do_tiling_bf16
+// CONF2-LABEL: func.func @brgemm_32tiles_do_tiling_bf16
 // CONF2-DAG: %[[C1:.+]] = arith.constant 1 : index
 // CONF2-DAG: %[[C32:.+]] = arith.constant 32 : index
 // CONF2-DAG: %[[C16:.+]] = arith.constant 16 : index
@@ -112,7 +112,7 @@ module {
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d3, d2)>
 module {
   memref.global "private" constant @__constant_16x32x64x2xbf16 : memref<16x32x64x2xbf16> = dense<1.000000e+00> alignment = 64
-  func.func @gemm_64tiles_do_tiling_bf16(%arg0: memref<4x16x64x64xbf16>) -> memref<4x16x64x64xbf16> {
+  func.func @brgemm_64tiles_do_tiling_bf16(%arg0: memref<4x16x64x64xbf16>) -> memref<4x16x64x64xbf16> {
     %cst = arith.constant 0.000000e+00 : bf16
     %0 = memref.get_global @__constant_16x32x64x2xbf16 : memref<16x32x64x2xbf16>
     %alloc = memref.alloc() alignment = 64 : memref<4x16x64x64xbf16>
@@ -132,7 +132,7 @@ module {
   }
 }
 
-// CONF2-LABEL: func.func @gemm_64tiles_do_tiling_bf16
+// CONF2-LABEL: func.func @brgemm_64tiles_do_tiling_bf16
 // CONF2-DAG: %[[C1:.+]] = arith.constant 1 : index
 // CONF2-DAG: %[[C32:.+]] = arith.constant 32 : index
 // CONF2-DAG: %[[C64:.+]] = arith.constant 64 : index
@@ -157,7 +157,7 @@ module {
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d4, d3, d1)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d2, d3)>
 module {
-  func.func @gemm_64tiles_do_tiling_bf16_tensor(%arg0: tensor<4x16x64x64xbf16>) -> tensor<4x16x64x64xbf16> {
+  func.func @brgemm_64tiles_do_tiling_bf16_tensor(%arg0: tensor<4x16x64x64xbf16>) -> tensor<4x16x64x64xbf16> {
     %cst = arith.constant dense<1.000000e+00> : tensor<16x32x64x2xbf16>
     %cst_0 = arith.constant 0.000000e+00 : bf16
     %0 = bufferization.alloc_tensor() : tensor<4x16x64x64xbf16>
@@ -180,7 +180,7 @@ module {
   }
 }
 
-// CONF2-LABEL: func.func @gemm_64tiles_do_tiling_bf16_tensor
+// CONF2-LABEL: func.func @brgemm_64tiles_do_tiling_bf16_tensor
 // CONF2-DAG: %[[C1:.+]] = arith.constant 1 : index
 // CONF2-DAG: %[[C32:.+]] = arith.constant 32 : index
 // CONF2-DAG: %[[C64:.+]] = arith.constant 64 : index

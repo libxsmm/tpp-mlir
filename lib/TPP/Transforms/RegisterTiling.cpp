@@ -39,8 +39,7 @@ using namespace mlir::tpp;
 namespace mlir {
 namespace tpp {
 
-template <typename GemmOp>
-struct LinalgOpTiling : OpRewritePattern<GemmOp> {
+template <typename GemmOp> struct LinalgOpTiling : OpRewritePattern<GemmOp> {
   using OpRewritePattern<GemmOp>::OpRewritePattern;
 
   LinalgOpTiling(MLIRContext *ctx, RegisterTilingOptions tilingoptions)
@@ -54,94 +53,79 @@ struct LinalgOpTiling : OpRewritePattern<GemmOp> {
       return rewriter.notifyMatchFailure(
           gemmOp, "Invalid user input tile sizes. Should be <m,n,k>");
 
-    // Classify the operation using the iterator types. Supported GEMM-like
-    // ops, each in plain or vnni layout, with any number of leading batch
-    // (parallel) or batch-reduce (reduction) dimensions, all tiled by 1.
-    SmallVector<utils::IteratorType> gemmIteratorTypes =
-        gemmOp.getIteratorTypesArray();
-    int reductionCount =
-        std::count(gemmIteratorTypes.begin(), gemmIteratorTypes.end(),
-                   utils::IteratorType::reduction);
+    // Only the three known contraction forms are supported: gemm, batch gemm,
+    // and batch-reduce gemm (each in plain or vnni layout). Use the upstream
+    // contraction matchers to robustly reject anything else. The body check in
+    // isaContractionOpInterface transparently skips the extf casts used by the
+    // mixed-precision (bf16) variants.
+    auto linalgOp = cast<linalg::LinalgOp>(gemmOp.getOperation());
+    if (!linalg::isaContractionOpInterface(linalgOp))
+      return rewriter.notifyMatchFailure(gemmOp, "Expected a contraction");
 
-    int parallelCount =
-        std::count(gemmIteratorTypes.begin(), gemmIteratorTypes.end(),
-                   utils::IteratorType::parallel);
-
-    // Reject anything that is not a GEMM-like contraction with two inputs.
-    if (reductionCount == 0 || parallelCount < 2 ||
-        gemmOp.getNumDpsInputs() != 2)
+    FailureOr<linalg::ContractionDimensions> contractionDims =
+        linalg::inferContractionDims(linalgOp);
+    if (failed(contractionDims))
       return rewriter.notifyMatchFailure(gemmOp,
-                                         "Expected GEMM like operation");
+                                         "Could not infer contraction dims");
 
-    auto shapeTypeLhs =
-        dyn_cast<ShapedType>(gemmOp.getOperand(0).getType());
-    auto shapeTypeRhs =
-        dyn_cast<ShapedType>(gemmOp.getOperand(1).getType());
+    // gemm/batch-gemm/batch-reduce-gemm all have a single M and single N dim.
+    if (contractionDims->m.size() != 1 || contractionDims->n.size() != 1)
+      return rewriter.notifyMatchFailure(gemmOp, "Expected a single M and N");
+
+    auto shapeTypeLhs = dyn_cast<ShapedType>(gemmOp.getOperand(0).getType());
+    auto shapeTypeRhs = dyn_cast<ShapedType>(gemmOp.getOperand(1).getType());
     if (!shapeTypeLhs || !shapeTypeRhs)
       return rewriter.notifyMatchFailure(gemmOp, "Expected shaped operands");
 
     auto shapeLhs = shapeTypeLhs.getShape();
-
     auto vnniOpt = vnni::utils::isInVnniLayout(gemmOp);
 
     // Tiling with the help of upstream APIs
     linalg::LinalgTilingOptions tilingOptions;
     tilingOptions.setLoopType(linalg::LinalgTilingLoopType::Loops);
 
-    // Get rank and map of linalg op
     unsigned rankA = shapeTypeLhs.getRank();
-    unsigned rankB = shapeTypeRhs.getRank();
-    AffineMap mapA =
-        gemmOp.getMatchingIndexingMap(&gemmOp->getOpOperand(0));
-    AffineMap mapB =
-        gemmOp.getMatchingIndexingMap(&gemmOp->getOpOperand(1));
+    AffineMap mapA = gemmOp.getMatchingIndexingMap(&gemmOp->getOpOperand(0));
 
-    // Every dimension before the base matmul operands is a leading batch
-    // (parallel) or batch-reduce (reduction) dimension. baseRank is 2 for the
-    // plain layout ([...][M][K]) and 3 for the vnni layout ([...][K/vnni][vnni]).
+    // baseRank is 2 for the plain layout ([...][M][K]) and 3 for the vnni
+    // layout ([...][M][K/vnni][vnni]).
     unsigned baseRank = vnniOpt ? 3 : 2;
     if (rankA < baseRank)
       return rewriter.notifyMatchFailure(gemmOp, "Unexpected operand rank");
-    unsigned numBatch = rankA - baseRank;
 
-    unsigned dimM, dimN, dimK, vnniDim = 0;
+    // M and N come from the inferred contraction dims. The innermost K (and the
+    // vnni dim) are read positionally from the LHS trailing layout, which is
+    // fixed for all supported forms: A = [...][M][K] or [...][M][K/vnni][vnni].
+    unsigned dimM = contractionDims->m[0];
+    unsigned dimN = contractionDims->n[0];
+    unsigned dimK, vnniDim = 0;
     if (vnniOpt) {
-      // Layout: A = [...][M][K/vnni][vnni], B = [...][K/vnni][N][vnni].
       vnniDim =
           (dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 1))).getPosition();
-      dimM = (dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 3))).getPosition();
       dimK = (dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 2))).getPosition();
-      dimN = (dyn_cast<AffineDimExpr>(mapB.getResult(rankB - 2))).getPosition();
     } else {
-      // Layout: A = [...][M][K], B = [...][K][N].
-      dimM = (dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 2))).getPosition();
       dimK = (dyn_cast<AffineDimExpr>(mapA.getResult(rankA - 1))).getPosition();
-      dimN = (dyn_cast<AffineDimExpr>(mapB.getResult(rankB - 1))).getPosition();
     }
 
-    // Collect the leading batch dimensions in operand order (outermost first).
-    SmallVector<unsigned> batchDims;
-    for (unsigned i = 0; i < numBatch; ++i)
-      batchDims.push_back(
-          (dyn_cast<AffineDimExpr>(mapA.getResult(i))).getPosition());
+    SmallVector<unsigned> batchDims(contractionDims->batch.begin(),
+                                    contractionDims->batch.end());
+    for (unsigned kDim : contractionDims->k)
+      if (kDim != dimK && (!vnniOpt || kDim != vnniDim))
+        batchDims.push_back(kDim);
 
-    // Check dimensions are aligned with the iterator types. The batch
-    // dimensions may be parallel (batch matmul) or reduction (batch reduce).
-    if (gemmIteratorTypes[dimM] != mlir::utils::IteratorType::parallel ||
-        gemmIteratorTypes[dimN] != mlir::utils::IteratorType::parallel ||
-        gemmIteratorTypes[dimK] != mlir::utils::IteratorType::reduction)
-      return rewriter.notifyMatchFailure(
-          gemmOp, "Failed matching with iterator types and dimension");
-
-    // Every batch/batch-reduce dimension is tiled by 1.
-    SmallVector<int64_t> tileSizes(gemmIteratorTypes.size(), 0);
+    // Set the tile sizes.
+    // M, N, and K tiles are inputted by user.
+    // Batch/batch-reduction tile is set to 1.
+    // Vnni tile is set to vnni factor (2 or 4).
+    SmallVector<int64_t> tileSizes(linalgOp.getNumLoops(), 0);
     tileSizes[dimM] = options.registerTileShape[0];
     tileSizes[dimN] = options.registerTileShape[1];
     for (unsigned dim : batchDims)
       tileSizes[dim] = 1;
 
-    // Interchange: any extra (outer) batch dimensions come first, followed by
-    // the M, N, innermost-batch, K (and vnni) loop ordering.
+    // Order the tiled loops.
+    // Any extra (outer) batch dimensions come first, followed by
+    // the M, N, innermost-batch (if any), K (and vnni) loop.
     SmallVector<unsigned> interchange;
     for (unsigned i = 0; i + 1 < batchDims.size(); ++i)
       interchange.push_back(batchDims[i]);
@@ -161,8 +145,8 @@ struct LinalgOpTiling : OpRewritePattern<GemmOp> {
       if (kTileVnni < 1 || (options.registerTileShape[2] % vnniFactor != 0))
         return rewriter.notifyMatchFailure(
             gemmOp, "Failed matching K tile size for vnni layout. K tile "
-                      "size should be >= vnni layout and divisible by vnni "
-                      "layout");
+                    "size should be >= vnni layout and divisible by vnni "
+                    "layout");
 
       tileSizes[dimK] = kTileVnni;
       tileSizes[vnniDim] = 0;
@@ -174,7 +158,9 @@ struct LinalgOpTiling : OpRewritePattern<GemmOp> {
     tilingOptions.setTileSizes(tileSizes);
     tilingOptions.setInterchange(interchange);
 
-    FailureOr<linalg::TiledLinalgOp> tiledOp = linalg::tileLinalgOp(rewriter, gemmOp, tilingOptions);
+    // Upstream API to tile linalg op.
+    FailureOr<linalg::TiledLinalgOp> tiledOp =
+        linalg::tileLinalgOp(rewriter, gemmOp, tilingOptions);
     if (failed(tiledOp)) {
       return failure();
     }
@@ -188,16 +174,15 @@ private:
 };
 
 void populateRegisterTilingPatterns(RewritePatternSet &patterns,
-                                        RegisterTilingOptions options) {
-  patterns.add<LinalgOpTiling<linalg::GenericOp>,
-               LinalgOpTiling<linalg::MatmulOp>,
-               LinalgOpTiling<linalg::BatchMatmulOp>,
-               LinalgOpTiling<linalg::BatchReduceMatmulOp>>(
-      patterns.getContext(), options);
+                                    RegisterTilingOptions options) {
+  patterns
+      .add<LinalgOpTiling<linalg::GenericOp>, LinalgOpTiling<linalg::MatmulOp>,
+           LinalgOpTiling<linalg::BatchMatmulOp>,
+           LinalgOpTiling<linalg::BatchReduceMatmulOp>>(patterns.getContext(),
+                                                        options);
 }
 
-struct RegisterTiling
-    : public tpp::impl::RegisterTilingBase<RegisterTiling> {
+struct RegisterTiling : public tpp::impl::RegisterTilingBase<RegisterTiling> {
 
   using RegisterTilingBase::RegisterTilingBase;
 
