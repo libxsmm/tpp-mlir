@@ -221,6 +221,8 @@ private:
         mlir::arith::createArithEmulateUnsupportedFloats(emulateFloatsOptions));
     mlir::arith::ArithExpandOpsPassOptions arithExpandOpsOptions;
     arithExpandOpsOptions.includeF8E8M0 = true;
+    arithExpandOpsOptions.includeF8E5M2 = true;
+    arithExpandOpsOptions.includeF8E4M3FN = true;
     pm.addPass(arith::createArithExpandOpsPass(arithExpandOpsOptions));
     pm.addPass(createLowerAffinePass());
   }

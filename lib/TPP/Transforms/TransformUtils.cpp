@@ -11,11 +11,13 @@
 #include "TPP/IR/StructuredOpMatcher.h"
 #include "TPP/Transforms/Utils/TransformUtils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExprVisitor.h"
 
 namespace mlir {
@@ -140,9 +142,12 @@ Value getSliceOperand(OpBuilder &builder, linalg::LinalgOp linalgOp,
   Location loc = linalgOp.getLoc();
   Type reducedType;
   if (linalgOp.hasPureTensorSemantics()) {
-    reducedType = tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-        desiredResultRank, cast<RankedTensorType>(operandType), sizes);
-        //strides);
+    SmallVector<int64_t> staticSizes;
+    std::tie(staticSizes, std::ignore) = decomposeMixedValues(sizes);
+    llvm::SmallBitVector droppedDims =
+        getPositionsOfShapeOne(rank - desiredResultRank, staticSizes);
+    reducedType = tensor::inferSliceType(cast<RankedTensorType>(operandType),
+                                         sizes, droppedDims);
   } else {
     reducedType = memref::SubViewOp::inferRankReducedResultType(
         getExpectedResultMemRefShape(sizes, desiredResultRank),
