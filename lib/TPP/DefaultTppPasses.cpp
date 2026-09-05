@@ -89,8 +89,8 @@ private:
         createConvertLinalgGenericTo32BitAccumulation());
 
     // Vectorizes the remaining Linalg operations
-    pm.addNestedPass<func::FuncOp>(createBrgemmLinalgTiling(
-        BrgemmLinalgTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
+    pm.addNestedPass<func::FuncOp>(createRegisterTiling(
+        RegisterTilingOptions{SmallVector<unsigned>{*registerBlocking}}));
     pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
     if (!disableTileElementwiseOps)
       pm.addNestedPass<func::FuncOp>(createTileElementWiseOps());
