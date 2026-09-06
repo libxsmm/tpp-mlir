@@ -17,11 +17,11 @@
 #define TPP_TRANSFORMS_UTILS_TENSORINITINT_H
 
 #include "TPP/Transforms/Utils/TensorInit.h"
+#include "TPP/Transforms/Utils/TensorInitRNG.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
 
 #include <algorithm>
-#include <random>
 
 // Base class for integer values.
 struct TensorInitInt : public TensorInit<llvm::APInt> {
@@ -87,46 +87,39 @@ struct ConstantTensorInitInt : TensorInitInt {
 // Random init (uniform).
 struct RandomTensorInitInt : TensorInitInt {
   RandomTensorInitInt(DataType type, int seed)
-      : TensorInitInt(type), generator(seed), distribution(0, 255) {
-    if (type == DataType::I8)
-      distribution = std::uniform_int_distribution<uint64_t>(0, 127);
-  }
+      : TensorInitInt(type), generator(seed),
+        upperBound(type == DataType::I8 ? 127 : 255) {}
 
   // Next random uniform number.
-  float next() { return distribution(generator); }
+  float next() { return generator.uniformInt(0, upperBound); }
 
   // Return a dense<uniform(0, distribution)> throughout the shape.
   void fillData() override;
 
 private:
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::uniform_int_distribution<uint64_t> distribution;
+  TensorInitRNG generator;
+  // Inclusive upper bound of the generated range.
+  uint64_t upperBound;
 };
 
 // Random init (normal).
 struct NormalTensorInitInt : TensorInitInt {
   NormalTensorInitInt(DataType type, int seed)
-      : TensorInitInt(type), generator(seed), distribution(255) {
-    if (type == DataType::I8)
-      distribution = std::binomial_distribution<uint64_t>(127);
-  }
+      : TensorInitInt(type), generator(seed),
+        trials(type == DataType::I8 ? 127 : 255) {}
 
   // Next random number.
-  float next() {
-    auto value = distribution(generator);
-    return value;
-  }
+  float next() { return generator.binomial(trials, 0.5); }
 
   // Return a dense<normal(0, distribution)> throughout the shape.
   void fillData() override;
 
 private:
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::binomial_distribution<uint64_t> distribution;
+  TensorInitRNG generator;
+  // Number of Bernoulli trials backing the binomial distribution.
+  uint64_t trials;
 };
 
 // Identity init.
@@ -155,7 +148,7 @@ struct QuantTensorInitInt : TensorInitInt {
   QuantTensorInitInt(DataType type, mlir::Type scaleDataType, int seed,
                      TensorInitPtr floatScaleInit)
       : TensorInitInt(type), scaleDataType(scaleDataType), generator(seed),
-        distribution(0.0, 0.2), floatScaleInit(floatScaleInit) {}
+        floatScaleInit(floatScaleInit) {}
 
   // Indicate which matrix it being initialized, input or weight
   bool isInputMatrix = true;
@@ -177,9 +170,7 @@ struct QuantTensorInitInt : TensorInitInt {
 
 private:
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::normal_distribution<float> distribution;
+  TensorInitRNG generator;
   TensorInitPtr floatScaleInit;
 };
 
