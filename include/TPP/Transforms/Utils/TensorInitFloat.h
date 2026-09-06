@@ -16,11 +16,11 @@
 #define TPP_TRANSFORMS_UTILS_TENSORINITFLOAT_H
 
 #include "TPP/Transforms/Utils/TensorInit.h"
+#include "TPP/Transforms/Utils/TensorInitRNG.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
 
 #include <algorithm>
-#include <random>
 
 // Base class for float values.
 struct TensorInitFloat : public TensorInit<llvm::APFloat> {
@@ -121,29 +121,27 @@ struct ConstantTensorInitFloat : TensorInitFloat {
 // Random init (uniform).
 struct RandomTensorInitFloat : TensorInitFloat {
   RandomTensorInitFloat(DataType type, int seed)
-      : TensorInitFloat(type), generator(seed), distribution(0.0, 1.0) {}
+      : TensorInitFloat(type), generator(seed) {}
 
   // Next random uniform number.
-  float next() { return distribution(generator); }
+  float next() { return generator.uniformFloat(); }
 
   // Return a dense<uniform(0.0, 1.0)> throughout the shape.
   void fillData() override;
 
 private:
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::uniform_real_distribution<float> distribution;
+  TensorInitRNG generator;
 };
 
 // Random init (normal).
 struct NormalTensorInitFloat : TensorInitFloat {
   NormalTensorInitFloat(DataType type, int seed)
-      : TensorInitFloat(type), generator(seed), distribution(0.0, 0.2) {}
+      : TensorInitFloat(type), generator(seed) {}
 
   // Next random number.
   float next() {
-    auto value = distribution(generator);
+    auto value = generator.normalFloat(0.0f, 0.2f);
     value = std::clamp(value, 0.0f, 1.0f);
     return value;
   }
@@ -153,9 +151,7 @@ struct NormalTensorInitFloat : TensorInitFloat {
 
 private:
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::normal_distribution<float> distribution;
+  TensorInitRNG generator;
 };
 
 // Identity init.
@@ -181,7 +177,7 @@ struct IdentityTensorInitFloat : TensorInitFloat {
 // Random init (Quant).
 struct QuantScaleTensorInitFloat : TensorInitFloat {
   QuantScaleTensorInitFloat(DataType type, int seed)
-      : TensorInitFloat(type), generator(seed), distribution(0.0, 0.2) {}
+      : TensorInitFloat(type), generator(seed) {}
 
   // Method to set scale buffer.
   // A scale tensor is initialized in one of two modes:
@@ -201,7 +197,7 @@ struct QuantScaleTensorInitFloat : TensorInitFloat {
 
     // Standalone mode
     for (size_t i = 0; i < size; i++) {
-      float value = distribution(generator);
+      float value = generator.normalFloat(0.0f, 0.2f);
       if (value < 0.0f)
         value = -value;
       scaleBuffer.push_back(llvm::APFloat(value));
@@ -218,9 +214,7 @@ private:
   // Scale buffer corresponding to quantized arguments.
   std::vector<llvm::APFloat> scaleBuffer;
   // Random generator.
-  std::default_random_engine generator;
-  // Random distribution.
-  std::normal_distribution<float> distribution;
+  TensorInitRNG generator;
 };
 
 #endif // TPP_TRANSFORMS_UTILS_TENSORINITFLOAT_H
