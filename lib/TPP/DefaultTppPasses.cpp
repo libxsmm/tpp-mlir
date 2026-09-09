@@ -108,6 +108,14 @@ private:
     // No-op unless the benchmark producer requested replication.
     pm.addPass(createReplicateBenchArgs());
     pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
+    // Cache-block the K dimension on the lowered AMX nano-kernel: hoist a
+    // K-block loop outside the spatial forall and accumulate into the bf16 C
+    // tile in place (beta=1). No-op when k-cache-blocking is 0.
+    if (kCacheBlocking > 0) {
+      NanoGemmKCacheBlockingOptions kCacheOpts;
+      kCacheOpts.kCacheTile = kCacheBlocking;
+      pm.addNestedPass<func::FuncOp>(createNanoGemmKCacheBlocking(kCacheOpts));
+    }
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
     pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
     // Stream write-only stores (e.g. the output C matrix) with a nontemporal
@@ -126,6 +134,8 @@ private:
     // Applies a set of passes at the linalg level to fuse and pack.
     TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose,
                                         disableVnniPacking};
+    // K-cache-blocking option initialization.
+    tppMappingOptions.kCacheBlocking = kCacheBlocking;
     pm.addPass(createTppMapping(tppMappingOptions));
     // Generalize linalg.pack and linalg.unpack.
     pm.addPass(createLowerPacksAndUnPacks());

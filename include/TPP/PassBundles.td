@@ -56,6 +56,9 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
     ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
                "GEMM unroll sizes for the innermost dims: [M, N, K]">,
+    Option<"kCacheBlocking", "k-cache-blocking", "unsigned", /*default=*/"0",
+           "Cache-block the GEMM reduction (K) dimension by this many "
+           "batch-reduce K-blocks. 0 disables.">,
 
   ];
 }
@@ -80,6 +83,10 @@ def TppMapping : Pass<"tpp-mapping", "ModuleOp"> {
     Option<"disableTileElementwiseOps", "disable-tile-elementwise-ops",
            "bool", /*default=*/"false",
            "Disables tiling of elementwise operations.">,
+    Option<"kCacheBlocking", "k-cache-blocking", "unsigned", /*default=*/"0",
+           "Cache-block the GEMM reduction (K) dimension by this many "
+           "batch-reduce K-blocks so the K-block loop encloses the spatial "
+           "tiling. 0 disables.">,
   ];
 }
 

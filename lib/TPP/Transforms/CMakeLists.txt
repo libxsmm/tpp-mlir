@@ -25,6 +25,7 @@ add_mlir_library(TPPTransforms
   FoldAddIntoDest.cpp
   Vectorization.cpp
   RegisterTiling.cpp
+  NanoGemmKCacheBlocking.cpp
   SplitReductionDim.cpp
   VectorContractToOuterproduct.cpp
   HoistVectorTransfers.cpp
