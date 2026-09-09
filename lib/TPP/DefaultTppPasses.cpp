@@ -126,6 +126,12 @@ private:
     // Applies a set of passes at the linalg level to fuse and pack.
     TppMappingOptions tppMappingOptions{lowerPackUnpackWithoutTranspose,
                                         disableVnniPacking};
+    // Forward the two-level cache-blocking controls into TppMapping: M/N cache
+    // panels (via tile-and-fuse) plus K cache blocking. No-op when
+    // k-cache-blocking is 0.
+    tppMappingOptions.kCacheBlocking = kCacheBlocking;
+    tppMappingOptions.mCachePanel = mCachePanel;
+    tppMappingOptions.nCachePanel = nCachePanel;
     pm.addPass(createTppMapping(tppMappingOptions));
     // Generalize linalg.pack and linalg.unpack.
     pm.addPass(createLowerPacksAndUnPacks());

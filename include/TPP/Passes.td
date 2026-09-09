@@ -130,6 +130,31 @@ def RegisterTiling : Pass<"tile-gemm"> {
   ];
 }
 
+def GemmKCacheBlocking : Pass<"gemm-k-cache-blocking"> {
+  let summary = "Cache-block the reduction (K) dimension of a batch-reduce GEMM.";
+  let description = [{
+    Tiles the batch-reduce (outer K) dimension of a batch-reduce matmul by a
+    cache-block factor, producing an outer sequential reduction loop that
+    accumulates partial results into the output. This bounds the size of the
+    reused input panel so it stays resident in L2 instead of being evicted and
+    refetched from L3 on every reuse (cache thrashing).
+
+    The tile size is expressed in units of the batch-reduce dimension, i.e. the
+    number of K-sub-blocks per cache block (K_cache = k-cache-blocking * K-block).
+    Runs before register blocking. A value of 0 disables the pass, and the tile
+    must evenly divide the batch-reduce extent (no partial tail is emitted).
+    For example: --gemm-k-cache-blocking="k-cache-blocking=64".
+  }];
+  let dependentDialects = ["linalg::LinalgDialect",
+                           "scf::SCFDialect",
+                           "tensor::TensorDialect",
+                           "arith::ArithDialect"];
+  let options = [
+         Option<"kCacheBlocking", "k-cache-blocking", "unsigned", /*default=*/"0",
+                "Batch-reduce (K-block) iterations per cache block. 0 disables.">,
+  ];
+}
+
 def ConvertLinalgGenericTo32BitAccumulation : Pass<"convert-linalg-generic-to-32-bit-acc"> {
    let summary = "Convert linalg.generic op from bf16/i8 to f32/i32 accumulation.";
    let description = [{

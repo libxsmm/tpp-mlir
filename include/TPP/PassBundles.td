@@ -56,6 +56,15 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
     ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
                "GEMM unroll sizes for the innermost dims: [M, N, K]">,
+    Option<"kCacheBlocking", "k-cache-blocking", "unsigned", /*default=*/"0",
+           "Cache-block the GEMM reduction (K) dimension by this many "
+           "batch-reduce K-blocks. 0 disables.">,
+    Option<"mCachePanel", "m-cache-panel", "int64_t", /*default=*/"4",
+           "M panel width (register tiles) for k-cache-blocking two-level "
+           "tiling.">,
+    Option<"nCachePanel", "n-cache-panel", "int64_t", /*default=*/"1",
+           "N panel width (register tiles) for k-cache-blocking two-level "
+           "tiling.">,
 
   ];
 }
@@ -80,6 +89,18 @@ def TppMapping : Pass<"tpp-mapping", "ModuleOp"> {
     Option<"disableTileElementwiseOps", "disable-tile-elementwise-ops",
            "bool", /*default=*/"false",
            "Disables tiling of elementwise operations.">,
+    Option<"kCacheBlocking", "k-cache-blocking", "unsigned", /*default=*/"0",
+           "Cache-block the GEMM reduction (K) dimension by this many "
+           "batch-reduce K-blocks so the K-block loop encloses the spatial "
+           "tiling. 0 disables.">,
+    Option<"mCachePanel", "m-cache-panel", "int64_t", /*default=*/"4",
+           "When k-cache-blocking is enabled, width (in register tiles) of the "
+           "M panel owned by each outer spatial forall, so the K-block loop's B "
+           "slice is reused across the panel's inner register tiles.">,
+    Option<"nCachePanel", "n-cache-panel", "int64_t", /*default=*/"1",
+           "When k-cache-blocking is enabled, width (in register tiles) of the "
+           "N panel owned by each outer spatial forall, so the K-block loop's A "
+           "slice is reused across the panel's inner register tiles.">,
   ];
 }
 

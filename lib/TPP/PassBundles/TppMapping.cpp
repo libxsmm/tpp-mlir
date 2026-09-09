@@ -85,7 +85,29 @@ private:
     pm.addNestedPass<func::FuncOp>(
         createLinalgConvertCompareSelectToMaximumfPass());
 
-    pm.addPass(createTileConsumerAndFuseProducers());
+    if (kCacheBlocking > 0) {
+      // M/N cache tiling + epilogue fusion. Tile the spatial M/N dims by the
+      // cache-block factors so the outer forall owns a CM x CN group of
+      // register tiles; A[CM-block] and B[CN-block] stay L2-resident and are
+      // reused across the group, while the high-precision (f32/i32) accumulator
+      // patch is written to C exactly once by the fused epilogue.
+      TileConsumerAndFuseProducersOptions tileOpts;
+      tileOpts.tileSizes = SmallVector<int64_t>{mCachePanel, nCachePanel};
+      pm.addPass(createTileConsumerAndFuseProducers(tileOpts));
+    } else {
+      pm.addPass(createTileConsumerAndFuseProducers());
+    }
+
+    // K cache-block tiling. Tile the reduction (K) dimension inside each
+    // cache block and thread the high-precision accumulator across K-blocks
+    // (beta=1), so the epilogue down-converts and writes C exactly once after
+    // the K loop. No-op when k-cache-blocking is 0.
+    if (kCacheBlocking > 0) {
+      GemmKCacheBlockingOptions kCacheOpts;
+      kCacheOpts.kCacheBlocking = kCacheBlocking;
+      pm.addPass(createGemmKCacheBlocking(kCacheOpts));
+    }
+
     pm.addPass(createSimplifyAndCanonicalizePack());
     pm.addPass(createCleanup());
   }
