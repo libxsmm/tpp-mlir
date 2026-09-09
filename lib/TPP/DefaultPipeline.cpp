@@ -101,6 +101,13 @@ llvm::cl::list<int64_t> gemmUnroll(
                    "vector.contract to register-sized shapes"),
     llvm::cl::CommaSeparated);
 
+llvm::cl::opt<unsigned> kCacheBlocking(
+    "k-cache-blocking",
+    llvm::cl::desc("Cache-block the GEMM reduction (K) dimension by this many "
+                   "batch-reduce K-blocks so the reused panel stays "
+                   "L2-resident. 0 disables."),
+    llvm::cl::init(0));
+
 namespace mlir {
 namespace tpp {
 #define GEN_PASS_DEF_DEFAULTPIPELINE
@@ -200,6 +207,7 @@ private:
         registerBlocking.begin(), registerBlocking.end()};
     tppDefaultOptions.gemmUnroll =
         SmallVector<int64_t>{gemmUnroll.begin(), gemmUnroll.end()};
+    tppDefaultOptions.kCacheBlocking = kCacheBlocking;
     tppDefaultOptions.nanoKernel = nanoKernel;
     tppDefaultOptions.defBundleCpuTargetFeature = pipelineCpuTargetFeature;
     pm.addPass(createDefaultTppPasses(tppDefaultOptions));

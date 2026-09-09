@@ -130,6 +130,28 @@ def RegisterTiling : Pass<"tile-gemm"> {
   ];
 }
 
+def NanoGemmKCacheBlocking : Pass<"nano-gemm-k-cache-blocking"> {
+  let summary = "Cache-block the K dimension of a nano-kernel (AMX) GEMM.";
+  let description = [{
+    Runs after VectorContractToNanoKernels on the already-lowered AMX/memref
+    IR. Splits the batch-reduce (K) reduction loop of each nano GEMM tile by a
+    cache-block factor and hoists the resulting outer K-block loop OUTSIDE the
+    spatial scf.forall, so a K-block panel stays L2-resident across the tile
+    sweep. The bf16 output tile C is used as the cross-block accumulator
+    (beta=1): the first K-block seeds a zero bias, later blocks add the running
+    C tile (extf) into the f32 partial before rounding back to C. A value of 0
+    disables the pass, and the tile must evenly divide the batch-reduce extent.
+  }];
+  let dependentDialects = ["scf::SCFDialect",
+                           "memref::MemRefDialect",
+                           "vector::VectorDialect",
+                           "arith::ArithDialect"];
+  let options = [
+         Option<"kCacheTile", "k-cache-tile", "unsigned", /*default=*/"0",
+                "Batch-reduce (K-block) iterations per cache block. 0 disables.">,
+  ];
+}
+
 def ConvertLinalgGenericTo32BitAccumulation : Pass<"convert-linalg-generic-to-32-bit-acc"> {
    let summary = "Convert linalg.generic op from bf16/i8 to f32/i32 accumulation.";
    let description = [{
