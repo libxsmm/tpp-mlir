@@ -116,7 +116,8 @@
 
 // Requantize i8xi8->i32 Gemm output back to i8. The i32 accumulator is
 // dequantized with the per-row input scale and per-output-channel weight scale,
-// then rescaled with the per-output-channel output scale and saturated to i8.
+// then rescaled with the reciprocal of the per-output-channel output scale and
+// saturated to i8.
 
 // I8-REQUANT: #map = affine_map<(d0, d1, d2) -> (d0, d2)>
 // I8-REQUANT: #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
@@ -140,7 +141,9 @@
 // I8-REQUANT:           ^bb0(%[[IN:.*]]: i32, %[[INS:.*]]: f32, %[[WS:.*]]: f32, %[[OS:.*]]: f32, %[[OUT:.*]]: i8):
 // I8-REQUANT:             %[[F:.*]] = arith.sitofp %[[IN]] : i32 to f32
 // I8-REQUANT:             %[[SCALE0:.*]] = arith.mulf %[[INS]], %[[WS]] : f32
-// I8-REQUANT:             %[[SCALE1:.*]] = arith.mulf %[[SCALE0]], %[[OS]] : f32
+// I8-REQUANT:             %[[ONE:.*]] = arith.constant 1.000000e+00 : f32
+// I8-REQUANT:             %[[RECIP:.*]] = arith.divf %[[ONE]], %[[OS]] : f32
+// I8-REQUANT:             %[[SCALE1:.*]] = arith.mulf %[[SCALE0]], %[[RECIP]] : f32
 // I8-REQUANT:             %[[MUL:.*]] = arith.mulf %[[F]], %[[SCALE1]] : f32
 // I8-REQUANT:             %[[MAX:.*]] = arith.maximumf %[[MUL]], %[[LOW]] : f32
 // I8-REQUANT:             %[[MIN:.*]] = arith.minimumf %[[MAX]], %[[HIGH]] : f32
@@ -171,6 +174,7 @@
 // I8-REQUANT-PACKED:           linalg.generic {indexing_maps = [#map3, #map4, #map5, #map5, #map3], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins({{.*}} : tensor<4x24x32x32xi32>, tensor<4x1x32x1xf32>, tensor<24x1x32x1xf32>, tensor<24x1x32x1xf32>) outs(%[[ARG5]] : tensor<4x24x32x32xi8>) {
 // I8-REQUANT-PACKED:             arith.sitofp
 // I8-REQUANT-PACKED:             arith.mulf
+// I8-REQUANT-PACKED:             arith.divf
 // I8-REQUANT-PACKED:             arith.mulf
 // I8-REQUANT-PACKED:             arith.mulf
 // I8-REQUANT-PACKED:             arith.maximumf
@@ -207,7 +211,9 @@
 // I8-REQUANT-I8SCALE:             %[[EWS:.*]] = arith.extf %[[WS]] : f8E8M0FNU to f32
 // I8-REQUANT-I8SCALE:             %[[EOS:.*]] = arith.extf %[[OS]] : f8E8M0FNU to f32
 // I8-REQUANT-I8SCALE:             %[[SCALE0:.*]] = arith.mulf %[[EINS]], %[[EWS]] : f32
-// I8-REQUANT-I8SCALE:             %[[SCALE1:.*]] = arith.mulf %[[SCALE0]], %[[EOS]] : f32
+// I8-REQUANT-I8SCALE:             %[[ONE:.*]] = arith.constant 1.000000e+00 : f32
+// I8-REQUANT-I8SCALE:             %[[RECIP:.*]] = arith.divf %[[ONE]], %[[EOS]] : f32
+// I8-REQUANT-I8SCALE:             %[[SCALE1:.*]] = arith.mulf %[[SCALE0]], %[[RECIP]] : f32
 // I8-REQUANT-I8SCALE:             %[[MUL:.*]] = arith.mulf %[[F]], %[[SCALE1]] : f32
 // I8-REQUANT-I8SCALE:             %[[MAX:.*]] = arith.maximumf %[[MUL]], %[[LOW]] : f32
 // I8-REQUANT-I8SCALE:             %[[MIN:.*]] = arith.minimumf %[[MAX]], %[[HIGH]] : f32
@@ -425,6 +431,7 @@
 // I8-REQUANT-I8SCALE-PACKED:             arith.extf {{.*}} f8E8M0FNU to f32
 // I8-REQUANT-I8SCALE-PACKED:             arith.extf {{.*}} f8E8M0FNU to f32
 // I8-REQUANT-I8SCALE-PACKED:             arith.mulf
+// I8-REQUANT-I8SCALE-PACKED:             arith.divf
 // I8-REQUANT-I8SCALE-PACKED:             arith.mulf
 // I8-REQUANT-I8SCALE-PACKED:             arith.mulf
 // I8-REQUANT-I8SCALE-PACKED:             arith.maximumf
