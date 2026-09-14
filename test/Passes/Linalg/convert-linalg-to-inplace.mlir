@@ -204,3 +204,214 @@ func.func @no_inplace_generic_transposed_maps(
 // CHECK:  %[[EMPTY:.+]] = tensor.empty
 // CHECK:  linalg.generic
 // CHECK-SAME: ins(%[[ARG0]] :{{.*}}) outs(%[[EMPTY]] :{{.*}})
+
+// -----
+
+// Basic out-of-place binary add: input %arg1 (single use, identity map,
+// matching type) becomes the destination.
+func.func @binary_add(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @binary_add(
+// CHECK: %[[R:.*]] = linalg.generic
+// CHECK-SAME: ins(%arg0 : tensor<8x4xf32>) outs(%arg1 : tensor<8x4xf32>)
+// CHECK: return %[[R]] : tensor<8x4xf32>
+
+// -----
+
+// Fastmath flags of the original addf are preserved.
+func.func @fastmath_preserved(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y fastmath<reassoc,afn> : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @fastmath_preserved(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%arg0 : tensor<8x4xf32>) outs(%arg1 : tensor<8x4xf32>)
+// CHECK: arith.addf {{.*}} fastmath<reassoc,afn> : f32
+
+// -----
+
+// Accumulation pattern `ins(%acc, %x) outs(%acc)`: already in-place on the
+// intended buffer, leave untouched.
+func.func @accumulation_skipped(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%arg0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @accumulation_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%[[ACC:.*]], %[[X:.*]] : tensor<8x4xf32>, tensor<8x4xf32>) outs(%[[ACC]] : tensor<8x4xf32>)
+
+// -----
+
+// Both ins operands are the same value: skip.
+func.func @same_input_skipped(%arg0: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg0 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @same_input_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%[[A:.*]], %[[A]] : tensor<8x4xf32>, tensor<8x4xf32>) outs(%{{.*}} : tensor<8x4xf32>)
+
+// -----
+
+// No identity-map input can serve as destination: skip.
+func.func @broadcast_skipped(%arg0: tensor<4xf32>, %arg1: tensor<4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d1)>,
+                       affine_map<(d0, d1) -> (d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<4xf32>, tensor<4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @broadcast_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%arg0, %arg1 : tensor<4xf32>, tensor<4xf32>) outs(%{{.*}} : tensor<8x4xf32>)
+
+// -----
+
+// Both inputs have additional uses: neither can become the destination.
+func.func @multi_use_skipped(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>) -> (tensor<8x4xf32>, tensor<8x4xf32>, tensor<8x4xf32>) {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1, %arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>, tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @multi_use_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%[[A:.*]], %[[B:.*]] : tensor<8x4xf32>, tensor<8x4xf32>) outs(%{{.*}} : tensor<8x4xf32>)
+
+// -----
+
+// More than two inputs: outside the scope of this pattern, skip.
+func.func @three_inputs_skipped(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>, %arg2: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1, %arg2 : tensor<8x4xf32>, tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %z: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @three_inputs_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%{{.*}}, %{{.*}}, %{{.*}} : tensor<8x4xf32>, tensor<8x4xf32>, tensor<8x4xf32>) outs(%{{.*}} : tensor<8x4xf32>)
+
+// -----
+
+// Init type differs from the inputs (tensor.cast): the chosen input cannot
+// match the result type, skip.
+func.func @cast_init_skipped(%arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>, %arg2: tensor<8x4xf32>) -> tensor<?x4xf32> {
+  %0 = tensor.cast %arg2 : tensor<8x4xf32> to tensor<?x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>)
+      outs(%0 : tensor<?x4xf32>) {
+    ^bb0(%x: f32, %y: f32, %o: f32):
+      %s = arith.addf %x, %y : f32
+      linalg.yield %s : f32
+  } -> tensor<?x4xf32>
+  return %1 : tensor<?x4xf32>
+}
+
+// CHECK-LABEL: func.func @cast_init_skipped(
+// CHECK: linalg.generic
+// CHECK-SAME: ins(%arg0, %arg1 : tensor<8x4xf32>, tensor<8x4xf32>) outs(%{{.*}} : tensor<?x4xf32>)
+
+// -----
+
+// Unary elementwise op: the input replaces the output.
+func.func @unary_neg(%arg0: tensor<8x4xf32>) -> tensor<8x4xf32> {
+  %0 = tensor.empty() : tensor<8x4xf32>
+  %1 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d0, d1)>,
+                       affine_map<(d0, d1) -> (d0, d1)>],
+      iterator_types = ["parallel", "parallel"]}
+      ins(%arg0 : tensor<8x4xf32>)
+      outs(%0 : tensor<8x4xf32>) {
+    ^bb0(%x: f32, %o: f32):
+      %s = arith.negf %x : f32
+      linalg.yield %s : f32
+  } -> tensor<8x4xf32>
+  return %1 : tensor<8x4xf32>
+}
+
+// CHECK-LABEL: func.func @unary_neg(
+// CHECK: linalg.generic
+// CHECK-SAME: outs(%arg0 : tensor<8x4xf32>)

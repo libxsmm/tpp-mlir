@@ -10,8 +10,10 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/STLExtras.h"
 namespace mlir {
 namespace tpp {
 #define GEN_PASS_DEF_CONVERTLINALGTOINPLACE
@@ -23,48 +25,111 @@ using namespace mlir;
 
 namespace {
 
+// An input may only replace the destination buffer if no other op consumes
+// it. Shape-only queries (tensor.dim) do not read the buffer contents and
+// remain valid after one-shot bufferization, so they are allowed.
+static bool hasOnlySafeUses(Value value, Operation *owner) {
+  return llvm::all_of(value.getUses(), [&](OpOperand &use) {
+    return use.getOwner() == owner || isa<tensor::DimOp>(use.getOwner());
+  });
+}
+
 struct ConvertAddInplace : public OpRewritePattern<linalg::GenericOp> {
   using OpRewritePattern<linalg::GenericOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(linalg::GenericOp op,
                                 PatternRewriter &rewriter) const override {
 
+    // Only rewrite ops on tensors: with buffer semantics the destination swap
+    // below would write into a buffer the surrounding IR does not expect.
+    if (!op.hasPureTensorSemantics())
+      return failure();
+
     if (op.getBody()->getOperations().size() != 2)
       return failure();
     auto addf = dyn_cast<arith::AddFOp>(&op.getBody()->getOperations().front());
     if (!addf)
       return failure();
-    if (op.getNumOperands() == 2)
+    if (op.getNumDpsInputs() != 2 || op.getNumDpsInits() != 1)
       return failure();
-    // TODO: This needs to be changed in the future to a detailed analysis that
-    // checks if the second input is not used subsequently
     if (op.getInputs()[0] == op.getInputs()[1])
       return failure();
+
+    // If the destination is already one of the inputs (e.g. the accumulation
+    // pattern `ins(%acc, %x) outs(%acc)`), the op is already in-place on the
+    // intended buffer. Leave it untouched: picking a different input as the
+    // destination would write the result into a buffer the surrounding IR
+    // does not expect (e.g. a per-iteration temporary of a loop-carried
+    // value), which one-shot bufferization then rejects.
+    //
+    // Example of the IR this guards against (loop-carried accumulation):
+    //
+    //   %accN = scf.for %i = %lb to %ub step %c1
+    //       iter_args(%acc = %acc0) -> tensor<8x4xf32> {
+    //     %x = ... : tensor<8x4xf32>  // per-iteration temporary
+    //     %new = linalg.generic
+    //         ins(%acc, %x : tensor<8x4xf32>, tensor<8x4xf32>)
+    //         outs(%acc : tensor<8x4xf32>) {
+    //       ^bb0(%a: f32, %b: f32, %out: f32):
+    //         %s = arith.addf %a, %b : f32
+    //         linalg.yield %s : f32
+    //     } -> tensor<8x4xf32>
+    //     scf.yield %new : tensor<8x4xf32>
+    //   }
+    //
+    // Without the check below, the pattern would repoint the destination to
+    // %x, yielding `ins(%acc) outs(%x)`. Then %new no longer aliases %acc's
+    // buffer, breaking the loop-carried buffer identity: one-shot
+    // bufferization cannot keep the iteration argument in place and rejects
+    // the IR (or falls back to per-iteration copies).
+    Value init = op.getDpsInits()[0];
+    if (init == op.getInputs()[0] || init == op.getInputs()[1])
+      return failure();
+
+    // For the out-of-place form `ins(%a, %b) outs(%init)`, an input may only
+    // serve as the in-place destination if:
+    //   1. its indexing map is an identity (it covers the full result shape),
+    //   2. it has no uses besides this op, so writing into it cannot corrupt
+    //      any other consumer (the uses of this op's result are repointed).
+    auto isIdentityMap = [&](unsigned idx) {
+      return op.getIndexingMapsArray()[idx] ==
+             rewriter.getMultiDimIdentityMap(
+                 op.getIndexingMapsArray()[idx].getNumDims());
+    };
+
+    Value inputs, outputs;
+    Type initType = init.getType();
+    if (isIdentityMap(1) && op.getInputs()[1].getType() == initType &&
+        hasOnlySafeUses(op.getInputs()[1], op)) {
+      inputs = op.getInputs()[0];
+      outputs = op.getInputs()[1];
+    } else if (isIdentityMap(0) && op.getInputs()[0].getType() == initType &&
+               hasOnlySafeUses(op.getInputs()[0], op)) {
+      inputs = op.getInputs()[1];
+      outputs = op.getInputs()[0];
+    } else {
+      // Neither input can safely become the destination; stay out-of-place.
+      return failure();
+    }
+
     SmallVector<AffineMap> indexingMaps;
     SmallVector<utils::IteratorType> iteratorTypes;
     for (auto iteratorTypesArray : op.getIteratorTypesArray()) {
       iteratorTypes.push_back(iteratorTypesArray);
     }
-
-    Value inputs, outputs;
-    // Check which input is marked as non-broadcastable
-    if (op.getIndexingMapsArray()[1] ==
-        rewriter.getMultiDimIdentityMap(
-            op.getIndexingMapsArray()[1].getNumDims())) {
+    if (outputs == op.getInputs()[1]) {
       indexingMaps.push_back(op.getIndexingMapsArray()[0]);
       indexingMaps.push_back(op.getIndexingMapsArray()[1]);
-      inputs = op.getInputs()[0];
-      outputs = op.getInputs()[1];
     } else {
       indexingMaps.push_back(op.getIndexingMapsArray()[1]);
       indexingMaps.push_back(op.getIndexingMapsArray()[0]);
-      inputs = op.getInputs()[1];
-      outputs = op.getInputs()[0];
     }
     rewriter.replaceOpWithNewOp<linalg::GenericOp>(
         op, op.getResultTypes(), inputs, outputs, indexingMaps, iteratorTypes,
         [&](OpBuilder &builder, Location loc, ValueRange regionArgs) {
           auto scalarOp = arith::AddFOp::create(builder, loc, regionArgs);
+          // Preserve the fastmath flags of the original addf.
+          scalarOp.setFastmath(addf.getFastmath());
           linalg::YieldOp::create(builder, loc, scalarOp.getResult());
         });
     return success();
@@ -107,14 +172,21 @@ struct EltwiseUnaryGenericToInplace
       return rewriter.notifyMatchFailure(genericOp,
                                          "expects matching indexing maps");
 
+    // The input may only replace the output buffer if no other op consumes
+    // it; otherwise the in-place write would corrupt those consumers.
+    // Shape-only queries (tensor.dim) are fine.
+    if (!hasOnlySafeUses(genericOp.getInputs()[0], genericOp))
+      return rewriter.notifyMatchFailure(genericOp,
+                                         "expects input to have no other uses");
+
     // Use the input value directly as the output.
     ValueRange outputs = genericOp.getInputs();
     SmallVector<Type> resultTypes = TypeRange(ValueRange{outputs});
     SmallVector<AffineMap> indexingMaps{maps[1]};
 
-    auto newGeneric = linalg::GenericOp::create(rewriter, 
-        genericOp.getLoc(), resultTypes, /*inputs=*/ValueRange{}, outputs,
-        indexingMaps, genericOp.getIteratorTypesArray());
+    auto newGeneric = linalg::GenericOp::create(
+        rewriter, genericOp.getLoc(), resultTypes, /*inputs=*/ValueRange{},
+        outputs, indexingMaps, genericOp.getIteratorTypesArray());
     rewriter.inlineRegionBefore(genericOp->getRegion(0), newGeneric.getRegion(),
                                 newGeneric.getRegion().begin());
 
