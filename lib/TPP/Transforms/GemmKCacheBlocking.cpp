@@ -116,10 +116,16 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
     if (ShapedType::isDynamic(brExtent) || brExtent <= 0)
       return rewriter.notifyMatchFailure(brgemmOp,
                                          "Dynamic batch-reduce extent");
-    if (kCacheBlocking >= static_cast<unsigned>(brExtent) ||
-        brExtent % static_cast<int64_t>(kCacheBlocking) != 0)
+    // When k-cache-blocking covers all (or more) K-blocks the K-loop degenerates
+    // to a single iteration; clamp to the extent so any M/N cache panel is still
+    // split into register tiles below (bailing here would leave a panelized GEMM
+    // the AMX/nano path cannot lower). A partial tail (non-divisor) is rejected.
+    unsigned effKBlock = kCacheBlocking;
+    if (static_cast<int64_t>(effKBlock) > brExtent)
+      effKBlock = static_cast<unsigned>(brExtent);
+    if (brExtent % static_cast<int64_t>(effKBlock) != 0)
       return rewriter.notifyMatchFailure(
-          brgemmOp, "K cache block must strictly divide batch-reduce extent");
+          brgemmOp, "K cache block must divide batch-reduce extent");
 
     // GEMM-centric K-cache-blocking: tile the batch-reduce (outer K) reduction
     // dimension and thread the running result through the resulting sequential
@@ -147,10 +153,6 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
     auto aType = cast<RankedTensorType>(A.getType());
     auto bTy = cast<RankedTensorType>(Bmat.getType());
 
-    Value lb = arith::ConstantIndexOp::create(rewriter, loc, 0);
-    Value ub = arith::ConstantIndexOp::create(rewriter, loc, brExtent);
-    Value step = arith::ConstantIndexOp::create(rewriter, loc, kCacheBlocking);
-
     // Slice A and B along the batch-reduce dim to a K-block starting at `iv`.
     auto sliceBR = [&](OpBuilder &b, Location l, Value iv, Value v,
                        RankedTensorType t, unsigned d) -> Value {
@@ -160,7 +162,7 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
         sz.push_back(b.getIndexAttr(t.getDimSize(i)));
       SmallVector<OpFoldResult> str(t.getRank(), b.getIndexAttr(1));
       off[d] = iv;
-      sz[d] = b.getIndexAttr(kCacheBlocking);
+      sz[d] = b.getIndexAttr(effKBlock);
       return tensor::ExtractSliceOp::create(b, l, v, off, sz, str);
     };
 
@@ -205,6 +207,13 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
       if (onA == onB)
         hasPanel = false;
     }
+
+    // Nothing to tile when the K-loop is a single block and there is no panel
+    // to split: leave the canonical single-tile GEMM for the AMX/nano path and
+    // avoid re-matching the tiled inner op.
+    if (effKBlock == static_cast<unsigned>(brExtent) && !hasPanel)
+      return rewriter.notifyMatchFailure(
+          brgemmOp, "single K-block and no panel: nothing to tile");
 
     auto isPanelPos = [&](unsigned pos) {
       return llvm::is_contained(panelIterPos, pos);
@@ -256,6 +265,10 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
       if (!isPanelPos(i))
         newIters.push_back(iteratorTypes[i]);
     Block &origBody = brgemmOp->getRegion(0).front();
+
+    Value lb = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    Value ub = arith::ConstantIndexOp::create(rewriter, loc, brExtent);
+    Value step = arith::ConstantIndexOp::create(rewriter, loc, effKBlock);
 
     // Thread the GEMM's own accumulator (its DPS init) through the loop; each
     // block accumulates onto it (beta=1, since the GEMM body computes
