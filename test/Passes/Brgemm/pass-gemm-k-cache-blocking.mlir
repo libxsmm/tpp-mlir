@@ -77,3 +77,46 @@ module {
 // DISABLED-LABEL: func.func @panel_full_kblock
 // DISABLED-NOT: scf.for
 // DISABLED: linalg.generic
+
+// -----
+
+// Two panels (both an M- and an N-cache-panel > 1) plus a preceding
+// accumulator zero-init fill. The fill must be tiled per-panel into 32x32
+// fills; left whole over the tensor<2x2x32x32xf32> panel group it vectorizes
+// into a single vector<65536xf32> splat constant that overflows the X86
+// build_vector operand limit and aborts instruction selection.
+#mapA2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
+#mapB2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>
+#mapC2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d4, d5)>
+module {
+  func.func @two_panel_fill_tiling(%A: tensor<2x16x32x16x2xbf16>, %B: tensor<2x16x16x32x2xbf16>) -> tensor<2x2x32x32xf32> {
+    %cst = arith.constant 0.000000e+00 : f32
+    %empty = tensor.empty() : tensor<2x2x32x32xf32>
+    %fill = linalg.fill ins(%cst : f32) outs(%empty : tensor<2x2x32x32xf32>) -> tensor<2x2x32x32xf32>
+    %0 = linalg.generic {indexing_maps = [#mapA2, #mapB2, #mapC2], iterator_types = ["parallel", "parallel", "reduction", "reduction", "parallel", "parallel", "reduction"]} ins(%A, %B : tensor<2x16x32x16x2xbf16>, tensor<2x16x16x32x2xbf16>) outs(%fill : tensor<2x2x32x32xf32>) {
+    ^bb0(%in: bf16, %in_0: bf16, %out: f32):
+      %1 = arith.extf %in : bf16 to f32
+      %2 = arith.extf %in_0 : bf16 to f32
+      %3 = arith.mulf %1, %2 : f32
+      %4 = arith.addf %out, %3 : f32
+      linalg.yield %4 : f32
+    } -> tensor<2x2x32x32xf32>
+    return %0 : tensor<2x2x32x32xf32>
+  }
+}
+
+// The zero-init fill is tiled per-panel into 32x32 fills (nested register-tile
+// loops), never left whole over the tensor<2x2x32x32xf32> panel group.
+// CHECK-LABEL: func.func @two_panel_fill_tiling
+// CHECK: scf.for
+// CHECK:   scf.for
+// CHECK:     tensor.extract_slice %{{.+}}[%{{.+}}, %{{.+}}, 0, 0] [1, 1, 32, 32]
+// CHECK:     linalg.fill {{.*}} outs({{.*}} : tensor<32x32xf32>)
+// CHECK:     tensor.insert_slice
+// CHECK-NOT: linalg.fill {{.*}} outs({{.*}} : tensor<2x2x32x32xf32>)
+
+// A tile size of 0 disables the pass; the fill and generic are left unchanged.
+// DISABLED-LABEL: func.func @two_panel_fill_tiling
+// DISABLED-NOT: scf.for
+// DISABLED: linalg.fill {{.*}} outs({{.*}} : tensor<2x2x32x32xf32>)
+// DISABLED: linalg.generic

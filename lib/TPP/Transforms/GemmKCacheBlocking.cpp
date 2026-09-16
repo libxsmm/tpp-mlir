@@ -266,6 +266,76 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
         newIters.push_back(iteratorTypes[i]);
     Block &origBody = brgemmOp->getRegion(0).front();
 
+    // Tile the panel-group accumulator zero-init along the same panel dims as
+    // the truncf epilogue below. Left whole the fill vectorizes into one
+    // `dense<0.0> : vector<numPanels x 32 x 32 x f32>` splat constant; once the
+    // panel is large (e.g. an 8x8 M/N panel = 65536 elements) that overflows the
+    // target's build_vector operand limit (X86 SelectionDAG SDNode) and aborts
+    // instruction selection. Tiled, each fill initializes a single 32x32 tile.
+    Value loopInit = initOperand;
+    if (hasPanel) {
+      if (auto fillOp = initOperand.getDefiningOp<linalg::FillOp>()) {
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPoint(fillOp);
+        Location fl = fillOp.getLoc();
+        Value fillVal = fillOp.getInputs()[0];
+        Value fillDst = fillOp.getDpsInitOperand(0)->get();
+
+        auto fillTileOffsets = [&](OpBuilder &b, RankedTensorType t,
+                                   ArrayRef<Value> ivs,
+                                   SmallVector<OpFoldResult> &off,
+                                   SmallVector<OpFoldResult> &sz,
+                                   SmallVector<OpFoldResult> &str) {
+          off.assign(t.getRank(), b.getIndexAttr(0));
+          sz.clear();
+          for (int64_t i = 0; i < t.getRank(); ++i)
+            sz.push_back(b.getIndexAttr(t.getDimSize(i)));
+          str.assign(t.getRank(), b.getIndexAttr(1));
+          for (unsigned p = 0; p < numPanels; ++p) {
+            off[p] = ivs[p];
+            sz[p] = b.getIndexAttr(1);
+          }
+        };
+
+        std::function<Value(OpBuilder &, Location, Value, SmallVector<Value> &)>
+            buildFill = [&](OpBuilder &nb, Location nl, Value dstCur,
+                            SmallVector<Value> &ivs) -> Value {
+          if (ivs.size() == numPanels) {
+            auto t = cast<RankedTensorType>(dstCur.getType());
+            SmallVector<OpFoldResult> off, sz, str;
+            fillTileOffsets(nb, t, ivs, off, sz, str);
+            SmallVector<int64_t> shp(t.getShape().drop_front(numPanels));
+            auto rTy = RankedTensorType::get(shp, t.getElementType());
+            Value tile =
+                tensor::ExtractSliceOp::create(nb, nl, rTy, dstCur, off, sz, str);
+            Value filled =
+                linalg::FillOp::create(nb, nl, ValueRange{fillVal},
+                                       ValueRange{tile})
+                    .getResult(0);
+            return tensor::InsertSliceOp::create(nb, nl, filled, dstCur, off, sz,
+                                                 str);
+          }
+          unsigned d = ivs.size();
+          Value pLb = arith::ConstantIndexOp::create(nb, nl, 0);
+          Value pUb = arith::ConstantIndexOp::create(nb, nl, panelExtent[d]);
+          Value pStep = arith::ConstantIndexOp::create(nb, nl, 1);
+          auto loop = scf::ForOp::create(
+              nb, nl, pLb, pUb, pStep, ValueRange{dstCur},
+              [&](OpBuilder &lb2, Location ll, Value pv, ValueRange lArgs) {
+                SmallVector<Value> ivs2(ivs);
+                ivs2.push_back(pv);
+                Value res = buildFill(lb2, ll, lArgs[0], ivs2);
+                scf::YieldOp::create(lb2, ll, res);
+              });
+          return loop.getResult(0);
+        };
+
+        SmallVector<Value> fivs;
+        loopInit = buildFill(rewriter, fl, fillDst, fivs);
+        rewriter.replaceOp(fillOp, loopInit);
+      }
+    }
+
     Value lb = arith::ConstantIndexOp::create(rewriter, loc, 0);
     Value ub = arith::ConstantIndexOp::create(rewriter, loc, brExtent);
     Value step = arith::ConstantIndexOp::create(rewriter, loc, effKBlock);
@@ -276,7 +346,7 @@ struct KCacheBlockingTiling : OpRewritePattern<BrgemmOp> {
     // the small per-tile f32/i32 tensor, kept at full precision across all
     // K-blocks. The consumer epilogue runs once, unchanged, after the loop.
     auto forOp = scf::ForOp::create(
-        rewriter, loc, lb, ub, step, ValueRange{initOperand},
+        rewriter, loc, lb, ub, step, ValueRange{loopInit},
         [&](OpBuilder &b, Location l, Value iv, ValueRange args) {
           Value acc = args[0];
           Value slicedA = sliceBR(b, l, iv, A, aType, aDim);
