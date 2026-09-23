@@ -155,3 +155,5 @@ PARLOOPER: [Harnessing Deep Learning and HPC Kernels via High-Level Loop and Ten
 TPP-MLIR: [Towards a high-performance AI compiler with upstream MLIR (2024)](https://arxiv.org/abs/2404.15204)
 
 VECTORIZER: [Library Liberation: Competitive Performance Matmul Through Compiler-composed Nanokernels](https://arxiv.org/abs/2511.13764)
+
+CACHE: [Space Filling Curves is All You Need: Communication-Avoiding Matrix Multiplication Made Simple](https://arxiv.org/abs/2601.16294)
