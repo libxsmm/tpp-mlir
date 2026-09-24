@@ -83,3 +83,12 @@ if uv_path and os.path.exists(os.path.join(lighthouse_dir, "pyproject.toml")):
             f"{uv_path} run --project {lighthouse_dir} --extra ingress_torch_cpu {import_script}",
         )
     )
+    emit_brgemm_script = os.path.join(
+        config.tpp_src_root, "tools", "pytorch", "emit_brgemm.py"
+    )
+    config.substitutions.append(
+        (
+            "emit-brgemm",
+            f"{uv_path} run --project {lighthouse_dir} --extra ingress_torch_cpu {emit_brgemm_script}",
+        )
+    )
