@@ -112,7 +112,9 @@ private:
     pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
     // Stream write-only stores (e.g. the output C matrix) with a nontemporal
     // hint. Runs after flattening so the transfer_write is already 1-D.
-    pm.addNestedPass<func::FuncOp>(createConvertToStreamingStore());
+    // Disabled by default; opt in via enable-streaming-stores.
+    if (enableStreamingStores)
+      pm.addNestedPass<func::FuncOp>(createConvertToStreamingStore());
   }
 
   // Default TPP lowering: map and pack at the linalg level, bufferize, lower to

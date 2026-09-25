@@ -52,11 +52,14 @@ def DefaultTppPasses : Pass<"default-tpp-passes", "ModuleOp"> {
     Option<"disableTileElementwiseOps", "disable-tile-elementwise-ops",
            "bool", /*default=*/"false",
            "Disables tiling of elementwise operations.">,
+    Option<"enableStreamingStores", "enable-streaming-stores",
+           "bool", /*default=*/"false",
+           "Enables converting write-only stores to nontemporal streaming "
+           "stores.">,
     ListOption<"registerBlocking", "registerBlocking",
            "unsigned", "Register blocking tile sizes for brgemm operation.">,
     ListOption<"gemmUnroll", "gemm-unroll", "int64_t",
                "GEMM unroll sizes for the innermost dims: [M, N, K]">,
-
   ];
 }
 
