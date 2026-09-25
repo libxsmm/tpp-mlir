@@ -885,16 +885,8 @@ Value MLIRGenerator::requantizeGemm(LayerArgs &args, Value chain) {
             Value scale =
                 arith::MulFOp::create(nestedBuilder, nestedLoc, inS, wS)
                     ->getResult(0);
-            // Apply the output scale after reciprocating it.
-            Value reciprocalOS =
-                arith::DivFOp::create(nestedBuilder, nestedLoc,
-                                      arith::ConstantOp::create(
-                                          nestedBuilder, nestedLoc,
-                                          builder.getFloatAttr(floatTy, 1.0)),
-                                      oS)
-                    ->getResult(0);
-            scale = arith::MulFOp::create(nestedBuilder, nestedLoc, scale,
-                                          reciprocalOS)
+            // Apply the output scale by dividing (no arith.reciprocal op).
+            scale = arith::DivFOp::create(nestedBuilder, nestedLoc, scale, oS)
                         ->getResult(0);
             Value scaled =
                 arith::MulFOp::create(nestedBuilder, nestedLoc, accF, scale)
