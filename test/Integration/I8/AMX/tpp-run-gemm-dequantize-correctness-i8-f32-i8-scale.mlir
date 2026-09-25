@@ -1,4 +1,8 @@
-// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | FileCheck %s -check-prefix=IR
+// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16 enable-streaming-stores" %s | FileCheck %s -check-prefix=IR
+
+// Streaming stores are disabled by default: the epilogue write stays a plain
+// vector.transfer_write with no nontemporal hint.
+// RUN: tpp-opt --default-tpp-passes="nano-kernel registerBlocking=32,32,64 gemm-unroll=16,16,16" %s | FileCheck %s -check-prefix=DEFAULT
 
 // RUN: tpp-run -e entry --entry-point-result=void --linalg-to-loops -print --splat-to-random --init-type quant -seed 123  %s > %t.1
 // RUN: tpp-run -e entry --entry-point-result=void -print --nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,64 --splat-to-random -seed 123 --init-type quant %s > %t.2
@@ -17,6 +21,17 @@
 // IR:   arith.sitofp
 // IR:   arith.mulf
 // IR:   vector.store {{.*}}nontemporal = true
+
+// DEFAULT: scf.for
+// DEFAULT:   vector.transfer_read
+// DEFAULT:   vector.broadcast
+// DEFAULT:   arith.extf
+// DEFAULT:   arith.mulf
+// DEFAULT:   vector.transfer_read
+// DEFAULT:   arith.sitofp
+// DEFAULT:   arith.mulf
+// DEFAULT:   vector.transfer_write
+// DEFAULT-NOT: nontemporal
 
 #map = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d2, d4, d6, d3)>
 #map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d1, d2, d6, d5, d3)>

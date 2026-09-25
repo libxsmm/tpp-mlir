@@ -88,6 +88,12 @@ llvm::cl::opt<bool> disableTileElementwiseOps(
     llvm::cl::desc("Disables tiling of elementwise operations"),
     llvm::cl::init(false));
 
+llvm::cl::opt<bool> enableStreamingStores(
+    "enable-streaming-stores",
+    llvm::cl::desc("Enables converting write-only stores to nontemporal "
+                   "streaming stores"),
+    llvm::cl::init(false));
+
 llvm::cl::list<unsigned> registerBlocking(
     "registerBlocking",
     llvm::cl::desc("Register blocking tile sizes for brgemm operation"),
@@ -196,6 +202,7 @@ private:
         lowerPackUnpackWithoutTranspose;
     tppDefaultOptions.disableVnniPacking = disableVnniPacking;
     tppDefaultOptions.disableTileElementwiseOps = disableTileElementwiseOps;
+    tppDefaultOptions.enableStreamingStores = enableStreamingStores;
     tppDefaultOptions.registerBlocking = SmallVector<unsigned>{
         registerBlocking.begin(), registerBlocking.end()};
     tppDefaultOptions.gemmUnroll =
