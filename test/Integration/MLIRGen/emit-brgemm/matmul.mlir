@@ -1,9 +1,7 @@
 // Structure (unit) tests for the PyTorch `emit_brgemm.py` generator. Each RUN
 // line invokes the generator through the Lighthouse `uv` environment (the
-// `emit-brgemm` substitution) and FileCheck verifies the emitted IR. Gated on
-// the 'lighthouse' feature (submodule + `uv` present).
-//
-// REQUIRES: lighthouse
+// `emit-brgemm` substitution) and FileCheck verifies the emitted IR. The
+// directory-level lit.local.cfg gates these on the 'lighthouse' feature.
 
 // Direct path: comp type == C type (f32), so a single linalg.contract is
 // emitted with no fill/epilogue.

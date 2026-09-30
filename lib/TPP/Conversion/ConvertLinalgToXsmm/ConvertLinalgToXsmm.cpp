@@ -1056,7 +1056,7 @@ struct ConvertVnniPacking : public OpRewritePattern<linalg::TransposeOp> {
     }
 
     memref::ExpandShapeOp expandShapeOp =
-        dyn_cast<memref::ExpandShapeOp>(source.getDefiningOp());
+        dyn_cast_or_null<memref::ExpandShapeOp>(source.getDefiningOp());
     if (!expandShapeOp || expandShapeOp.getSrcType().getRank() != 2)
       return failure();
 
