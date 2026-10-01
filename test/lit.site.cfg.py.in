@@ -32,6 +32,9 @@ config.tpp_src_root = "@CMAKE_SOURCE_DIR@"
 config.tpp_obj_root = "@CMAKE_BINARY_DIR@"
 config.use_openmp = "@USE_OpenMP@"
 config.cpuid_checker = "@CMAKE_BINARY_DIR@/bin/check-cpuid"
+# Resolved by cmake's find_program (empty when Lighthouse is disabled). Lets lit
+# find uv even when ~/.local/bin is off PATH, matching the cmake lookup.
+config.uv_executable = "@UV_EXECUTABLE@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
