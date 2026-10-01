@@ -80,7 +80,17 @@ set(LIGHTHOUSE_VENV "${LIGHTHOUSE_SOURCE_DIR}/.venv" CACHE PATH
     "Virtual environment to install Lighthouse into")
 
 # Lighthouse is installed with `uv`; it is required for this integration.
-find_program(UV_EXECUTABLE uv REQUIRED)
+# Besides PATH, also look in uv's standard install locations: the standalone
+# installer and `pip install --user` drop the binary in ~/.local/bin, the Cargo
+# install in ~/.cargo/bin, and UV_INSTALL_DIR overrides both. CI shells that
+# invoke cmake without a login profile (e.g. srun) often omit ~/.local/bin.
+find_program(UV_EXECUTABLE
+  NAMES uv
+  HINTS
+    ENV UV_INSTALL_DIR
+    "$ENV{HOME}/.local/bin"
+    "$ENV{HOME}/.cargo/bin"
+  REQUIRED)
 message(STATUS "Lighthouse: using uv (${UV_EXECUTABLE})")
 
 # `uv venv --clear` recreates the environment even if a previous run left a
