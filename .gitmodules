@@ -1,3 +1,4 @@
 [submodule "third_party/lighthouse"]
 	path = third_party/lighthouse
 	url = https://github.com/llvm/lighthouse
+	branch = main
