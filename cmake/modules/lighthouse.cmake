@@ -119,6 +119,18 @@ add_custom_command(
 
 add_custom_target(lighthouse ALL DEPENDS "${LIGHTHOUSE_VENV}/pyvenv.cfg")
 
+# Launcher placed next to the built tools so the benchmark harness (which runs
+# ${bin}/<benchmark>) can invoke the Python emit_brgemm.py generator through uv.
+# Absolute paths are baked in at configure time so it works from any cwd.
+set(EMIT_BRGEMM_PY "${PROJECT_SOURCE_DIR}/tools/pytorch/emit_brgemm.py")
+set(_emit_brgemm_wrapper "${LLVM_RUNTIME_OUTPUT_INTDIR}/emit_brgemm")
+configure_file(
+  "${PROJECT_SOURCE_DIR}/tools/pytorch/emit_brgemm.in"
+  "${_emit_brgemm_wrapper}"
+  @ONLY)
+execute_process(COMMAND chmod +x "${_emit_brgemm_wrapper}")
+message(STATUS "Lighthouse: generated benchmark launcher ${_emit_brgemm_wrapper}")
+
 # Run the Lighthouse pre-commit checks and LIT tests. precommit.sh drives
 # everything through `uv run`.
 add_custom_target(check-lighthouse

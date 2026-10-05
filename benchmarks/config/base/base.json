@@ -79,48 +79,62 @@
     }
   }},
   {
-  "mlir_gemm_bf16_vnni": {
-    "mlir_gemm_bf16_vnni_dp2_xsmm": {
+  "mlir_xgemm_bf16_vnni": {
+    "mlir_xgemm_bf16_vnni_dp2_xsmm": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32 --vnniA --vnniB" ],
       "environment": {},
       "flags": [ "-n", "100" ],
       "extensions": [ "avx2" ]
     },
-    "mlir_gemm_bf16_vnni_dp2_vector_avx512": {
+    "mlir_xgemm_bf16_vnni_dp2_nano_amx": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32 --vnniA --vnniB" ],
+      "environment": {},
+      "flags": [ "-n", "100", "-run-args='--nano-kernels --gemm-unroll=16,16,16 --registerBlocking=32,32,32'" ],
+      "extensions": [ "amx_bf16" ]
+    },
+    "mlir_xgemm_bf16_vnni_dp2_nano_avx512": {
+      "type": "IR-GEN",
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32 --vnniA --vnniB" ],
       "environment": {},
       "flags": [ "-n", "100", "-run-args='--nano-kernels --gemm-unroll=1,16,1 --registerBlocking=8,32,2'" ],
-      "extensions": [ "avx512.*" ]
+      "extensions": [ "avx512_bf16" ]
     },
-    "mlir_gemm_bf16_vnni_dp2_vector_avx2": {
+    "mlir_xgemm_bf16_vnni_dp2_nano_avx2": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=2" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32 --vnniA --vnniB" ],
       "environment": {},
       "flags": [ "-n", "100", "-run-args='--nano-kernels --gemm-unroll=1,8,1 --target-feature=avx2 --registerBlocking=2,32,2'" ],
-      "extensions": [ "avx2" ]
+      "extensions": [ "arl" ]
     }
   }},
   {
-  "mlir_gemm_bf16_splat": {
-    "mlir_gemm_bf16_splat_dp2_xsmm": {
+  "mlir_xgemm_bf16_splat": {
+    "mlir_xgemm_bf16_splat_dp2_xsmm": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=0" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32" ],
       "environment": {},
       "flags": [ "-n", "100", "-run-args='--disable-vnni-packing'" ],
       "extensions": [ "avx2" ]
     },
-    "mlir_gemm_bf16_splat_dp2_vector_avx512": {
+    "mlir_xgemm_gemm_bf16_splat_dp2_nano_amx": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=0" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32" ],
+      "environment": {},
+      "flags": [ "-n", "100", "-run-args='--disable-vnni-packing --nano-kernels --gemm-unroll=16,16,32 --registerBlocking=32,32,32'" ],
+      "extensions": [ "amx_bf16" ]
+    },
+    "mlir_xgemm_bf16_splat_dp2_nano_avx512": {
+      "type": "IR-GEN",
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32" ],
       "environment": {},
       "flags": [ "-n", "100", "-run-args='--disable-vnni-packing --nano-kernels --gemm-unroll=1,16,2 --registerBlocking=8,32,2'" ],
       "extensions": [ "avx512_bf16" ]
     },
-    "mlir_gemm_bf16_splat_dp2_vector_avx2_arl": {
+    "mlir_xgemm_bf16_splat_dp2_nano_avx2_arl": {
       "type": "IR-GEN",
-      "benchmark": [ "mlir-gen", "--kernel=const --data-type=bf16 --batch=512 --layers=1024,1024,1024,1024 --tiles=32,32,32 --vnni=0" ],
+      "benchmark": [ "emit_brgemm", "brgemm --M 64 --N 64 --K 64 --br_count 8 --aType bf16 --bType bf16 --cType bf16 --compType f32" ],
       "environment": {},
       "flags": [ "-n", "100", "-run-args='--disable-vnni-packing --nano-kernels --gemm-unroll=1,8,1 --registerBlocking=2,32,1'" ],
       "extensions": [ "arl" ]
