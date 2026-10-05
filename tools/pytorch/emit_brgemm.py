@@ -328,8 +328,8 @@ def main(argv=None):
         args.alpha, args.beta,
         args.compType,
     )
-    # Mirror mlir-gen: embed the benchmark harness directives so the tpp-mlir
-    # harness can scrape the entry point and FLOP count from the IR itself.
+    # Embed the benchmark with FLOPS count so that the tpp-mlir benchmarking
+    # infra is re-used.
     total_flops = 2 * args.br_count * args.M * args.N * args.K
     header = (
         "// RUN: tpp-run %s -n 10 \\\n"

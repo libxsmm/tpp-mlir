@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Generated into the build's bin/ directory by cmake/modules/lighthouse.cmake.
-# Thin launcher so the benchmark harness, which invokes build/bin/<benchmark>,
-# can drive the Lighthouse emit_brgemm.py generator through its uv environment.
-# Generated IR is written to stdout; uv's own logs go to stderr.
+# Generated into the build's bin/ and used as an exe for benchmarking.
 set -euo pipefail
 exec "@UV_EXECUTABLE@" run --project "@LIGHTHOUSE_SOURCE_DIR@" \
   --extra ingress_torch_cpu "@EMIT_BRGEMM_PY@" "$@"

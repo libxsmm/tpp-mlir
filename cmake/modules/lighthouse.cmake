@@ -32,15 +32,8 @@ endif()
 
 set(LIGHTHOUSE_SOURCE_DIR "${PROJECT_SOURCE_DIR}/third_party/lighthouse")
 
-option(LIGHTHOUSE_TRACK_REMOTE
-       "Update the Lighthouse submodule to the tip of its tracked branch (see \
-.gitmodules) at configure time instead of the committed revision. This keeps the \
-MLIR-bindings nightly wheels current with the upstream rolling feed so the pin \
-never ages out; turn OFF to build the exact committed submodule revision." ON)
+option(LIGHTHOUSE_TRACK_REMOTE ON)
 
-# Auto-checkout (and, when tracking is enabled, auto-advance) the submodule so
-# users need not run git manually. Only attempt this inside a git work tree; a
-# source tarball ships the sources directly.
 set(_lighthouse_need_checkout FALSE)
 if(NOT EXISTS "${LIGHTHOUSE_SOURCE_DIR}/pyproject.toml")
   set(_lighthouse_need_checkout TRUE)
