@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # Generated into the build's bin/ and used as an exe for benchmarking.
 set -euo pipefail
-exec "@UV_EXECUTABLE@" run --project "@LIGHTHOUSE_SOURCE_DIR@" \
-  --extra ingress_torch_cpu "@EMIT_BRGEMM_PY@" "$@"
+exec "@UV_EXECUTABLE@" run --no-sync --project "@LIGHTHOUSE_SOURCE_DIR@" \
+  "@EMIT_BRGEMM_PY@" "$@"
