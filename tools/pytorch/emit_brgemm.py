@@ -100,8 +100,12 @@ _VNNI_FACTOR = {
     "arm": {"bf16": 4},
 }
 
-# ARM only supports f32 and bf16 element types.
-_ARM_TYPES = {"f32", "bf16"}
+# Element types supported per architecture. x86 supports all declared A/B/C
+# types; ARM is restricted to f32/bf16.
+_SUPPORTED_TYPES = {
+    "x86": set(_AB_TYPES) | set(_C_TYPES),
+    "arm": {"f32", "bf16"},
+}
 
 
 def _detect_arch():
@@ -131,12 +135,12 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
         raise ValueError(
             f"unsupported C type {c_name}; allowed: {', '.join(_C_TYPES)}")
     arch = _detect_arch()
-    if arch == "arm":
-        bad = {t for t in (a_name, b_name, c_name) if t not in _ARM_TYPES}
-        if bad:
-            raise ValueError(
-                f"ARM only supports {', '.join(sorted(_ARM_TYPES))} types, "
-                f"got: {', '.join(sorted(bad))}")
+    allowed = _SUPPORTED_TYPES[arch]
+    bad = {t for t in (a_name, b_name, c_name) if t not in allowed}
+    if bad:
+        raise ValueError(
+            f"{arch.upper()} only supports {', '.join(sorted(allowed))} types, "
+            f"got: {', '.join(sorted(bad))}")
     if vnni_a and not vnni_b:
         raise ValueError("VNNI must be enabled for B, if it is enabled for B")
 
