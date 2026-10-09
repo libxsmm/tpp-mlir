@@ -46,6 +46,7 @@ Run inside the lighthouse uv env, e.g.:
 """
 
 import argparse
+import platform
 
 from mlir import ir
 from mlir.dialects import func, linalg, tensor, arith
@@ -91,8 +92,26 @@ def _acc_name(c_name):
     return c_name
 
 
-# VNNI reduction-packing factor per element type (f32/f64/i64 have no VNNI).
-_VNNI_FACTOR = {"bf16": 2, "f16": 2, "i16": 2, "i8": 4, "bf8": 4, "hf8": 4}
+# VNNI reduction-packing factor per architecture and element type (types absent
+# from an arch's table have no VNNI layout, e.g. f32/f64/i64). x86 packs bf16 in
+# blocks of 2 (AVX512-BF16); ARM uses 4 (BFMMLA). 
+_VNNI_FACTOR = {
+    "x86": {"bf16": 2, "f16": 2, "i16": 2, "i8": 4, "bf8": 4, "hf8": 4},
+    "arm": {"bf16": 4},
+}
+
+# Element types supported per architecture. x86 supports all declared A/B/C
+# types; ARM is restricted to f32/bf16.
+_SUPPORTED_TYPES = {
+    "x86": set(_AB_TYPES) | set(_C_TYPES),
+    "arm": {"f32", "bf16"},
+}
+
+
+def _detect_arch():
+    # platform.machine() -> x86_64/AMD64 on x86, aarch64/arm64 on ARM.
+    m = platform.machine().lower()
+    return "arm" if ("arm" in m or "aarch64" in m) else "x86"
 
 # Element bit widths (resolved names), used to pick ext vs trunc when converting
 # between the computation type and C.
@@ -115,6 +134,13 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
     if c_name not in _C_TYPES:
         raise ValueError(
             f"unsupported C type {c_name}; allowed: {', '.join(_C_TYPES)}")
+    arch = _detect_arch()
+    allowed = _SUPPORTED_TYPES[arch]
+    bad = {t for t in (a_name, b_name, c_name) if t not in allowed}
+    if bad:
+        raise ValueError(
+            f"{arch.upper()} only supports {', '.join(sorted(allowed))} types, "
+            f"got: {', '.join(sorted(bad))}")
     if vnni_a and not vnni_b:
         raise ValueError("VNNI must be enabled for B, if it is enabled for B")
 
@@ -126,9 +152,9 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
         raise ValueError("VNNI expand of A is not supported with --transA")
     if vnni and trans_b:
         raise ValueError("VNNI does not support transposing B (only A may be transposed)")
-    if vnni and a_name not in _VNNI_FACTOR:
+    if vnni and a_name not in _VNNI_FACTOR[arch]:
         raise ValueError(f"no VNNI layout for element type {a_name}")
-    vf = _VNNI_FACTOR[a_name] if vnni else 1
+    vf = _VNNI_FACTOR[arch][a_name] if vnni else 1
     if vnni and k % vf != 0:
         raise ValueError(f"K={k} not divisible by the VNNI factor {vf}")
     kp = k // vf
