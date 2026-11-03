@@ -124,3 +124,88 @@
 // VNNI + transposing B is rejected: only A may be transposed under VNNI.
 // RUN: not emit-brgemm brgemm --M 8 --N 8 --K 8 --aType bf16 --bType bf16 --cType bf16 --vnniA --vnniB --transB 2>&1 | FileCheck %s --check-prefix=VNNI-ERR
 // VNNI-ERR: VNNI does not support transposing B (only A may be transposed)
+
+// Scalar block-scaled i8 GEMM with f32 scales and f32 C: accumulate in i32,
+// then a generic epilogue applies the per-M (sA) and per-N (sB) scale vectors
+// to the dequantized accumulator before adding C.
+// RUN: emit-brgemm brgemm --M 8 --N 8 --K 8 --scale-kind scalar --aType i8 --bType i8 --cType f32 --compType i32 --scaleType f32 2>&1 | FileCheck %s --check-prefix=SCALAR-F32
+// SCALAR-F32-DAG: #[[$MC:.+]] = affine_map<(d0, d1) -> (d0, d1)>
+// SCALAR-F32-DAG: #[[$MSA:.+]] = affine_map<(d0, d1) -> (d0)>
+// SCALAR-F32-DAG: #[[$MSB:.+]] = affine_map<(d0, d1) -> (d1)>
+// SCALAR-F32-LABEL: func.func @entry(
+// SCALAR-F32-SAME: %[[A:.+]]: tensor<1x8x8xi8>, %[[SA:.+]]: tensor<8xf32>, %[[B:.+]]: tensor<1x8x8xi8>, %[[SB:.+]]: tensor<8xf32>, %[[C:.+]]: tensor<8x8xf32>) -> tensor<8x8xf32>
+// SCALAR-F32: %[[Z:.+]] = arith.constant 0 : i32
+// SCALAR-F32: linalg.fill ins(%[[Z]] : i32) {{.*}} -> tensor<8x8xi32>
+// SCALAR-F32: %[[ACC:.+]] = linalg.contract {{.*}} ins(%[[A]], %[[B]] : tensor<1x8x8xi8>, tensor<1x8x8xi8>) {{.*}} -> tensor<8x8xi32>
+// SCALAR-F32: linalg.generic {{.*}} ins(%[[ACC]], %[[SA]], %[[SB]] : tensor<8x8xi32>, tensor<8xf32>, tensor<8xf32>) outs(%[[C]] : tensor<8x8xf32>)
+// SCALAR-F32: ^bb0(%[[IN:.+]]: i32, %[[ISA:.+]]: f32, %[[ISB:.+]]: f32, %[[OUT:.+]]: f32):
+// SCALAR-F32: %[[FP:.+]] = arith.sitofp %[[IN]] : i32 to f32
+// SCALAR-F32: %[[SS:.+]] = arith.mulf %[[ISA]], %[[ISB]] : f32
+// SCALAR-F32: %[[DQ:.+]] = arith.mulf %[[FP]], %[[SS]] : f32
+// SCALAR-F32: arith.addf %[[DQ]], %[[OUT]] : f32
+
+// Scalar block-scaled i8 GEMM with f8E8M0FNU scales and quantized i8 C: the
+// epilogue dequantizes with sA*sB, requantizes by dividing by the output scale
+// sC, clamps to [-128, 127], and converts back to i8.
+// RUN: emit-brgemm brgemm --M 8 --N 8 --K 8 --scale-kind scalar --aType i8 --bType i8 --cType i8 --compType i32 --scaleType f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=SCALAR-QUANT
+// SCALAR-QUANT-LABEL: func.func @entry(
+// SCALAR-QUANT-SAME: %[[A:.+]]: tensor<1x8x8xi8>, %[[SA:.+]]: tensor<8xf8E8M0FNU>, %[[B:.+]]: tensor<1x8x8xi8>, %[[SB:.+]]: tensor<8xf8E8M0FNU>, %[[SC:.+]]: tensor<8xf8E8M0FNU>, %[[C:.+]]: tensor<8x8xi8>) -> tensor<8x8xi8>
+// SCALAR-QUANT: %[[ACC:.+]] = linalg.contract {{.*}} -> tensor<8x8xi32>
+// SCALAR-QUANT: linalg.generic {{.*}} ins(%[[ACC]], %[[SA]], %[[SB]], %[[SC]] : tensor<8x8xi32>, tensor<8xf8E8M0FNU>, tensor<8xf8E8M0FNU>, tensor<8xf8E8M0FNU>) outs(%[[C]] : tensor<8x8xi8>)
+// SCALAR-QUANT: ^bb0(%[[IN:.+]]: i32, %[[ISA:.+]]: f8E8M0FNU, %[[ISB:.+]]: f8E8M0FNU, %[[ISC:.+]]: f8E8M0FNU, %[[OUT:.+]]: i8):
+// SCALAR-QUANT: arith.sitofp %[[IN]] : i32 to f32
+// SCALAR-QUANT: arith.extf %[[ISA]] : f8E8M0FNU to f32
+// SCALAR-QUANT: arith.extf %[[ISB]] : f8E8M0FNU to f32
+// SCALAR-QUANT: arith.extf %[[ISC]] : f8E8M0FNU to f32
+// SCALAR-QUANT: %[[DIV:.+]] = arith.divf {{.*}} : f32
+// SCALAR-QUANT: %[[LO:.+]] = arith.constant -1.280000e+02 : f32
+// SCALAR-QUANT: %[[HI:.+]] = arith.constant 1.270000e+02 : f32
+// SCALAR-QUANT: %[[CLO:.+]] = arith.maximumf {{.*}}, %[[LO]] : f32
+// SCALAR-QUANT: %[[CHI:.+]] = arith.minimumf %[[CLO]], %[[HI]] : f32
+// SCALAR-QUANT: %[[Q:.+]] = arith.fptosi %[[CHI]] : f32 to i8
+// SCALAR-QUANT: linalg.yield %[[Q]] : i8
+
+// MX block-scaled MXINT8 GEMM via linalg.scaled_contract: A/B are VNNI-packed
+// (K split into K/vf x vf) with A transposed; the per-block f8E8M0FNU scales are
+// indexed with `floordiv` (block/vf groups). i8 accumulates in f32, then an
+// epilogue applies the 2^-12 integer bias before adding C.
+// RUN: emit-brgemm brgemm --M 128 --N 64 --K 64 --scale-kind mx --aType i8 --bType i8 --cType f32 --compType f32 --scaleType f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MX-I8
+// MX-I8-DAG: #[[$MA:.+]] = affine_map<(d0, d1, d2, d3, d4) -> (d0, d3, d1, d4)>
+// MX-I8-DAG: #[[$MSA:.+]] = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d3 floordiv 8)>
+// MX-I8-DAG: #[[$MB:.+]] = affine_map<(d0, d1, d2, d3, d4) -> (d0, d3, d2, d4)>
+// MX-I8-DAG: #[[$MSB:.+]] = affine_map<(d0, d1, d2, d3, d4) -> (d0, d2, d3 floordiv 8)>
+// MX-I8-DAG: #[[$MC:.+]] = affine_map<(d0, d1, d2, d3, d4) -> (d1, d2)>
+// MX-I8-LABEL: func.func @entry(
+// MX-I8-SAME: %[[A:.+]]: tensor<1x16x128x4xi8>, %[[SA:.+]]: tensor<1x128x2xf8E8M0FNU>, %[[B:.+]]: tensor<1x16x64x4xi8>, %[[SB:.+]]: tensor<1x64x2xf8E8M0FNU>, %[[C:.+]]: tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-I8: linalg.fill {{.*}} -> tensor<128x64xf32>
+// MX-I8: %[[ACC:.+]] = linalg.scaled_contract indexing_maps = [#[[$MA]], #[[$MSA]], #[[$MB]], #[[$MSB]], #[[$MC]]] {cast = #linalg.type_fn<cast_signed>} ins(%[[A]], %[[SA]], %[[B]], %[[SB]] : tensor<1x16x128x4xi8>, tensor<1x128x2xf8E8M0FNU>, tensor<1x16x64x4xi8>, tensor<1x64x2xf8E8M0FNU>) outs({{.*}} : tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-I8: linalg.generic {{.*}} ins(%[[ACC]], %[[C]] : tensor<128x64xf32>, tensor<128x64xf32>) outs(%[[C]] : tensor<128x64xf32>)
+// MX-I8: %[[BIAS:.+]] = arith.constant 2.44140625E-4 : f32
+// MX-I8: %[[MB:.+]] = arith.mulf {{.*}}, %[[BIAS]] : f32
+// MX-I8: arith.addf %[[MB]], {{.*}} : f32
+
+// MX block-scaled MXBF8 GEMM: bf8 (f8E5M2) inputs contract straight into f32 C
+// with no bias epilogue (floating-point path).
+// RUN: emit-brgemm brgemm --M 128 --N 64 --K 64 --scale-kind mx --aType bf8 --bType bf8 --cType f32 --compType f32 --scaleType f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MX-BF8
+// MX-BF8-NOT: bf8
+// MX-BF8-LABEL: func.func @entry(
+// MX-BF8-SAME: %[[A:.+]]: tensor<1x16x128x4xf8E5M2>, %[[SA:.+]]: tensor<1x128x2xf8E8M0FNU>, %[[B:.+]]: tensor<1x16x64x4xf8E5M2>, %[[SB:.+]]: tensor<1x64x2xf8E8M0FNU>, %[[C:.+]]: tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-BF8: %[[R:.+]] = linalg.scaled_contract {{.*}} ins(%[[A]], %[[SA]], %[[B]], %[[SB]] : tensor<1x16x128x4xf8E5M2>, tensor<1x128x2xf8E8M0FNU>, tensor<1x16x64x4xf8E5M2>, tensor<1x64x2xf8E8M0FNU>) outs(%[[C]] : tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-BF8-NOT: linalg.generic
+// MX-BF8: return %[[R]] : tensor<128x64xf32>
+
+// MX block-scaled MXHF8 GEMM: hf8 (f8E4M3FN) inputs, same floating-point path.
+// RUN: emit-brgemm brgemm --M 128 --N 64 --K 64 --scale-kind mx --aType hf8 --bType hf8 --cType f32 --compType f32 --scaleType f8E8M0FNU 2>&1 | FileCheck %s --check-prefix=MX-HF8
+// MX-HF8-NOT: hf8
+// MX-HF8-LABEL: func.func @entry(
+// MX-HF8-SAME: %[[A:.+]]: tensor<1x16x128x4xf8E4M3FN>, %[[SA:.+]]: tensor<1x128x2xf8E8M0FNU>, %[[B:.+]]: tensor<1x16x64x4xf8E4M3FN>, %[[SB:.+]]: tensor<1x64x2xf8E8M0FNU>, %[[C:.+]]: tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-HF8: %[[R:.+]] = linalg.scaled_contract {{.*}} ins(%[[A]], %[[SA]], %[[B]], %[[SB]] : tensor<1x16x128x4xf8E4M3FN>, tensor<1x128x2xf8E8M0FNU>, tensor<1x16x64x4xf8E4M3FN>, tensor<1x64x2xf8E8M0FNU>) outs(%[[C]] : tensor<128x64xf32>) -> tensor<128x64xf32>
+// MX-HF8: return %[[R]] : tensor<128x64xf32>
+
+// Scalar scale rejects a C type other than f32/i8.
+// RUN: not emit-brgemm brgemm --M 8 --N 8 --K 8 --scale-kind scalar --aType i8 --bType i8 --cType bf16 --compType i32 --scaleType f32 2>&1 | FileCheck %s --check-prefix=SCALAR-ERR
+// SCALAR-ERR: --scale-kind scalar expects --cType f32 or i8
+
+// MX scale requires the f8E8M0FNU scale type.
+// RUN: not emit-brgemm brgemm --M 8 --N 8 --K 8 --scale-kind mx --aType i8 --bType i8 --cType f32 --compType f32 --scaleType f32 2>&1 | FileCheck %s --check-prefix=MX-ERR
+// MX-ERR: --scale-kind mx requires --scaleType f8E8M0FNU

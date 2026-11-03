@@ -61,31 +61,28 @@ from lighthouse.ingress.mlir_gen.utils import affine_map, get_mlir_elem_type
 _ALIASES = {"bf8": "f8E5M2", "hf8": "f8E4M3FN"}
 # Supported user-facing element types for the A/B operands and the C output.
 _AB_TYPES = ("f64", "i64", "f32", "f16", "bf16", "i16", "bf8", "hf8", "i8")
-# Extra A/B operand types only valid with --scale-kind mx (ui8 = MX unsigned
-# int8); kept out of _AB_TYPES so the plain contract path still rejects them.
-_AB_ARG_TYPES = _AB_TYPES + ("ui8",)
 
 # --- MX microscaling (linalg.scaled_contract) ---------------------------------
 # Block size: one shared E8M0 (f8E8M0FNU) scale per this many K elements.
 _MX_BLOCK = 32
-# MXINT8/MXUINT8 elements carry an implicit 2^-6 per-element exponent bias, so a
+# MXINT8 elements carry an implicit 2^-6 per-element exponent bias, so a
 # product of two terms accumulates 2^-12 = 1/4096 (matches libxsmm MXINT8 ref).
 _MX_INT_BIAS = 1.0 / 4096.0
 # User A/B type -> (MLIR element type name, cast TypeFn). Signedness of integer
 # operands is carried by the scaled_contract `cast` attr (element stays i8).
-# Mixed-type variants (e.g. MXINT8 x MXUINT8) are intentionally unsupported.
 _MX_TYPES = {
     "i8": ("i8", "cast_signed"),         # MXINT8
-    "ui8": ("i8", "cast_unsigned"),      # MXUINT8
     "bf8": ("f8E5M2", "cast_signed"),    # MXBF8
     "hf8": ("f8E4M3FN", "cast_signed"),  # MXHF8
 }
-# C output types for the MX path: the f32 accumulator, or a narrower float that
-# is produced via an extf/addf/truncf epilogue (bitwidth <= f32).
-_MX_C_TYPES = ("f32", "bf16", "f16", "bf8", "hf8")
+# A/B operand types accepted by --scale-kind mx (MXINT8/MXBF8/MXHF8).
+_MX_AB_TYPES = ("i8", "bf8", "hf8")
 _C_TYPES = ("i64", "i32", "i16", "i8", "bf8", "hf8", "bf16", "f16", "f32", "f64")
 # Computation (accumulator) types selectable via --compType.
 _COMP_TYPES = ("i32", "i64", "f32", "f64")
+# Scale element types accepted on the CLI; --scale-kind scalar narrows these to
+# f32 or f8E8M0FNU and throws for any other scale type.
+_SCALE_TYPES = ("f32", "f8E8M0FNU", "f16", "bf16", "bf8", "hf8")
 
 # C types narrower than the f32/i32 accumulator: emitted via the down-convert
 # epilogue. F16/BF16/BF8/HF8 accumulate in f32 then truncf; I16/I8 accumulate
@@ -141,6 +138,14 @@ _BITS = {"f8E5M2": 8, "f8E4M3FN": 8, "f16": 16, "bf16": 16, "f32": 32,
          "f64": 64, "i8": 8, "i16": 16, "i32": 32, "i64": 64}
 
 
+def _dlti_unroll_attr(vtm, vtn, vtk):
+    # reg_gemm_unroll hint consumed by the tpp-mlir register-unroll pass.
+    return ir.Attribute.parse(
+        f'#dlti.target_system_spec<"CPU" = '
+        f'#dlti.target_device_spec<"reg_gemm_unroll" = [{vtm}, {vtn}, {vtk}]>>'
+    )
+
+
 def build_contract(m, n, k, br_count, a_name, b_name, c_name,
                    vtm, vtn, vtk,
                    trans_a=False, trans_b=False, vnni_a=False, vnni_b=False,
@@ -164,7 +169,7 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
             f"{arch.upper()} only supports {', '.join(sorted(allowed))} types, "
             f"got: {', '.join(sorted(bad))}")
     if vnni_a and not vnni_b:
-        raise ValueError("VNNI must be enabled for B, if it is enabled for B")
+        raise ValueError("VNNI must be enabled for B if it is enabled for A")
 
     # vnni_b only: A's argument stays non-VNNI and is expanded into VNNI before
     # the contract via tensor.expand_shape.
@@ -246,11 +251,7 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
             affine_map(ndims, [d[1], d[2]]),  # C: M, N
         ]
    
-        # dlti attribute creation. Used by unroll pass to unroll contract operation.
-        dlti_attr = ir.Attribute.parse(
-            f'#dlti.target_system_spec<"CPU" = '
-            f'#dlti.target_device_spec<"reg_gemm_unroll" = [{vtm}, {vtn}, {vtk}]>>'
-        )
+        dlti_attr = _dlti_unroll_attr(vtm, vtn, vtk)
         scaled = alpha != 1.0 or beta != 1.0
         direct = (comp_res == c_res) and not scaled
 
@@ -326,16 +327,9 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
         return module
 
 
-def _dlti_unroll_attr(vtm, vtn, vtk):
-    return ir.Attribute.parse(
-        f'#dlti.target_system_spec<"CPU" = '
-        f'#dlti.target_device_spec<"reg_gemm_unroll" = [{vtm}, {vtn}, {vtk}]>>'
-    )
-
-
 def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
-                        vtm, vtn, vtk, vnni_a=False, vnni_b=False,
-                        fn_name="entry"):
+                        comp_name, vtm, vtn, vtk, vnni_a=False, vnni_b=False,
+                        trans_a=False, trans_b=False, fn_name="entry"):
     """Integer GEMM with per-dimension (per-row/per-column) scale vectors.
 
     A (i8) * B (i8) accumulates in i32; an epilogue applies a per-M scale
@@ -357,15 +351,17 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
     """
     if br_count < 1:
         raise ValueError(f"br_count must be >= 1, got {br_count}")
-    if not (_is_int(a_name) and _is_int(b_name)):
-        raise ValueError("--scale-kind scalar expects integer A/B operands")
-    if a_name not in _AB_TYPES or b_name not in _AB_TYPES:
-        raise ValueError("--scale-kind scalar does not support MX-only types")
+    if a_name != "i8" or b_name != "i8":
+        raise ValueError("--scale-kind scalar requires --aType i8 and --bType i8")
+    if comp_name not in (None, "i32"):
+        raise ValueError("--scale-kind scalar requires --compType i32")
     if scale_name not in ("f32", "f8E8M0FNU"):
         raise ValueError(
             "--scaleType must be f32 or f8E8M0FNU for --scale-kind scalar")
     if c_name not in ("f32", "i8"):
         raise ValueError("--scale-kind scalar expects --cType f32 or i8")
+    if trans_a or trans_b:
+        raise ValueError("--scale-kind scalar does not support transpose")
     # Quantized output: emit a per-N output scale sC, clamp and convert to i8.
     quant = c_name == "i8"
 
@@ -498,36 +494,46 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
         return module
 
 
-def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, block,
-                    vtm, vtn, vtk, fn_name="entry"):
+def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
+                    comp_name, block, vtm, vtn, vtk, fn_name="entry"):
     """MX block-scaled GEMM via ``linalg.scaled_contract``: A and B carry one
     E8M0 (f8E8M0FNU) scale per ``block`` K elements. Integer operands
-    (MXINT8/MXUINT8) additionally apply the implicit 2^-12 exponent bias.
-    The contraction accumulates in f32; when C is a narrower float the epilogue
-    adds C and down-converts (extf + addf + truncf, like the bf16 path).
+    (MXINT8) additionally apply the implicit 2^-12 exponent bias.
+    A is transposed and VNNI-packed (batch, K/vf, M, vf) and B is VNNI-packed
+    (batch, K/vf, N, vf). The contraction accumulates in f32 and C is f32.
     Mixed A/B types are not supported."""
     if br_count < 1:
         raise ValueError(f"br_count must be >= 1, got {br_count}")
+    if scale_name != "f8E8M0FNU":
+        raise ValueError("--scale-kind mx requires --scaleType f8E8M0FNU")
+    if a_name not in _MX_AB_TYPES or b_name not in _MX_AB_TYPES:
+        raise ValueError(
+            f"--scale-kind mx requires A/B types in {_MX_AB_TYPES}, "
+            f"got {a_name}/{b_name}")
     if a_name != b_name:
         raise ValueError(
             "--scale-kind mx requires matching A/B types; mixed types "
-            "(e.g. MXINT8 x MXUINT8) are not supported")
-    if a_name not in _MX_TYPES:
-        raise ValueError(
-            f"--scale-kind mx supports A/B types {', '.join(_MX_TYPES)}, "
-            f"got {a_name}")
-    if c_name not in _MX_C_TYPES:
-        raise ValueError(
-            f"--scale-kind mx supports C types {', '.join(_MX_C_TYPES)}, "
-            f"got {c_name}")
+            "are not supported")
+    if c_name != "f32":
+        raise ValueError("--scale-kind mx requires --cType f32")
+    if comp_name not in (None, "f32"):
+        raise ValueError("--scale-kind mx requires --compType f32")
     if k % block != 0:
         raise ValueError(f"K={k} must be divisible by the MX block size {block}")
 
+    arch = _detect_arch()
+    if a_name not in _VNNI_FACTOR[arch]:
+        raise ValueError(f"no VNNI layout for MX type {a_name} on {arch}")
+    vf = _VNNI_FACTOR[arch][a_name]
+    if block % vf != 0:
+        raise ValueError(
+            f"MX block size {block} must be divisible by the VNNI factor {vf}")
+
     elem_name, cast_fn = _MX_TYPES[a_name]
     is_int = _is_int(elem_name)
-    c_res = _ALIASES.get(c_name, c_name)
-    narrow_c = c_res != "f32"
-    kb = k // block
+    kb = k // block     # number of E8M0 scale blocks along K
+    kp = k // vf        # VNNI-packed (outer) K extent
+    bpv = block // vf   # VNNI groups sharing one scale block
 
     with ir.Context(), ir.Location.unknown():
         module = ir.Module.create()
@@ -536,25 +542,27 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, block,
         tf32 = _get_type("f32")
         tc = _get_type(c_name)
 
-        a_ty = ir.RankedTensorType.get([br_count, m, k], telem)
+        # A is transposed + VNNI-packed (batch, K/vf, M, vf); B is VNNI-packed
+        # (batch, K/vf, N, vf). Scales carry one E8M0 per `block` K elements.
+        a_ty = ir.RankedTensorType.get([br_count, kp, m, vf], telem)
+        b_ty = ir.RankedTensorType.get([br_count, kp, n, vf], telem)
         sa_ty = ir.RankedTensorType.get([br_count, m, kb], tscale)
-        b_ty = ir.RankedTensorType.get([br_count, n, k], telem)
         sb_ty = ir.RankedTensorType.get([br_count, n, kb], tscale)
-        # scaled_contract accumulates in f32; C may be a narrower float.
-        acc_ty = ir.RankedTensorType.get([m, n], tf32)
+        # scaled_contract accumulates in f32 (C is f32).
         c_ty = ir.RankedTensorType.get([m, n], tc)
 
-        # Contraction dims: d0=batch, d1=M, d2=N, d3=K (batch + K reduced); each
-        # scale maps K to the block index (K floordiv block).
-        d = [ir.AffineDimExpr.get(i) for i in range(4)]
-        kfloor = ir.AffineFloorDivExpr.get(
-            d[3], ir.AffineConstantExpr.get(block))
+        # Iteration dims: d0=batch, d1=M, d2=N, d3=K/vf, d4=vf (batch, K/vf and
+        # vf reduced). A scale block spans bpv=block/vf consecutive d3 groups, so
+        # the scale block index is d3 floordiv bpv.
+        d = [ir.AffineDimExpr.get(i) for i in range(5)]
+        blkidx = ir.AffineFloorDivExpr.get(
+            d[3], ir.AffineConstantExpr.get(bpv))
         maps = ir.ArrayAttr.get([
-            ir.AffineMapAttr.get(affine_map(4, [d[0], d[1], d[3]])),    # A
-            ir.AffineMapAttr.get(affine_map(4, [d[0], d[1], kfloor])),  # scale_A
-            ir.AffineMapAttr.get(affine_map(4, [d[0], d[2], d[3]])),    # B
-            ir.AffineMapAttr.get(affine_map(4, [d[0], d[2], kfloor])),  # scale_B
-            ir.AffineMapAttr.get(affine_map(4, [d[1], d[2]])),          # C
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[3], d[1], d[4]])),  # A
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[1], blkidx])),      # sA
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[3], d[2], d[4]])),  # B
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[2], blkidx])),      # sB
+            ir.AffineMapAttr.get(affine_map(5, [d[1], d[2]])),             # C
         ])
         cast = ir.Attribute.parse(f"#linalg.type_fn<{cast_fn}>")
         dlti_attr = _dlti_unroll_attr(vtm, vtn, vtk)
@@ -568,8 +576,8 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, block,
             with ir.InsertionPoint(entry):
                 A, SA, B, SB, C = entry.arguments
 
-                # FP8 with C == f32 accumulator: contract straight into C.
-                if not is_int and not narrow_c:
+                # FP8: contract straight into the f32 C.
+                if not is_int:
                     op = linalg.ScaledContractOp(
                         result_tensors=[c_ty], inputs=[A, SA, B, SB],
                         outputs=[C], indexing_maps=maps, cast=cast)
@@ -577,13 +585,13 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, block,
                     func.ReturnOp([op.results[0]])
                     return module
 
-                # Otherwise accumulate into an f32 temp, then an epilogue applies
-                # the int 2^-12 bias (if any), adds C and down-converts to C.
+                # MXINT8: accumulate into an f32 temp, then an epilogue applies
+                # the implicit 2^-12 bias and adds C.
                 zero = arith.ConstantOp(tf32, ir.FloatAttr.get(tf32, 0.0))
                 tmp = tensor.EmptyOp([m, n], tf32)
                 init = linalg.fill(zero, outs=[tmp])
                 op = linalg.ScaledContractOp(
-                    result_tensors=[acc_ty], inputs=[A, SA, B, SB],
+                    result_tensors=[c_ty], inputs=[A, SA, B, SB],
                     outputs=[init], indexing_maps=maps, cast=cast)
                 linalg.fill_builtin_region(op.operation)
                 acc = op.results[0]
@@ -594,20 +602,14 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, block,
                 par = ir.Attribute.parse("#linalg.iterator_type<parallel>")
                 iters = ir.ArrayAttr.get([par, par])
                 g = linalg.GenericOp([c_ty], [acc, C], [C], emaps, iters)
-                blk = g.regions[0].blocks.append(tf32, tc, tc)
+                blk = g.regions[0].blocks.append(tf32, tf32, tf32)
                 with ir.InsertionPoint(blk):
                     acc_in, c_in, _out = blk.arguments
-                    a_term = acc_in
-                    if is_int:
-                        bias = arith.ConstantOp(
-                            tf32, ir.FloatAttr.get(tf32, _MX_INT_BIAS))
-                        a_term = arith.MulFOp(acc_in, bias).result
-                    c_val = (arith.ExtFOp(tf32, c_in).result
-                             if narrow_c else c_in)  # C -> f32
-                    summed = arith.AddFOp(a_term, c_val).result
-                    out_val = (arith.TruncFOp(tc, summed).result
-                               if narrow_c else summed)  # f32 -> C
-                    linalg.YieldOp([out_val])
+                    bias = arith.ConstantOp(
+                        tf32, ir.FloatAttr.get(tf32, _MX_INT_BIAS))
+                    biased = arith.MulFOp(acc_in, bias).result
+                    summed = arith.AddFOp(biased, c_in).result
+                    linalg.YieldOp([summed])
                 func.ReturnOp([g.results[0]])
         return module
 
@@ -622,8 +624,8 @@ def _add_matmul_args(p):
                    help="N register-blocking hint for the reg_gemm_unroll dlti attr")
     p.add_argument("--vtK", type=int, default=32,
                    help="K register-blocking hint for the reg_gemm_unroll dlti attr")
-    p.add_argument("--aType", choices=_AB_ARG_TYPES, default="bf16")
-    p.add_argument("--bType", choices=_AB_ARG_TYPES, default="bf16")
+    p.add_argument("--aType", choices=_AB_TYPES, default="bf16")
+    p.add_argument("--bType", choices=_AB_TYPES, default="bf16")
     p.add_argument("--compType", choices=_COMP_TYPES, default=None,
                    help="computation/accumulator type (libxsmm comp); default "
                         "i32 for integer C, f32 for float C")
@@ -645,11 +647,11 @@ def _add_matmul_args(p):
                         "scale vectors (sA, sB) and optional quantized i8 output "
                         "(per-N output scale sC); 'mx' = linalg.scaled_contract "
                         "with per-block E8M0 scale tensors "
-                        "(MXINT8/MXUINT8/MXBF8/MXHF8)")
+                        "(MXINT8/MXBF8/MXHF8)")
     p.add_argument("--scaleType", dest="scale_type",
-                   choices=("f32", "f8E8M0FNU"), default="f32",
+                   choices=_SCALE_TYPES, default="f32",
                    help="scale element type for --scale-kind scalar (sA/sB/sC): "
-                        "f32 or f8E8M0FNU (power-of-two)")
+                        "f32 or f8E8M0FNU (power-of-two); other types throw")
     p.add_argument("--mxBlock", type=int, default=_MX_BLOCK,
                    help="MX microscaling block size (K elements per E8M0 scale)")
     p.add_argument("-o", "--output", metavar="FILE")
@@ -669,15 +671,17 @@ def main(argv=None):
     if args.scale_kind == "mx":
         module = build_mx_scaled(
             args.M, args.N, args.K, args.br_count,
-            args.aType, args.bType, args.cType, args.mxBlock,
+            args.aType, args.bType, args.cType, args.scale_type,
+            args.compType, args.mxBlock,
             args.vtM, args.vtN, args.vtK,
         )
     elif args.scale_kind == "scalar":
         module = build_scalar_scaled(
             args.M, args.N, args.K, args.br_count,
             args.aType, args.bType, args.cType, args.scale_type,
-            args.vtM, args.vtN, args.vtK,
+            args.compType, args.vtM, args.vtN, args.vtK,
             args.vnniA, args.vnniB,
+            args.transA, args.transB,
         )
     else:
         module = build_contract(
