@@ -84,6 +84,20 @@ private:
   // Vectorize the remaining Linalg operations and, optionally, lower vector
   // patterns to nano-kernels.
   void addVectorizationPasses() {
+    // Tile the contraction on M and N with the register blocking sizes and
+    // fuse its producers and elementwise consumers into the tile, so that
+    // the epilogue is placed after the reduction loops of the register tile.
+    // Tile sizes follow the contraction loop order (batch-reduce, M, N).
+    // Runs before generalization, as the pass may specialize generics back to
+    // named ops (e.g., linalg.matmul), which register tiling does not handle.
+    if (registerBlocking.size() >= 2) {
+      TileConsumerAndFuseProducersOptions tileAndFuseOptions;
+      tileAndFuseOptions.tileSizes = {0, registerBlocking[0],
+                                      registerBlocking[1]};
+      pm.addNestedPass<func::FuncOp>(
+          createTileConsumerAndFuseProducers(tileAndFuseOptions));
+    }
+
     pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
     pm.addNestedPass<func::FuncOp>(
         createConvertLinalgGenericTo32BitAccumulation());
@@ -109,6 +123,9 @@ private:
     pm.addPass(createReplicateBenchArgs());
     pm.addNestedPass<func::FuncOp>(createVectorContractToNanoKernels());
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+    // Zero AMX accumulators in registers instead of reloading a zero-filled
+    // buffer, and drop the zero fill when the tiles overwrite it.
+    // pm.addNestedPass<func::FuncOp>(createFoldZeroFillIntoAmxTiles());
     pm.addNestedPass<func::FuncOp>(createFlattenVectorOps());
     // Stream write-only stores (e.g. the output C matrix) with a nontemporal
     // hint. Runs after flattening so the transfer_write is already 1-D.

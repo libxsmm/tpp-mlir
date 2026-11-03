@@ -17,6 +17,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/TileUsingInterface.h"
 #include "mlir/Dialect/Tensor/Transforms/Transforms.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Interfaces/TilingInterface.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -798,6 +799,65 @@ struct ElementWiseFusion : tpp::impl::ElementWiseFusionBase<ElementWiseFusion> {
   }
 };
 
+// Return true if `a` and `b` are the same tensor, i.e., the same value or
+// identical tensor.extract_slice ops of the same source.
+static bool isSameTensor(Value a, Value b) {
+  if (a == b)
+    return true;
+  auto sliceA = a.getDefiningOp<tensor::ExtractSliceOp>();
+  auto sliceB = b.getDefiningOp<tensor::ExtractSliceOp>();
+  if (!sliceA || !sliceB || sliceA.getSource() != sliceB.getSource() ||
+      sliceA.getType() != sliceB.getType())
+    return false;
+  return sliceA.isSameAs(sliceB, isEqualConstantIntOrValue);
+}
+
+// Replace the inputs of an elementwise `op` that read the same tensor as its
+// init with the init block argument, e.g., an epilogue that reads and updates
+// the output in place (out = f(acc, out)). Otherwise, once the op is tiled,
+// the input is read from the original tensor while the loop updates it in
+// place, and bufferization resolves the conflict with a (strided) copy of the
+// output.
+static void foldInputsIntoInit(RewriterBase &rewriter, linalg::GenericOp op) {
+  if (op.getNumDpsInits() != 1)
+    return;
+  OpOperand *init = op.getDpsInitOperand(0);
+  AffineMap initMap = op.getMatchingIndexingMap(init);
+  Type initElemType = getElementTypeOrSelf(init->get().getType());
+
+  SmallVector<unsigned> foldedInputs;
+  SmallVector<Value> newInputs;
+  SmallVector<AffineMap> newMaps;
+  for (OpOperand *input : op.getDpsInputOperands()) {
+    AffineMap inputMap = op.getMatchingIndexingMap(input);
+    if (isSameTensor(input->get(), init->get()) && inputMap == initMap &&
+        getElementTypeOrSelf(input->get().getType()) == initElemType) {
+      foldedInputs.push_back(input->getOperandNumber());
+      continue;
+    }
+    newInputs.push_back(input->get());
+    newMaps.push_back(inputMap);
+  }
+  // Keep at least one input; ops without inputs are not tiled.
+  if (foldedInputs.empty() || newInputs.empty())
+    return;
+  newMaps.push_back(initMap);
+
+  rewriter.setInsertionPoint(op);
+  auto newOp = linalg::GenericOp::create(
+      rewriter, op.getLoc(), op.getResultTypes(), newInputs, op.getDpsInits(),
+      newMaps, op.getIteratorTypesArray());
+  rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
+                              newOp.getRegion().end());
+  Block &body = newOp.getRegion().front();
+  BlockArgument initArg = body.getArgument(op.getNumDpsInputs());
+  for (unsigned idx : llvm::reverse(foldedInputs)) {
+    rewriter.replaceAllUsesWith(body.getArgument(idx), initArg);
+    body.eraseArgument(idx);
+  }
+  rewriter.replaceOp(op, newOp->getResults());
+}
+
 // Define an element-wise tiling pass on a linalg.generic op with parallel
 // iterators.
 struct TileElementWiseOps
@@ -806,6 +866,16 @@ struct TileElementWiseOps
 
   void runOnOperation() override {
     auto &ctx = getContext();
+
+    IRRewriter rewriter(&ctx);
+    SmallVector<linalg::GenericOp> eltwiseOps;
+    getOperation()->walk([&](linalg::GenericOp op) {
+      if (linalg::isElementwise(op))
+        eltwiseOps.push_back(op);
+    });
+    for (linalg::GenericOp op : eltwiseOps)
+      foldInputsIntoInit(rewriter, op);
+
     RewritePatternSet patterns(&ctx);
 
     // Define a pattern of linalg.generic op with parallel iterators on which we
