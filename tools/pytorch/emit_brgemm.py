@@ -61,9 +61,28 @@ from lighthouse.ingress.mlir_gen.utils import affine_map, get_mlir_elem_type
 _ALIASES = {"bf8": "f8E5M2", "hf8": "f8E4M3FN"}
 # Supported user-facing element types for the A/B operands and the C output.
 _AB_TYPES = ("f64", "i64", "f32", "f16", "bf16", "i16", "bf8", "hf8", "i8")
+
+# --- MX microscaling (linalg.scaled_contract) ---------------------------------
+# Block size: one shared E8M0 (f8E8M0FNU) scale per this many K elements.
+_MX_BLOCK = 32
+# MXINT8 elements carry an implicit 2^-6 per-element exponent bias, so a
+# product of two terms accumulates 2^-12 = 1/4096 (matches libxsmm MXINT8 ref).
+_MX_INT_BIAS = 1.0 / 4096.0
+# User A/B type -> (MLIR element type name, cast TypeFn). Signedness of integer
+# operands is carried by the scaled_contract `cast` attr (element stays i8).
+_MX_TYPES = {
+    "i8": ("i8", "cast_signed"),         # MXINT8
+    "bf8": ("f8E5M2", "cast_signed"),    # MXBF8
+    "hf8": ("f8E4M3FN", "cast_signed"),  # MXHF8
+}
+# A/B operand types accepted by --scale-kind mx (MXINT8/MXBF8/MXHF8).
+_MX_AB_TYPES = ("i8", "bf8", "hf8")
 _C_TYPES = ("i64", "i32", "i16", "i8", "bf8", "hf8", "bf16", "f16", "f32", "f64")
 # Computation (accumulator) types selectable via --compType.
 _COMP_TYPES = ("i32", "i64", "f32", "f64")
+# Scale element types accepted on the CLI; --scale-kind scalar narrows these to
+# f32 or f8E8M0FNU and throws for any other scale type.
+_SCALE_TYPES = ("f32", "f8E8M0FNU", "f16", "bf16", "bf8", "hf8")
 
 # C types narrower than the f32/i32 accumulator: emitted via the down-convert
 # epilogue. F16/BF16/BF8/HF8 accumulate in f32 then truncf; I16/I8 accumulate
@@ -119,6 +138,14 @@ _BITS = {"f8E5M2": 8, "f8E4M3FN": 8, "f16": 16, "bf16": 16, "f32": 32,
          "f64": 64, "i8": 8, "i16": 16, "i32": 32, "i64": 64}
 
 
+def _dlti_unroll_attr(vtm, vtn, vtk):
+    # reg_gemm_unroll hint consumed by the tpp-mlir register-unroll pass.
+    return ir.Attribute.parse(
+        f'#dlti.target_system_spec<"CPU" = '
+        f'#dlti.target_device_spec<"reg_gemm_unroll" = [{vtm}, {vtn}, {vtk}]>>'
+    )
+
+
 def build_contract(m, n, k, br_count, a_name, b_name, c_name,
                    vtm, vtn, vtk,
                    trans_a=False, trans_b=False, vnni_a=False, vnni_b=False,
@@ -142,7 +169,7 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
             f"{arch.upper()} only supports {', '.join(sorted(allowed))} types, "
             f"got: {', '.join(sorted(bad))}")
     if vnni_a and not vnni_b:
-        raise ValueError("VNNI must be enabled for B, if it is enabled for B")
+        raise ValueError("VNNI must be enabled for B if it is enabled for A")
 
     # vnni_b only: A's argument stays non-VNNI and is expanded into VNNI before
     # the contract via tensor.expand_shape.
@@ -224,11 +251,7 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
             affine_map(ndims, [d[1], d[2]]),  # C: M, N
         ]
    
-        # dlti attribute creation. Used by unroll pass to unroll contract operation.
-        dlti_attr = ir.Attribute.parse(
-            f'#dlti.target_system_spec<"CPU" = '
-            f'#dlti.target_device_spec<"reg_gemm_unroll" = [{vtm}, {vtn}, {vtk}]>>'
-        )
+        dlti_attr = _dlti_unroll_attr(vtm, vtn, vtk)
         scaled = alpha != 1.0 or beta != 1.0
         direct = (comp_res == c_res) and not scaled
 
@@ -304,6 +327,293 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
         return module
 
 
+def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
+                        comp_name, vtm, vtn, vtk, vnni_a=False, vnni_b=False,
+                        trans_a=False, trans_b=False, fn_name="entry"):
+    """Integer GEMM with per-dimension (per-row/per-column) scale vectors.
+
+    A (i8) * B (i8) accumulates in i32; an epilogue applies a per-M scale
+    ``sA[m]`` and a per-N scale ``sB[n]`` (constant across K, so they factor out
+    of the reduction) and adds the incoming C. ``scale_name`` selects the scale
+    element type: ``f32`` (used directly) or ``f8E8M0FNU`` (power-of-two, decoded
+    via extf). Three variants, matching the validated reference IRs:
+
+      * ``--cType f32 --scaleType f32``        -> out = (f32)acc*sA*sB + C
+      * ``--cType f32 --scaleType f8E8M0FNU``  -> same, E8M0 scales
+      * ``--cType i8`` (quantized output)      -> a per-N output scale ``sC[n]``
+        divides the result, which is then clamped to [-128, 127] and converted
+        to i8: out = clamp((f32)acc*sA*sB/sC + C, -128, 127).
+
+    ``vnni_b`` (optionally ``vnni_a``) VNNI-packs the K reduction dim into
+    ``(K/vf, vf)`` blocks (vf = the arch i8 VNNI factor); when only B is packed,
+    A is expanded to match. The scales are independent of K, so the epilogue is
+    unchanged.
+    """
+    if br_count < 1:
+        raise ValueError(f"br_count must be >= 1, got {br_count}")
+    if a_name != "i8" or b_name != "i8":
+        raise ValueError("--scale-kind scalar requires --aType i8 and --bType i8")
+    if comp_name not in (None, "i32"):
+        raise ValueError("--scale-kind scalar requires --compType i32")
+    if scale_name not in ("f32", "f8E8M0FNU"):
+        raise ValueError(
+            "--scaleType must be f32 or f8E8M0FNU for --scale-kind scalar")
+    if c_name not in ("f32", "i8"):
+        raise ValueError("--scale-kind scalar expects --cType f32 or i8")
+    if trans_a or trans_b:
+        raise ValueError("--scale-kind scalar does not support transpose")
+    # Quantized output: emit a per-N output scale sC, clamp and convert to i8.
+    quant = c_name == "i8"
+
+    # VNNI packs K into (K/vf, vf) blocks (vf innermost); vnni_a-only is invalid,
+    # and vnni_b-only expands A to the packed layout inside the body.
+    arch = _detect_arch()
+    if vnni_a and not vnni_b:
+        raise ValueError("VNNI must be enabled for B if it is enabled for A")
+    vnni = vnni_b
+    expand_a = vnni_b and not vnni_a
+    if vnni and a_name not in _VNNI_FACTOR[arch]:
+        raise ValueError(f"no VNNI layout for element type {a_name}")
+    vf = _VNNI_FACTOR[arch][a_name] if vnni else 1
+    if vnni and k % vf != 0:
+        raise ValueError(f"K={k} not divisible by the VNNI factor {vf}")
+    kp = k // vf
+
+    with ir.Context(), ir.Location.unknown():
+        module = ir.Module.create()
+        ta, tb = _get_type(a_name), _get_type(b_name)
+        ti32 = _get_type("i32")
+        tf32 = _get_type("f32")
+        tscale = (_get_type("f32") if scale_name == "f32"
+                  else ir.Type.parse("f8E8M0FNU"))
+        tc = _get_type(c_name)
+
+        # VNNI splits K into (K/vf, vf) with vf innermost; when only B is packed,
+        # A's argument stays (M x K) and is expanded in the body.
+        a_inner = [m, kp, vf] if vnni else [m, k]
+        b_inner = [kp, n, vf] if vnni else [k, n]
+        a_arg_inner = [m, k] if expand_a else a_inner
+        a_ty = ir.RankedTensorType.get([br_count] + a_arg_inner, ta)
+        b_ty = ir.RankedTensorType.get([br_count] + b_inner, tb)
+        sa_ty = ir.RankedTensorType.get([m], tscale)   # per-M input scale
+        sb_ty = ir.RankedTensorType.get([n], tscale)   # per-N input scale
+        sc_ty = ir.RankedTensorType.get([n], tscale)   # per-N output scale
+        c_ty = ir.RankedTensorType.get([m, n], tc)
+
+        # Contraction dims: d0=batch, d1=M, d2=N, d3=K (+ d4=vf for VNNI); batch,
+        # K and vf are reduction dims.
+        ndims = 5 if vnni else 4
+        d = [ir.AffineDimExpr.get(i) for i in range(ndims)]
+        a_dims = [d[0], d[1], d[3]] + ([d[4]] if vnni else [])
+        b_dims = [d[0], d[3], d[2]] + ([d[4]] if vnni else [])
+        maps = [
+            affine_map(ndims, a_dims),          # A: batch, M, K(/vf)(, vf)
+            affine_map(ndims, b_dims),          # B: batch, K(/vf), N(, vf)
+            affine_map(ndims, [d[1], d[2]]),    # C: M, N
+        ]
+        dlti_attr = _dlti_unroll_attr(vtm, vtn, vtk)
+
+        # Epilogue maps (output is M x N): acc/C are elementwise (d0=M, d1=N),
+        # sA is per-M (d0), sB and the output scale sC are per-N (d1).
+        e0, e1 = ir.AffineDimExpr.get(0), ir.AffineDimExpr.get(1)
+        id2 = affine_map(2, [e0, e1])
+        per_m = affine_map(2, [e0])
+        per_n = affine_map(2, [e1])
+
+        in_types = ([a_ty, sa_ty, b_ty, sb_ty]
+                    + ([sc_ty] if quant else []) + [c_ty])
+
+        with ir.InsertionPoint(module.body):
+            fn = func.FuncOp(fn_name, ir.FunctionType.get(in_types, [c_ty]))
+            fn.attributes["dlti.target_system_spec"] = dlti_attr
+            entry = fn.add_entry_block()
+            with ir.InsertionPoint(entry):
+                if quant:
+                    A, SA, B, SB, SC, C = entry.arguments
+                else:
+                    A, SA, B, SB, C = entry.arguments
+                    SC = None
+
+                # Expand A (M x K) into the VNNI layout (M x K/vf x vf) to match
+                # a VNNI-packed B.
+                if expand_a:
+                    a_vnni_ty = ir.RankedTensorType.get(
+                        [br_count] + a_inner, ta)
+                    A = tensor.expand_shape(
+                        a_vnni_ty, A, [[0], [1], [2, 3]], [],
+                        [br_count] + a_inner)
+
+                zero = arith.ConstantOp(ti32, ir.IntegerAttr.get(ti32, 0))
+                tmp = tensor.EmptyOp([m, n], ti32)
+                filled = linalg.fill(zero, outs=[tmp])
+                acc = linalg.contract(A, B, outs=[filled], indexing_maps=maps)
+
+                scale_ins = [acc, SA, SB] + ([SC] if quant else [])
+                emap_list = ([id2, per_m, per_n]
+                             + ([per_n] if quant else []) + [id2])
+                emaps = ir.ArrayAttr.get(
+                    [ir.AffineMapAttr.get(mp) for mp in emap_list])
+                par = ir.Attribute.parse("#linalg.iterator_type<parallel>")
+                iters = ir.ArrayAttr.get([par, par])
+                g = linalg.GenericOp([c_ty], scale_ins, [C], emaps, iters)
+                blk_types = ([ti32, tscale, tscale]
+                             + ([tscale] if quant else []) + [tc])
+                blk = g.regions[0].blocks.append(*blk_types)
+                with ir.InsertionPoint(blk):
+                    if quant:
+                        acc_in, sa_in, sb_in, sc_in, c_in = blk.arguments
+                    else:
+                        acc_in, sa_in, sb_in, c_in = blk.arguments
+                        sc_in = None
+
+                    def _scale_f32(val):
+                        # E8M0 scales decode to f32 via extf; f32 scales as-is.
+                        return (val if scale_name == "f32"
+                                else arith.ExtFOp(tf32, val).result)
+
+                    accf = arith.SIToFPOp(tf32, acc_in).result
+                    prod = arith.MulFOp(
+                        _scale_f32(sa_in), _scale_f32(sb_in)).result
+                    if quant:
+                        prod = arith.DivFOp(prod, _scale_f32(sc_in)).result
+                    scaled = arith.MulFOp(accf, prod).result
+                    if quant:
+                        c_val = arith.SIToFPOp(tf32, c_in).result
+                        summed = arith.AddFOp(scaled, c_val).result
+                        lo = arith.ConstantOp(
+                            tf32, ir.FloatAttr.get(tf32, -128.0))
+                        hi = arith.ConstantOp(
+                            tf32, ir.FloatAttr.get(tf32, 127.0))
+                        clamped = arith.MaximumFOp(summed, lo).result
+                        clamped = arith.MinimumFOp(clamped, hi).result
+                        out_val = arith.FPToSIOp(tc, clamped).result
+                    else:
+                        out_val = arith.AddFOp(scaled, c_in).result
+                    linalg.YieldOp([out_val])
+                func.ReturnOp([g.results[0]])
+        return module
+
+
+def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
+                    comp_name, block, vtm, vtn, vtk, fn_name="entry"):
+    """MX block-scaled GEMM via ``linalg.scaled_contract``: A and B carry one
+    E8M0 (f8E8M0FNU) scale per ``block`` K elements. Integer operands
+    (MXINT8) additionally apply the implicit 2^-12 exponent bias.
+    A is transposed and VNNI-packed (batch, K/vf, M, vf) and B is VNNI-packed
+    (batch, K/vf, N, vf). The contraction accumulates in f32 and C is f32.
+    Mixed A/B types are not supported."""
+    if br_count < 1:
+        raise ValueError(f"br_count must be >= 1, got {br_count}")
+    if scale_name != "f8E8M0FNU":
+        raise ValueError("--scale-kind mx requires --scaleType f8E8M0FNU")
+    if a_name not in _MX_AB_TYPES or b_name not in _MX_AB_TYPES:
+        raise ValueError(
+            f"--scale-kind mx requires A/B types in {_MX_AB_TYPES}, "
+            f"got {a_name}/{b_name}")
+    if a_name != b_name:
+        raise ValueError(
+            "--scale-kind mx requires matching A/B types; mixed types "
+            "are not supported")
+    if c_name != "f32":
+        raise ValueError("--scale-kind mx requires --cType f32")
+    if comp_name not in (None, "f32"):
+        raise ValueError("--scale-kind mx requires --compType f32")
+    if k % block != 0:
+        raise ValueError(f"K={k} must be divisible by the MX block size {block}")
+
+    arch = _detect_arch()
+    if a_name not in _VNNI_FACTOR[arch]:
+        raise ValueError(f"no VNNI layout for MX type {a_name} on {arch}")
+    vf = _VNNI_FACTOR[arch][a_name]
+    if block % vf != 0:
+        raise ValueError(
+            f"MX block size {block} must be divisible by the VNNI factor {vf}")
+
+    elem_name, cast_fn = _MX_TYPES[a_name]
+    is_int = _is_int(elem_name)
+    kb = k // block     # number of E8M0 scale blocks along K
+    kp = k // vf        # VNNI-packed (outer) K extent
+    bpv = block // vf   # VNNI groups sharing one scale block
+
+    with ir.Context(), ir.Location.unknown():
+        module = ir.Module.create()
+        telem = _get_type(elem_name)
+        tscale = ir.Type.parse("f8E8M0FNU")
+        tf32 = _get_type("f32")
+        tc = _get_type(c_name)
+
+        # A is transposed + VNNI-packed (batch, K/vf, M, vf); B is VNNI-packed
+        # (batch, K/vf, N, vf). Scales carry one E8M0 per `block` K elements.
+        a_ty = ir.RankedTensorType.get([br_count, kp, m, vf], telem)
+        b_ty = ir.RankedTensorType.get([br_count, kp, n, vf], telem)
+        sa_ty = ir.RankedTensorType.get([br_count, m, kb], tscale)
+        sb_ty = ir.RankedTensorType.get([br_count, n, kb], tscale)
+        # scaled_contract accumulates in f32 (C is f32).
+        c_ty = ir.RankedTensorType.get([m, n], tc)
+
+        # Iteration dims: d0=batch, d1=M, d2=N, d3=K/vf, d4=vf (batch, K/vf and
+        # vf reduced). A scale block spans bpv=block/vf consecutive d3 groups, so
+        # the scale block index is d3 floordiv bpv.
+        d = [ir.AffineDimExpr.get(i) for i in range(5)]
+        blkidx = ir.AffineFloorDivExpr.get(
+            d[3], ir.AffineConstantExpr.get(bpv))
+        maps = ir.ArrayAttr.get([
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[3], d[1], d[4]])),  # A
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[1], blkidx])),      # sA
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[3], d[2], d[4]])),  # B
+            ir.AffineMapAttr.get(affine_map(5, [d[0], d[2], blkidx])),      # sB
+            ir.AffineMapAttr.get(affine_map(5, [d[1], d[2]])),             # C
+        ])
+        cast = ir.Attribute.parse(f"#linalg.type_fn<{cast_fn}>")
+        dlti_attr = _dlti_unroll_attr(vtm, vtn, vtk)
+
+        with ir.InsertionPoint(module.body):
+            fn = func.FuncOp(
+                fn_name,
+                ir.FunctionType.get([a_ty, sa_ty, b_ty, sb_ty, c_ty], [c_ty]))
+            fn.attributes["dlti.target_system_spec"] = dlti_attr
+            entry = fn.add_entry_block()
+            with ir.InsertionPoint(entry):
+                A, SA, B, SB, C = entry.arguments
+
+                # FP8: contract straight into the f32 C.
+                if not is_int:
+                    op = linalg.ScaledContractOp(
+                        result_tensors=[c_ty], inputs=[A, SA, B, SB],
+                        outputs=[C], indexing_maps=maps, cast=cast)
+                    linalg.fill_builtin_region(op.operation)
+                    func.ReturnOp([op.results[0]])
+                    return module
+
+                # MXINT8: accumulate into an f32 temp, then an epilogue applies
+                # the implicit 2^-12 bias and adds C.
+                zero = arith.ConstantOp(tf32, ir.FloatAttr.get(tf32, 0.0))
+                tmp = tensor.EmptyOp([m, n], tf32)
+                init = linalg.fill(zero, outs=[tmp])
+                op = linalg.ScaledContractOp(
+                    result_tensors=[c_ty], inputs=[A, SA, B, SB],
+                    outputs=[init], indexing_maps=maps, cast=cast)
+                linalg.fill_builtin_region(op.operation)
+                acc = op.results[0]
+
+                id2 = affine_map(
+                    2, [ir.AffineDimExpr.get(0), ir.AffineDimExpr.get(1)])
+                emaps = ir.ArrayAttr.get([ir.AffineMapAttr.get(id2)] * 3)
+                par = ir.Attribute.parse("#linalg.iterator_type<parallel>")
+                iters = ir.ArrayAttr.get([par, par])
+                g = linalg.GenericOp([c_ty], [acc, C], [C], emaps, iters)
+                blk = g.regions[0].blocks.append(tf32, tf32, tf32)
+                with ir.InsertionPoint(blk):
+                    acc_in, c_in, _out = blk.arguments
+                    bias = arith.ConstantOp(
+                        tf32, ir.FloatAttr.get(tf32, _MX_INT_BIAS))
+                    biased = arith.MulFOp(acc_in, bias).result
+                    summed = arith.AddFOp(biased, c_in).result
+                    linalg.YieldOp([summed])
+                func.ReturnOp([g.results[0]])
+        return module
+
+
 def _add_matmul_args(p):
     p.add_argument("--M", type=int, default=64)
     p.add_argument("--N", type=int, default=64)
@@ -331,6 +641,19 @@ def _add_matmul_args(p):
                    help="scalar multiplier on A*B (default 1.0 = no scaling)")
     p.add_argument("--beta", type=float, default=1.0,
                    help="scalar multiplier on C (default 1.0 = plain accumulate)")
+    p.add_argument("--scale-kind", dest="scale_kind",
+                   choices=("scalar", "mx"), default=None,
+                   help="emit a scaled GEMM: 'scalar' = int8 A*B with per-M/per-N "
+                        "scale vectors (sA, sB) and optional quantized i8 output "
+                        "(per-N output scale sC); 'mx' = linalg.scaled_contract "
+                        "with per-block E8M0 scale tensors "
+                        "(MXINT8/MXBF8/MXHF8)")
+    p.add_argument("--scaleType", dest="scale_type",
+                   choices=_SCALE_TYPES, default="f32",
+                   help="scale element type for --scale-kind scalar (sA/sB/sC): "
+                        "f32 or f8E8M0FNU (power-of-two); other types throw")
+    p.add_argument("--mxBlock", type=int, default=_MX_BLOCK,
+                   help="MX microscaling block size (K elements per E8M0 scale)")
     p.add_argument("-o", "--output", metavar="FILE")
 
 
@@ -345,15 +668,31 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    module = build_contract(
-        args.M, args.N, args.K, args.br_count,
-        args.aType, args.bType, args.cType,
-        args.vtM, args.vtN, args.vtK,
-        args.transA, args.transB,
-        args.vnniA, args.vnniB,
-        args.alpha, args.beta,
-        args.compType,
-    )
+    if args.scale_kind == "mx":
+        module = build_mx_scaled(
+            args.M, args.N, args.K, args.br_count,
+            args.aType, args.bType, args.cType, args.scale_type,
+            args.compType, args.mxBlock,
+            args.vtM, args.vtN, args.vtK,
+        )
+    elif args.scale_kind == "scalar":
+        module = build_scalar_scaled(
+            args.M, args.N, args.K, args.br_count,
+            args.aType, args.bType, args.cType, args.scale_type,
+            args.compType, args.vtM, args.vtN, args.vtK,
+            args.vnniA, args.vnniB,
+            args.transA, args.transB,
+        )
+    else:
+        module = build_contract(
+            args.M, args.N, args.K, args.br_count,
+            args.aType, args.bType, args.cType,
+            args.vtM, args.vtN, args.vtK,
+            args.transA, args.transB,
+            args.vnniA, args.vnniB,
+            args.alpha, args.beta,
+            args.compType,
+        )
     # Embed the benchmark with FLOPS count so that the tpp-mlir benchmarking
     # infra is re-used.
     total_flops = 2 * args.br_count * args.M * args.N * args.K
