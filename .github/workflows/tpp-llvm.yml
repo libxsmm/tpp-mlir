@@ -7,6 +7,7 @@ on:
 env:
   NPROCS_LIMIT_LINK: 8
   SRUN: ${HOME}/srun.sh
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   TPP-MLIR-LLVM-Base:
