@@ -26,7 +26,7 @@ jobs:
     steps:
       # Step 2: Set up AWS CLI
       - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -46,7 +46,7 @@ jobs:
     #   (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: ec2-start
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Graviton 3 Full Test and Benchmarks
         run: |-
           scripts/github/check_llvm.sh || \

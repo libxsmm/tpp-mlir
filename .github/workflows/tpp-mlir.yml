@@ -24,7 +24,7 @@ jobs:
     runs-on: pcl-tiergarten
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: GCC Release
         run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
             'KIND=Release COMPILER=gcc CHECK=1 \
@@ -34,7 +34,7 @@ jobs:
     runs-on: pcl-tiergarten
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: GCC Debug
         run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
             'KIND=Debug COMPILER=gcc CHECK=1 \
@@ -44,7 +44,7 @@ jobs:
     runs-on: pcl-tiergarten
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Clang Release
         run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
             'KIND=Release COMPILER=clang LINKER=lld CHECK=1 \
@@ -54,7 +54,7 @@ jobs:
     runs-on: pcl-tiergarten
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Clang Debug Sanitizers
         run: "${{ env.SRUN }} --partition=emr --time=0:30:00 -- \
                 'KIND=Debug COMPILER=clang LINKER=lld SANITIZERS=1 CHECK=1 \
@@ -67,7 +67,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'avx2'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: AVX2 Clang Release
         run: "${{ env.SRUN }} --partition=arl --time=0:30:00 -- \
             'KIND=Release COMPILER=clang LINKER=lld CHECK=1 \

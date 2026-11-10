@@ -13,7 +13,7 @@ jobs:
   TPP-MLIR-LLVM-Base:
     runs-on: pcl-tiergarten
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: LLVM Base
         run: |-
               scripts/github/check_llvm.sh || \

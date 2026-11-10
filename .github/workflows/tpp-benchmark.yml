@@ -44,7 +44,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Emerald Rapids Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
@@ -60,7 +60,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Emerald Rapids OpenMP
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
@@ -74,7 +74,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Zen5 Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
@@ -88,7 +88,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Zen5 OpenMP
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
@@ -102,7 +102,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ARL Base
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld CHECK=1 BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
@@ -116,7 +116,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark-full'))
     needs: Check_LLVM
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ARL OpenMP
         run: |-
           CMD="KIND=Release COMPILER=clang LINKER=lld BENCHMARK_NUM_ITER=${{ env.NUM_ITER }} \
