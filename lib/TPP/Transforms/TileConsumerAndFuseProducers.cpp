@@ -714,6 +714,7 @@ struct TileConsumerAndFuseProducers
       // Attempt to recover named ops.
       RewritePatternSet patterns(&ctx);
       linalg::populateLinalgDeGeneralizationPatterns(patterns);
+      linalg::populateEraseUnnecessaryInputsPatterns(patterns);
       (void)applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 

@@ -84,6 +84,14 @@ private:
   // Vectorize the remaining Linalg operations and, optionally, lower vector
   // patterns to nano-kernels.
   void addVectorizationPasses() {
+    if (registerBlocking.size() >= 2) {
+      TileConsumerAndFuseProducersOptions tileAndFuseOptions;
+      tileAndFuseOptions.tileSizes = {0, registerBlocking[0],
+                                      registerBlocking[1]};
+      pm.addNestedPass<func::FuncOp>(
+          createTileConsumerAndFuseProducers(tileAndFuseOptions));
+    }
+
     pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
     pm.addNestedPass<func::FuncOp>(
         createConvertLinalgGenericTo32BitAccumulation());
