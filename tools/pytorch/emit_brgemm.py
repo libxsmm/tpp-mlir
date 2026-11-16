@@ -80,9 +80,8 @@ _MX_AB_TYPES = ("i8", "bf8", "hf8")
 _C_TYPES = ("i64", "i32", "i16", "i8", "bf8", "hf8", "bf16", "f16", "f32", "f64")
 # Computation (accumulator) types selectable via --compType.
 _COMP_TYPES = ("i32", "i64", "f32", "f64")
-# Scale element types accepted on the CLI; --scale-kind scalar narrows these to
-# f32 or f8E8M0FNU and throws for any other scale type.
-_SCALE_TYPES = ("f32", "f8E8M0FNU", "f16", "bf16", "bf8", "hf8")
+# Scale element types: f32 (used directly) or f8E8M0FNU (power-of-two, E8M0).
+_SCALE_TYPES = ("f32", "f8E8M0FNU")
 
 # C types narrower than the f32/i32 accumulator: emitted via the down-convert
 # epilogue. F16/BF16/BF8/HF8 accumulate in f32 then truncf; I16/I8 accumulate
@@ -343,11 +342,6 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
       * ``--cType i8`` (quantized output)      -> a per-N output scale ``sC[n]``
         divides the result, which is then clamped to [-128, 127] and converted
         to i8: out = clamp((f32)acc*sA*sB/sC + C, -128, 127).
-
-    ``vnni_b`` (optionally ``vnni_a``) VNNI-packs the K reduction dim into
-    ``(K/vf, vf)`` blocks (vf = the arch i8 VNNI factor); when only B is packed,
-    A is expanded to match. The scales are independent of K, so the epilogue is
-    unchanged.
     """
     if br_count < 1:
         raise ValueError(f"br_count must be >= 1, got {br_count}")
@@ -444,8 +438,7 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
                         [br_count] + a_inner)
 
                 zero = arith.ConstantOp(ti32, ir.IntegerAttr.get(ti32, 0))
-                tmp = tensor.EmptyOp([m, n], ti32)
-                filled = linalg.fill(zero, outs=[tmp])
+                filled = linalg.fill(zero, outs=[tensor.EmptyOp([m, n], ti32)])
                 acc = linalg.contract(A, B, outs=[filled], indexing_maps=maps)
 
                 scale_ins = [acc, SA, SB] + ([SC] if quant else [])
@@ -454,8 +447,8 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
                 emaps = ir.ArrayAttr.get(
                     [ir.AffineMapAttr.get(mp) for mp in emap_list])
                 par = ir.Attribute.parse("#linalg.iterator_type<parallel>")
-                iters = ir.ArrayAttr.get([par, par])
-                g = linalg.GenericOp([c_ty], scale_ins, [C], emaps, iters)
+                g = linalg.GenericOp([c_ty], scale_ins, [C], emaps,
+                                     ir.ArrayAttr.get([par, par]))
                 blk_types = ([ti32, tscale, tscale]
                              + ([tscale] if quant else []) + [tc])
                 blk = g.regions[0].blocks.append(*blk_types)
@@ -497,11 +490,7 @@ def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
 def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
                     comp_name, block, vtm, vtn, vtk, fn_name="entry"):
     """MX block-scaled GEMM via ``linalg.scaled_contract``: A and B carry one
-    E8M0 (f8E8M0FNU) scale per ``block`` K elements. Integer operands
-    (MXINT8) additionally apply the implicit 2^-12 exponent bias.
-    A is transposed and VNNI-packed (batch, K/vf, M, vf) and B is VNNI-packed
-    (batch, K/vf, N, vf). The contraction accumulates in f32 and C is f32.
-    Mixed A/B types are not supported."""
+    E8M0 (f8E8M0FNU) scale per ``block`` K elements."""
     if br_count < 1:
         raise ValueError(f"br_count must be >= 1, got {br_count}")
     if scale_name != "f8E8M0FNU":
@@ -587,9 +576,9 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
 
                 # MXINT8: accumulate into an f32 temp, then an epilogue applies
                 # the implicit 2^-12 bias and adds C.
-                zero = arith.ConstantOp(tf32, ir.FloatAttr.get(tf32, 0.0))
-                tmp = tensor.EmptyOp([m, n], tf32)
-                init = linalg.fill(zero, outs=[tmp])
+                init = linalg.fill(
+                    arith.ConstantOp(tf32, ir.FloatAttr.get(tf32, 0.0)),
+                    outs=[tensor.EmptyOp([m, n], tf32)])
                 op = linalg.ScaledContractOp(
                     result_tensors=[c_ty], inputs=[A, SA, B, SB],
                     outputs=[init], indexing_maps=maps, cast=cast)
@@ -600,8 +589,8 @@ def build_mx_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
                     2, [ir.AffineDimExpr.get(0), ir.AffineDimExpr.get(1)])
                 emaps = ir.ArrayAttr.get([ir.AffineMapAttr.get(id2)] * 3)
                 par = ir.Attribute.parse("#linalg.iterator_type<parallel>")
-                iters = ir.ArrayAttr.get([par, par])
-                g = linalg.GenericOp([c_ty], [acc, C], [C], emaps, iters)
+                g = linalg.GenericOp([c_ty], [acc, C], [C], emaps,
+                                     ir.ArrayAttr.get([par, par]))
                 blk = g.regions[0].blocks.append(tf32, tf32, tf32)
                 with ir.InsertionPoint(blk):
                     acc_in, c_in, _out = blk.arguments
@@ -650,8 +639,8 @@ def _add_matmul_args(p):
                         "(MXINT8/MXBF8/MXHF8)")
     p.add_argument("--scaleType", dest="scale_type",
                    choices=_SCALE_TYPES, default="f32",
-                   help="scale element type for --scale-kind scalar (sA/sB/sC): "
-                        "f32 or f8E8M0FNU (power-of-two); other types throw")
+                   help="scale element type (sA/sB/sC): f32 or f8E8M0FNU "
+                        "(power-of-two); --scale-kind mx requires f8E8M0FNU")
     p.add_argument("--mxBlock", type=int, default=_MX_BLOCK,
                    help="MX microscaling block size (K elements per E8M0 scale)")
     p.add_argument("-o", "--output", metavar="FILE")
