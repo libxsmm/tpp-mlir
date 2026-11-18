@@ -12,7 +12,7 @@ epilogue adds the incoming C and down-converts (extf + addf + truncf).
 
 Run inside the lighthouse uv env, e.g.:
 
-    #Run:
+    #Run 1:
     uv run --project third_party/lighthouse --extra ingress_torch_cpu \
         tools/pytorch/emit_brgemm.py brgemm --M 64 --N 64 --K 64 \
         --br_count 8 --aType bf16 --bType bf16 --compType f32 --cType bf16
@@ -41,6 +41,64 @@ Run inside the lighthouse uv env, e.g.:
       } -> tensor<64x64xbf16>
 
       return %3 : tensor<64x64xbf16>
+    }
+
+    #Run 2 i8 scale using linalg.contract:
+    uv run --project third_party/lighthouse --extra ingress_torch_cpu \
+        tools/pytorch/emit_brgemm.py brgemm --M 64 --N 64 --K 64 \
+        --br_count 8 --aType i8 --bType i8 --compType i32 --cType i32 \
+        --scale-kind scalar --scaleType f32
+
+    #Generated IR:
+    #map = affine_map<(d0, d1, d2, d3) -> (d0, d1, d3)>
+    #map1 = affine_map<(d0, d1, d2, d3) -> (d0, d3, d2)>
+    #map2 = affine_map<(d0, d1, d2, d3) -> (d1, d2)>
+    #map3 = affine_map<(d0, d1) -> (d0, d1)>
+    #map4 = affine_map<(d0, d1) -> (d0)>
+    #map5 = affine_map<(d0, d1) -> (d1)>
+
+    func.func @entry(%arg0: tensor<8x64x64xi8>, %arg1: tensor<64xf32>, %arg2: tensor<8x64x64xi8>, %arg3: tensor<64xf32>, 
+        %arg4: tensor<64x64xf32>) -> tensor<64x64xf32> {
+      %c0_i32 = arith.constant 0 : i32
+      %0 = tensor.empty() : tensor<64x64xi32>
+      %1 = linalg.fill ins(%c0_i32 : i32) outs(%0 : tensor<64x64xi32>) -> tensor<64x64xi32>
+      // The gemm kernel 
+      %2 = linalg.contract indexing_maps = [#map, #map1, #map2] ins(%arg0, %arg2 : tensor<8x64x64xi8>, tensor<8x64x64xi8>) 
+            outs(%1 : tensor<64x64xi32>) -> tensor<64x64xi32>
+
+      // Element-wise scale
+      %3 = linalg.generic {indexing_maps = [#map3, #map4, #map5, #map3], iterator_types = ["parallel", "parallel"]} ins(%2, %arg1, 
+            %arg3 : tensor<64x64xi32>, tensor<64xf32>, tensor<64xf32>) outs(%arg4 : tensor<64x64xf32>) {
+      ^bb0(%in: i32, %in_0: f32, %in_1: f32, %out: f32):
+        %4 = arith.sitofp %in : i32 to f32
+        %5 = arith.mulf %in_0, %in_1 : f32
+        %6 = arith.mulf %4, %5 : f32
+        %7 = arith.addf %6, %out : f32
+        linalg.yield %7 : f32
+      } -> tensor<64x64xf32>
+      return %3 : tensor<64x64xf32>
+    }
+
+    #Run 3 bf8 scale using linalg.scaled_contract:
+    uv run --project third_party/lighthouse --extra ingress_torch_cpu \
+        tools/pytorch/emit_brgemm.py brgemm --M 64 --N 64 --K 64 \
+        --br_count 8 --aType bf8 --bType bf8 --compType f32 --cType f32 \
+        --scale-kind mx --scaleType f8E8M0FNU
+
+    #Generated IR:
+    #map = affine_map<(d0, d1, d2, d3, d4) -> (d0, d3, d1, d4)>
+    #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d3 floordiv 8)>
+    #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d3, d2, d4)>
+    #map3 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d2, d3 floordiv 8)>
+    #map4 = affine_map<(d0, d1, d2, d3, d4) -> (d1, d2)>
+
+    func.func @entry(%arg0: tensor<8x16x64x4xf8E5M2>, %arg1: tensor<8x64x2xf8E8M0FNU>, %arg2: tensor<8x16x64x4xf8E5M2>, %arg3: 
+        tensor<8x64x2xf8E8M0FNU>, %arg4: tensor<64x64xf32>) -> tensor<64x64xf32> {
+      // The gemm kernel
+      %0 = linalg.scaled_contract indexing_maps = [#map, #map1, #map2, #map3, #map4] {cast = #linalg.type_fn<cast_signed>} 
+        ins(%arg0, %arg1, %arg2, %arg3 : tensor<8x16x64x4xf8E5M2>, tensor<8x64x2xf8E8M0FNU>, tensor<8x16x64x4xf8E5M2>, tensor<8x64x2xf8E8M0FNU>) 
+        outs(%arg4 : tensor<64x64xf32>) -> tensor<64x64xf32>
+      return %0 : tensor<64x64xf32>
     }
 
 """
@@ -329,11 +387,10 @@ def build_contract(m, n, k, br_count, a_name, b_name, c_name,
 def build_scalar_scaled(m, n, k, br_count, a_name, b_name, c_name, scale_name,
                         comp_name, vtm, vtn, vtk, vnni_a=False, vnni_b=False,
                         trans_a=False, trans_b=False, fn_name="entry"):
-    """Integer GEMM with per-dimension (per-row/per-column) scale vectors.
+    """Int8 GEMM with per-dimension (per-row/per-column) scale vectors.
 
-    A (i8) * B (i8) accumulates in i32; an epilogue applies a per-M scale
-    ``sA[m]`` and a per-N scale ``sB[n]`` (constant across K, so they factor out
-    of the reduction) and adds the incoming C. ``scale_name`` selects the scale
+    A (i8) * B (i8) accumulates in i32.
+    ``scale_name`` selects the scale
     element type: ``f32`` (used directly) or ``f8E8M0FNU`` (power-of-two, decoded
     via extf). Three variants, matching the validated reference IRs:
 
